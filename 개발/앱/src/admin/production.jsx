@@ -1,4 +1,4 @@
-// [추모영상 제작] 편집·컨펌(Producing) + 2차 가공(SecondEdit).
+// [추모영상 제작] 편집·컨펌(Production) + 2차 가공(SecondEdit).
 import React, { useState } from "react";
 import {
   ChevronRight, Clock, FolderOpen, Plus, Search, UserPlus, X,
@@ -15,7 +15,7 @@ const PROD_TABS = [
   { key: "published", label: "발행 완료", match: (s) => s === "published" },
 ];
 
-export function Producing({ onOpenEditor, account }) {
+export function Production({ onOpenEditor, account }) {
   const { reservations, partners } = useStore(); // 목 DB — 상태·담당자 전 화면 공유
   const [tab, setTab] = useState("review");
   const [pf, setPf] = useState("all");

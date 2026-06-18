@@ -2,6 +2,7 @@ import React, { useState, useRef } from "react";
 import { Check, Upload, Image, Film, Music, Play, ChevronLeft, ChevronRight, Heart, X, Sparkles, Shuffle } from "lucide-react";
 import { SANS, SERIF, BG, SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, STATUS, RADIUS } from "./theme.js";
 import { Logo } from "./ui.jsx";
+import { toast } from "./toast.jsx";
 import { grabVideoFrame } from "./lib/media.js";
 import * as D from "./data.js";
 
@@ -165,7 +166,7 @@ function StepBody({ step, st }) {
             );
           })}
         </div>
-        <button className="mt-2 flex items-center gap-1 text-[11.5px] font-semibold outline-none" style={{ color: GOLD }}><Upload className="h-3.5 w-3.5" /> 사진 다시 올리기</button>
+        <button onClick={st.addUpload} className="mt-2 flex items-center gap-1 text-[11.5px] font-semibold outline-none" style={{ color: GOLD }}><Upload className="h-3.5 w-3.5" /> 사진 다시 올리기</button>
       </div>
     );
   // 3 — 장면 전환 (소스별 개별 설정 + 랜덤 배치)
@@ -273,7 +274,7 @@ function StepBody({ step, st }) {
         <div className="relative flex items-center justify-center" style={{ aspectRatio: "16/9", background: "#2a323d", borderRadius: RADIUS }}>
           <Play className="h-10 w-10 text-white" fill="#fff" style={{ opacity: 0.9 }} />
         </div>
-        <button className="mt-3 w-full py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}>링크 복사 · 공유하기</button>
+        <button onClick={() => toast("링크를 복사했습니다")} className="mt-3 w-full py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}>링크 복사 · 공유하기</button>
       </div>
     </div>
   );

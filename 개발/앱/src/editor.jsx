@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { SERIF, NAVY, MASTER, BG, SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, STATUS, RADIUS } from "./theme.js";
 import { Btn } from "./ui.jsx";
+import { toast } from "./toast.jsx";
 import * as D from "./data.js";
 import { actions } from "./store.js";
 
@@ -15,7 +16,9 @@ const KIND_LABEL = { title: "타이틀", clip: "클립", slide: "추억 슬라�
 const BLOCK_COLOR = { title: GOLD, clip: "#3f5e87", slide: "#2f4763", ai: "#51607a", letter: "#5a6470" };
 
 // 장면전환은 블록 경계에 매핑. 자막은 시간축 자유배치 — VideoEditor state가 소유(추가·이동·길이조절).
-const BLOCK_TRANS = { "blk-1": "페이드", "blk-2": "슬라이드", "blk-3": "페이드" };
+// 모든 블록 사이(경계)에 장면 전환. 명시되지 않은 경계는 기본값(페이드).
+const BLOCK_TRANS_OVERRIDE = { "blk-2": "슬라이드", "blk-4": "슬라이드" };
+const blockTrans = (id) => BLOCK_TRANS_OVERRIDE[id] || "페이드";
 
 // 자막 드래그 스냅(초) + 초기 자막 시드(data.js 자막을 start/dur로 변환)
 const SUB_SNAP = 0.5;
@@ -197,12 +200,12 @@ function Timeline({ sel, onSel, subs, setSubs, onAddSub }) {
                   </button>
                 );
               })}
-              {/* 블록 경계 장면전환 */}
-              {segs.map((b) => BLOCK_TRANS[b.id] && (b.left + b.w) < width ? (
+              {/* 블록 경계 장면전환 — 모든 블록 사이에 표시(마지막 블록 제외) */}
+              {segs.map((b) => (b.left + b.w) < width ? (
                 <button key={"tr-" + b.id} onClick={() => onSel({ scope: "trans", kind: "transition", id: b.id })}
                   className="absolute top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center outline-none"
                   style={{ left: b.left + b.w, height: 22, width: 22, background: on("trans", b.id) ? GOLD : "#fff", border: "1.5px solid " + GOLD, borderRadius: 999 }}
-                  title={"장면 전환 · " + BLOCK_TRANS[b.id]}>
+                  title={"장면 전환 · " + blockTrans(b.id)}>
                   <ArrowRightLeft className="h-3 w-3" style={{ color: on("trans", b.id) ? "#fff" : GOLD_D }} />
                 </button>
               ) : null)}
@@ -260,7 +263,7 @@ function PromptManager() {
     <div className="mt-5 border-t pt-4" style={{ borderColor: LINE }}>
       <div className="mb-2 flex items-center justify-between">
         <span className="text-[12.5px] font-bold" style={{ color: INK }}>AI 문구(프롬프트) 관리</span>
-        <button className="flex items-center gap-1 text-[12px] font-semibold" style={{ color: GOLD }}><Plus className="h-3.5 w-3.5" /> 새로 추가</button>
+        <button onClick={() => toast("새 프롬프트를 추가합니다")} className="flex items-center gap-1 text-[12px] font-semibold" style={{ color: GOLD }}><Plus className="h-3.5 w-3.5" /> 새로 추가</button>
       </div>
       <div className="space-y-2">
         {D.PROMPTS.map((p) => (
@@ -268,12 +271,12 @@ function PromptManager() {
             <div className="flex items-center gap-2">
               <span className="px-1.5 py-[1px] text-[10.5px] font-bold" style={{ background: "#e9eef5", color: "#3f5e87", borderRadius: 3 }}>{p.target}</span>
               <span className="text-[12.5px] font-semibold" style={{ color: INK }}>{p.name}</span>
-              <button className="ml-auto text-[11.5px] font-semibold" style={{ color: GOLD }}>편집</button>
+              <button onClick={() => toast(p.name + " 프롬프트를 편집합니다")} className="ml-auto text-[11.5px] font-semibold" style={{ color: GOLD }}>편집</button>
             </div>
             <div className="mt-1 text-[11.5px] leading-relaxed" style={{ color: MUTE }}>{p.body}</div>
             <div className="mt-2 flex items-center gap-2 border-t pt-2" style={{ borderColor: LINE }}>
               <span className="flex h-9 w-9 shrink-0 items-center justify-center" style={{ background: "#fff", border: "1px dashed " + LINE2, borderRadius: RADIUS }}><ImageIcon className="h-4 w-4" style={{ color: FAINT }} /></span>
-              <button className="flex items-center gap-1 text-[11.5px] font-semibold" style={{ color: GOLD }}><Upload className="h-3.5 w-3.5" /> 사진 추가</button>
+              <button onClick={() => toast("사진 선택 창을 엽니다")} className="flex items-center gap-1 text-[11.5px] font-semibold" style={{ color: GOLD }}><Upload className="h-3.5 w-3.5" /> 사진 추가</button>
               <span className="text-[10.5px]" style={{ color: FAINT }}>사진 + 문구를 함께 전송</span>
             </div>
           </div>
@@ -289,7 +292,7 @@ function PropPanel({ sel, subs, updateSub, deleteSub }) {
   if (sel.scope === "block") item = D.EDITOR_BLOCKS.find((b) => b.id === sel.id);
   else if (sel.scope === "cap") item = subs.find((s) => s.id === sel.id);
   else if (sel.scope === "audio") item = D.EDITOR_TIMELINE.audio[0];
-  else if (sel.scope === "trans") item = { effect: BLOCK_TRANS[sel.id] };
+  else if (sel.scope === "trans") item = { effect: blockTrans(sel.id) };
   const k = sel.kind;
   const [effect, setEffect] = useState(item && item.effect ? item.effect : "페이드");
   const [pos, setPos] = useState(item && item.pos ? item.pos : "하단");
@@ -309,7 +312,7 @@ function PropPanel({ sel, subs, updateSub, deleteSub }) {
         {(k === "video" || k === "audio" || k === "clip" || k === "slide" || k === "ai") && (
           <Field label={k === "audio" ? "지금 음악" : "지금 들어간 파일"}>
             <div className="px-3 py-2.5 text-[12.5px]" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: INK, wordBreak: "break-all" }}>{(item.file || item.source || "").split("/").pop()}</div>
-            <button className="mt-2 flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><Upload className="h-4 w-4" /> {k === "audio" ? "다른 음악으로 바꾸기" : "다른 파일로 바꾸기"}</button>
+            <button onClick={() => toast(k === "audio" ? "음악 파일 선택 창을 엽니다" : "파일 선택 창을 엽니다")} className="mt-2 flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><Upload className="h-4 w-4" /> {k === "audio" ? "다른 음악으로 바꾸기" : "다른 파일로 바꾸기"}</button>
           </Field>
         )}
 
@@ -318,19 +321,19 @@ function PropPanel({ sel, subs, updateSub, deleteSub }) {
             <Field label="화면에 보일 글자"><input className={inputCls} style={{ ...inputStyle, fontFamily: SERIF }} defaultValue={item.text || D.EDITOR_RESERVATION.deceased} /></Field>
             <Field label="보이는 시간 (초)"><input className={inputCls} style={inputStyle} defaultValue={item.dur} /></Field>
             <Field label="AI 문구 (타이틀)"><select className={inputCls} style={inputStyle}>{D.PROMPTS.filter((p) => p.target === "타이틀").map((p) => <option key={p.id}>{p.name}</option>)}</select></Field>
-            <button className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> AI로 다시 만들기</button>
+            <button onClick={() => toast("AI로 다시 생성 요청됨 — 렌더 큐에 추가")} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> AI로 다시 만들기</button>
             <PromptManager />
           </>
         )}
 
         {(k === "clip" || k === "slide") && <Field label="보이는 시간 (초)"><input className={inputCls} style={inputStyle} defaultValue={item.dur} /></Field>}
-        {k === "slide" && <button className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> 사진으로 다시 만들기</button>}
+        {k === "slide" && <button onClick={() => toast("사진으로 다시 생성 요청됨 — 렌더 큐에 추가")} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> 사진으로 다시 만들기</button>}
 
         {k === "ai" && (
           <>
             <Field label="보이는 시간 (초)"><input className={inputCls} style={inputStyle} defaultValue={item.dur} /></Field>
             <Field label="AI 문구 (영상)"><select className={inputCls} style={inputStyle}>{D.PROMPTS.filter((p) => p.target === "AI영상").map((p) => <option key={p.id}>{p.name}</option>)}</select></Field>
-            <button className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> AI로 다시 만들기</button>
+            <button onClick={() => toast("AI로 다시 생성 요청됨 — 렌더 큐에 추가")} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> AI로 다시 만들기</button>
             <PromptManager />
           </>
         )}
@@ -351,7 +354,7 @@ function PropPanel({ sel, subs, updateSub, deleteSub }) {
               </div>
             </Field>
             <Field label="효과 길이"><select className={inputCls} style={inputStyle} defaultValue="0.5초 (기본)"><option>0.3초</option><option>0.5초 (기본)</option><option>1.0초</option></select></Field>
-            <button className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-semibold" style={{ border: "1px solid " + LINE2, borderRadius: RADIUS, color: MUTE }}><Trash2 className="h-4 w-4" /> 효과 빼기</button>
+            <button onClick={() => toast("장면 전환 효과를 뺐습니다")} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-semibold" style={{ border: "1px solid " + LINE2, borderRadius: RADIUS, color: MUTE }}><Trash2 className="h-4 w-4" /> 효과 빼기</button>
           </>
         )}
 
@@ -418,21 +421,15 @@ export default function VideoEditor({ reservation, onClose }) {
     setSel({ scope: "cap", kind: "subtitle", id });
   };
 
-  const [toast, setToast] = useState(null);
-  const flash = (msg) => { setToast(msg); setTimeout(() => setToast(null), 1800); };
+  // 토스트는 전역 toast()(App 루트의 <ToastHost/>)로 통일 — editor 자체 토스트 미보유.
   const publish = () => {
     if (reservation && reservation.id) actions.setReservationStatus(reservation.id, "published"); // 목 DB 전파 → 큐·파트너·대시보드
-    setToast("확정·발행되었습니다");
+    toast("확정·발행되었습니다");
     setTimeout(() => onClose && onClose(), 1000);
   };
 
   return (
     <div className="flex flex-col" style={{ height: "calc(100vh - 44px)", background: BG }}>
-      {toast && (
-        <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 px-4 py-2.5 text-[13px] font-semibold text-white" style={{ background: "#2a2622", borderRadius: 8, boxShadow: "0 8px 24px rgba(0,0,0,.25)" }}>
-          <Check className="h-4 w-4" style={{ color: "#9ec9b6" }} strokeWidth={2.6} /> {toast}
-        </div>
-      )}
       <div className="flex items-center justify-between px-4" style={{ background: MASTER, height: 52 }}>
         <div className="flex items-center gap-3">
           <button onClick={onClose} className="flex items-center gap-1 text-[13px] font-semibold" style={{ color: "#aab2bf" }}><ChevronLeft className="h-4 w-4" /> 닫기</button>
@@ -441,12 +438,12 @@ export default function VideoEditor({ reservation, onClose }) {
           <span className="text-[12px]" style={{ color: "#5a6472" }}>추모영상 편집</span>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => flash("되돌렸습니다")} className="flex items-center gap-1 px-2 py-1.5 text-[12px]" style={{ color: "#aab2bf" }}><Undo2 className="h-3.5 w-3.5" /> 되돌리기</button>
-          <button onClick={() => flash("다시 적용했습니다")} className="flex items-center gap-1 px-2 py-1.5 text-[12px]" style={{ color: "#aab2bf" }}><Redo2 className="h-3.5 w-3.5" /> 다시</button>
+          <button onClick={() => toast("되돌렸습니다")} className="flex items-center gap-1 px-2 py-1.5 text-[12px]" style={{ color: "#aab2bf" }}><Undo2 className="h-3.5 w-3.5" /> 되돌리기</button>
+          <button onClick={() => toast("다시 적용했습니다")} className="flex items-center gap-1 px-2 py-1.5 text-[12px]" style={{ color: "#aab2bf" }}><Redo2 className="h-3.5 w-3.5" /> 다시</button>
           <span className="h-4 w-px" style={{ background: "#2c3744" }} />
-          <button onClick={() => flash("자동 생성본으로 되돌렸습니다")} className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] font-semibold" style={{ color: "#aab2bf" }}><RotateCcw className="h-3.5 w-3.5" /> 자동본으로</button>
-          <Btn size="sm" variant="neutral" onClick={() => flash("저장되었습니다")}><Save className="h-3.5 w-3.5" /> 저장</Btn>
-          <Btn size="sm" onClick={() => flash("영상 재생성 요청됨 — 렌더 큐에 추가")}><Film className="h-3.5 w-3.5" /> 영상 다시 만들기</Btn>
+          <button onClick={() => toast("자동 생성본으로 되돌렸습니다")} className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] font-semibold" style={{ color: "#aab2bf" }}><RotateCcw className="h-3.5 w-3.5" /> 자동본으로</button>
+          <Btn size="sm" variant="neutral" onClick={() => toast("저장되었습니다")}><Save className="h-3.5 w-3.5" /> 저장</Btn>
+          <Btn size="sm" onClick={() => toast("영상 재생성 요청됨 — 렌더 큐에 추가")}><Film className="h-3.5 w-3.5" /> 영상 다시 만들기</Btn>
           <Btn size="sm" onClick={publish}><Check className="h-4 w-4" strokeWidth={2.4} /> 확정·발행</Btn>
         </div>
       </div>

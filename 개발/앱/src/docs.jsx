@@ -3,6 +3,7 @@ import { Printer, Mail } from "lucide-react";
 import { SURFACE, LINE, LINE2, INK, MUTE, FAINT, GOLD, GOLD_D, RADIUS } from "./theme.js";
 import { Btn } from "./ui.jsx";
 import * as D from "./data.js";
+import { toast } from "./toast.jsx";
 
 // 거래명세서 양식 (발행 시 동결 · 메일 발송) — 기획안 정산 §4 in-scope
 export function TradeStatement({ partner, items: itemsProp, period, issuedAt }) {
@@ -61,8 +62,8 @@ export function TradeStatement({ partner, items: itemsProp, period, issuedAt }) 
   return (
     <div>
       <div className="mb-3 flex items-center justify-end gap-2">
-        <Btn size="sm" variant="neutral"><Printer className="h-3.5 w-3.5" /> 인쇄</Btn>
-        <Btn size="sm"><Mail className="h-3.5 w-3.5" /> 이메일 발송</Btn>
+        <Btn size="sm" variant="neutral" onClick={() => toast("인쇄 창을 엽니다")}><Printer className="h-3.5 w-3.5" /> 인쇄</Btn>
+        <Btn size="sm" onClick={() => toast("거래명세서를 메일로 발송했습니다")}><Mail className="h-3.5 w-3.5" /> 이메일 발송</Btn>
       </div>
       <div className="mx-auto" style={{ maxWidth: 900, background: SURFACE, border: "1px solid " + LINE2, borderRadius: RADIUS, padding: 28 }}>
         {/* 타이틀 */}
@@ -84,7 +85,7 @@ export function TradeStatement({ partner, items: itemsProp, period, issuedAt }) 
             <tr><td style={{ ...labelCell, width: 70 }}>공급받는자</td><td style={valCell}>{partner || "—"}</td></tr>
             <tr><td style={labelCell}>지역</td><td style={valCell}>{recv ? recv.region : "—"}</td></tr>
             <tr><td style={labelCell}>담당자</td><td style={valCell}>{recv ? recv.manager : "—"}</td></tr>
-            <tr><td style={{ ...labelCell, borderBottom: "none" }}>건당 단가</td><td style={{ ...valCell, borderBottom: "none" }} className="tabular-nums">{won(unit)}원 (VAT 포함)</td></tr>
+            <tr><td style={{ ...labelCell, borderBottom: "none" }}>건당 단가</td><td style={{ ...valCell, borderBottom: "none" }} className="tabular-nums">{won(unit)}원</td></tr>
           </tbody></table>
         </div>
 

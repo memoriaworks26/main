@@ -167,7 +167,7 @@ export function FormBuilder() {
               {previewFields.map((f) => (
                 <FormPreviewField key={f.key} label={effectiveLabel(f)} type={f.type} required={f.locked} />
               ))}
-              <button className="mt-1 w-full py-2 text-[12.5px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}>제출</button>
+              <button onClick={() => toast("미리보기 폼입니다 — 실제 제출은 유저 화면에서 동작합니다")} className="mt-1 w-full py-2 text-[12.5px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}>제출</button>
             </div>
           </div>
           <p className="mt-2 px-1 text-[11px] leading-relaxed" style={{ color: FAINT }}>숨김 처리한 선택 항목은 제외됩니다.</p>

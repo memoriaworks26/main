@@ -29,10 +29,9 @@ export const NAV_LINE = "#28323f";
 
 // 상태색: 의미 전용, 채도 절제, 빨강 없음. (색 + 라벨 + 점 → 색약 대응)
 export const STATUS = {
-  published: { label: "발행완료", c: "#3a7468", bg: "#e9f1ee" },
-  review: { label: "컨펌대기", c: "#9a6a1c", bg: "#f4ead7" },
-  rendering: { label: "제작중", c: "#3f5e87", bg: "#e9eef5" },
-  rework: { label: "재작업", c: "#8a6f5a", bg: "#efe7df" }, // 컨펌 반려 → 재생성 (빨강 배제, 웜 브라운)
+  published: { label: "발행 완료", c: "#3a7468", bg: "#e9f1ee" },
+  review: { label: "컨펌 대기", c: "#9a6a1c", bg: "#f4ead7" },
+  rendering: { label: "작업중", c: "#3f5e87", bg: "#e9eef5" },
   standby: { label: "예비", c: "#8a857b", bg: "#eeece6" },
   info: { label: "안내화면", c: "#5a6470", bg: "#eceef0" },
   // 운영 상태(파트너 라이브/사이니지/정산)

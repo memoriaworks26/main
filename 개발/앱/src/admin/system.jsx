@@ -31,7 +31,7 @@ export function Signage() {
       </div>
       <Table cols={cols} rows={rows} renderCell={(r, k) =>
         k === "status" ? <Tag s={r.status} /> :
-        k === "act" ? <button className="text-[12px] font-semibold" style={{ color: GOLD }}>제어</button> :
+        k === "act" ? <button onClick={() => toast(r.id + " 디바이스를 제어합니다")} className="text-[12px] font-semibold" style={{ color: GOLD }}>제어</button> :
         k === "partner" ? <span className="font-semibold" style={{ color: INK }}>{r.partner}</span> :
         k === "ip" ? <span className="tabular-nums">{r.ip}</span> : r[k]
       } />

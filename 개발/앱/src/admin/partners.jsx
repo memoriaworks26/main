@@ -174,7 +174,7 @@ function PartnerDetail({ partner: p, unitPrice, onBack, go }) {
             </div>
           )}
         </Card>
-        <Card title="영상 진행 현황" action={goLink("producing")}>
+        <Card title="영상 진행 현황" action={goLink("production")}>
           <div className="space-y-2">
             {row("컨펌 대기", cnt("review") + "건")}{row("작업 중", cnt("rendering") + "건")}{row("발행 완료", cnt("published") + "건")}
             {row("누적 예약", rs.length + "건")}

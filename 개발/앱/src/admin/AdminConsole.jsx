@@ -6,12 +6,13 @@ import {
 } from "lucide-react";
 import { NAVY, BG, SURFACE, LINE, GOLD, GOLD_SOFT, INK, MUTE, FAINT, NAV_LINE } from "../theme.js";
 import { Logo, NavItem, NavSection } from "../ui.jsx";
+import { toast } from "../toast.jsx";
 import { useStore } from "../store.js";
 import * as D from "../data.js";
 import { Dashboard } from "./overview.jsx";
 import { PartnersManage } from "./partners.jsx";
 import { Customers } from "./customers.jsx";
-import { Producing, SecondEdit } from "./production.jsx";
+import { Production, SecondEdit } from "./production.jsx";
 import { ContentHub } from "./content.jsx";
 import { Templates } from "./templates.jsx";
 import { Settlement } from "./settlement.jsx";
@@ -62,7 +63,7 @@ export default function AdminConsole({ onOpenEditor, onLoginAsPartner }) {
   const go = (p) => setPage(p);
   const canFor = (a, k) => k === "mysettings" || a.role === "master" || (a.perms || []).includes(k); // 마스터=풀 액세스 · 내 설정은 모두 접근
   const can = (k) => canFor(account, k);
-  const NAV_ORDER = ["overview", "partners", "customer", "formbuilder", "producing", "secondedit", "templates", "content", "settlement", "mysettings", "accounts", "settings", "storage", "signage"];
+  const NAV_ORDER = ["overview", "partners", "customers", "forms", "production", "secondedit", "templates", "content", "settlement", "mysettings", "accounts", "settings", "storage", "signage"];
   const switchAccount = (a) => { setAccountId(a.id); if (!canFor(a, page)) setPage(NAV_ORDER.find((k) => canFor(a, k)) || "mysettings"); };
   const activePage = can(page) ? page : (NAV_ORDER.find(can) || "mysettings"); // 권한 없는 페이지는 접근 가능한 첫 페이지로
 
@@ -76,14 +77,14 @@ export default function AdminConsole({ onOpenEditor, onLoginAsPartner }) {
         </div>
         <UserChip account={account} accounts={accounts} onSwitch={switchAccount} />
         <nav className="flex-1 overflow-y-auto px-2.5 pb-4">
-          {(can("overview") || can("partners") || can("customer") || can("formbuilder")) && <NavSection>총괄</NavSection>}
+          {(can("overview") || can("partners") || can("customers") || can("forms")) && <NavSection>총괄</NavSection>}
           {can("overview") && <NavItem icon={<LayoutGrid className={ICON.size} strokeWidth={ICON.sw} />} label="대시보드" active={activePage === "overview"} onClick={() => go("overview")} />}
           {can("partners") && <NavItem icon={<Users2 className={ICON.size} strokeWidth={ICON.sw} />} label="파트너사 관리" active={activePage === "partners"} onClick={() => go("partners")} />}
-          {can("customer") && <NavItem icon={<UserCircle className={ICON.size} strokeWidth={ICON.sw} />} label="고객관리" active={activePage === "customer"} onClick={() => go("customer")} />}
-          {can("formbuilder") && <NavItem icon={<ClipboardList className={ICON.size} strokeWidth={ICON.sw} />} label="유저 입력 폼" active={activePage === "formbuilder"} onClick={() => go("formbuilder")} />}
+          {can("customers") && <NavItem icon={<UserCircle className={ICON.size} strokeWidth={ICON.sw} />} label="고객관리" active={activePage === "customers"} onClick={() => go("customers")} />}
+          {can("forms") && <NavItem icon={<ClipboardList className={ICON.size} strokeWidth={ICON.sw} />} label="유저 입력 폼" active={activePage === "forms"} onClick={() => go("forms")} />}
 
-          {(can("producing") || can("secondedit") || can("templates") || can("content")) && <NavSection>추모영상 제작</NavSection>}
-          {can("producing") && <NavItem icon={<Clapperboard className={ICON.size} strokeWidth={ICON.sw} />} label="편집·컨펌" active={activePage === "producing"} onClick={() => go("producing")} />}
+          {(can("production") || can("secondedit") || can("templates") || can("content")) && <NavSection>추모영상 제작</NavSection>}
+          {can("production") && <NavItem icon={<Clapperboard className={ICON.size} strokeWidth={ICON.sw} />} label="편집·컨펌" active={activePage === "production"} onClick={() => go("production")} />}
           {can("secondedit") && <NavItem icon={<Scissors className={ICON.size} strokeWidth={ICON.sw} />} label="2차 가공" active={activePage === "secondedit"} onClick={() => go("secondedit")} />}
           {can("templates") && <NavItem icon={<LayoutTemplate className={ICON.size} strokeWidth={ICON.sw} />} label="영상 템플릿" active={activePage === "templates"} onClick={() => go("templates")} />}
           {can("content") && <NavItem icon={<FolderOpen className={ICON.size} strokeWidth={ICON.sw} />} label="콘텐츠 허브" active={activePage === "content"} onClick={() => go("content")} />}
@@ -106,7 +107,7 @@ export default function AdminConsole({ onOpenEditor, onLoginAsPartner }) {
           </>}
         </nav>
         <div className="px-2.5 pb-4 pt-2" style={{ borderTop: "1px solid " + NAV_LINE }}>
-          <button className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-[12.5px] font-semibold outline-none focus-visible:ring-1" style={{ color: "#9aa6b6" }}>
+          <button onClick={() => toast("로그아웃되었습니다")} className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-[12.5px] font-semibold outline-none focus-visible:ring-1" style={{ color: "#9aa6b6" }}>
             <LogOut className={ICON.size} strokeWidth={ICON.sw} /> 로그아웃
           </button>
         </div>
@@ -116,14 +117,14 @@ export default function AdminConsole({ onOpenEditor, onLoginAsPartner }) {
         <main className="flex-1 px-3 py-4" style={{ maxWidth: 1000 }}>
           {activePage === "overview" && <Dashboard go={go} />}
           {activePage === "partners" && <PartnersManage go={go} onLoginAsPartner={onLoginAsPartner} />}
-          {activePage === "customer" && <Customers />}
-          {activePage === "producing" && <Producing onOpenEditor={onOpenEditor} account={account} />}
+          {activePage === "customers" && <Customers />}
+          {activePage === "production" && <Production onOpenEditor={onOpenEditor} account={account} />}
           {activePage === "secondedit" && <SecondEdit onOpenEditor={onOpenEditor} account={account} />}
           {activePage === "templates" && <Templates />}
           {activePage === "content" && <ContentHub />}
           {activePage === "settlement" && <Settlement />}
           {activePage === "accounts" && <AccountsManage account={account} />}
-          {activePage === "formbuilder" && <FormBuilder />}
+          {activePage === "forms" && <FormBuilder />}
           {activePage === "settings" && <SettingsView />}
           {activePage === "mysettings" && <MySettings account={account} />}
           {activePage === "storage" && <Storage />}

@@ -5,6 +5,7 @@ import AdminConsole from "./admin.jsx";
 import PartnerConsole from "./partner.jsx";
 import UserMobile from "./user.jsx";
 import VideoEditor from "./editor.jsx";
+import { ToastHost } from "./toast.jsx";
 
 // ─────────────────────────────────────────────────────────────
 // Memoria Works — 통합 인터페이스 (목업 / 권한 전환)
@@ -48,15 +49,16 @@ function MasterNav({ view, setView }) {
 export default function App() {
   const [view, setView] = useState("admin");
   const [editor, setEditor] = useState(null); // null | reservation/room 객체
+  const [asPartner, setAsPartner] = useState(null); // 관리자가 파트너로 접속 시 해당 파트너 객체
 
   const openEditor = (item) => setEditor(item || {});
   const closeEditor = () => setEditor(null);
+  const switchView = (v) => { setAsPartner(null); setView(v); };
+  const loginAsPartner = (partner) => { setAsPartner(partner); setView("partner"); };
 
   return (
     <div className="min-w-[1080px]" style={{ background: BG, minHeight: "100vh", fontFamily: SANS, color: INK }}>
       <style>{`
-        @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css');
-        @import url('https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&display=swap');
         * { font-family: ${SANS}; }
         .mw-track { height: 3px; background: rgba(63,94,135,.18); overflow: hidden; border-radius: 2px; }
         .mw-fill { height: 100%; width: 40%; background: #3f5e87; animation: mw-move 1.4s ease-in-out infinite; }
@@ -70,17 +72,18 @@ export default function App() {
         ::-webkit-scrollbar-thumb { background: #cfc8bb; border-radius: 5px; }
       `}</style>
 
-      <MasterNav view={view} setView={setView} />
+      <MasterNav view={view} setView={switchView} />
 
       {editor ? (
         <VideoEditor reservation={editor} onClose={closeEditor} />
       ) : (
         <>
-          {view === "admin" && <AdminConsole onOpenEditor={openEditor} />}
-          {view === "partner" && <PartnerConsole />}
+          {view === "admin" && <AdminConsole onOpenEditor={openEditor} onLoginAsPartner={loginAsPartner} />}
+          {view === "partner" && <PartnerConsole asPartner={asPartner} onBackToAdmin={asPartner ? () => switchView("admin") : null} />}
           {view === "user" && <UserMobile />}
         </>
       )}
+      <ToastHost />
     </div>
   );
 }
