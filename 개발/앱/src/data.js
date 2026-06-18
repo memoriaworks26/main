@@ -1,61 +1,32 @@
 // ─────────────────────────────────────────────────────────────
-// 더미 데이터 (실데이터 아님) — 도메인: 반려동물(펫) 장례 (추모실·반려동물·보호자)
+// 더미 데이터 (실데이터 아님) — 도메인: 반려동물(펫) 장례 (호실·반려동물·보호자)
 // 본개발에서 API 연결로 교체.
 // ─────────────────────────────────────────────────────────────
+import { swatch } from "./lib/media.js";
 
-// 추모실 현황 (현황판 그리드)
+// 호실 현황 (현황판 그리드)
 export const ROOMS = [
-  { id: 1, name: "1추모실", floor: "1층", type: "case", status: "published", deceased: "콩이", species: "말티즈", age: 15, chief: "홍성호", in: "06.15", out: "06.17" },
-  { id: 2, name: "2추모실", floor: "1층", type: "case", status: "review", deceased: "보리", species: "포메라니안", age: 13, chief: "김민재", in: "06.16", out: "06.18" },
-  { id: 3, name: "3추모실", floor: "2층", type: "case", status: "rendering", deceased: "초코", species: "푸들", age: 11, chief: "이정훈", in: "06.16", out: "06.18" },
-  { id: 4, name: "4추모실", floor: "2층", type: "case", status: "published", deceased: "나비", species: "코리안숏헤어", age: 16, chief: "박은영", in: "06.14", out: "06.16" },
-  { id: 5, name: "예비", floor: "", type: "standby", status: "standby" },
-  { id: 6, name: "종합안내 로비", floor: "", type: "info", status: "info" },
-  { id: 7, name: "종합안내 현관", floor: "", type: "info", status: "info" },
+  { id: 1, name: "1호실", floor: "1층", type: "case", status: "published", deceased: "콩이", species: "말티즈", age: 15, chief: "홍성호", in: "06.15", out: "06.17" },
+  { id: 2, name: "2호실", floor: "1층", type: "case", status: "review", deceased: "보리", species: "포메라니안", age: 13, chief: "김민재", in: "06.16", out: "06.18" },
+  { id: 3, name: "3호실", floor: "2층", type: "case", status: "rendering", deceased: "초코", species: "푸들", age: 11, chief: "이정훈", in: "06.16", out: "06.18" },
+  { id: 4, name: "4호실", floor: "2층", type: "case", status: "published", deceased: "나비", species: "코리안숏헤어", age: 16, chief: "박은영", in: "06.14", out: "06.16" },
 ];
 
-export const NAV_ROOMS = [
-  "1추모실 (1층)", "2추모실 (1층)", "3추모실 (2층)", "4추모실 (2층)",
-  "예비", "종합안내 로비", "종합안내 현관",
-];
-
-// 두 번째 파트너사(펫포레스트 추모관) 추모실 — 관리자 통합현황 드릴다운용
-export const ROOMS_P2 = [
-  { id: 21, name: "특1추모실", floor: "1층", type: "case", status: "rendering", deceased: "모카", species: "골든리트리버", age: 12, chief: "정우성", in: "06.16", out: "06.18" },
-  { id: 22, name: "1추모실", floor: "1층", type: "case", status: "published", deceased: "두부", species: "시츄", age: 14, chief: "최지우", in: "06.15", out: "06.17" },
-  { id: 23, name: "2추모실", floor: "2층", type: "case", status: "review", deceased: "별이", species: "페르시안", age: 17, chief: "윤상호", in: "06.16", out: "06.18" },
-  { id: 24, name: "예비", floor: "", type: "standby", status: "standby" },
-  { id: 25, name: "종합안내 로비", floor: "", type: "info", status: "info" },
-];
-
-// 파트너사(반려동물 장례식장) ↔ 추모실 매핑 — 현황판/추모실은 장례식장별
-export const PARTNER_ROOMS = {
-  "P-001": ROOMS, // 무지개동산 반려동물장례식장
-  "P-002": ROOMS_P2, // 펫포레스트 추모관
-  "P-003": [], // 하늘소풍 반려동물장례식장 (비활성)
-};
-
-// 파트너사별 추모실 요약 통계
-export function roomStats(partnerId) {
-  const rs = (PARTNER_ROOMS[partnerId] || []).filter((r) => r.type === "case");
-  const n = (s) => rs.filter((r) => r.status === s).length;
-  return { total: rs.length, rendering: n("rendering"), review: n("review"), published: n("published") };
-}
-
-// 예약·접수 목록 — partner(테넌트), requestedAt(컨펌 요청 시각 · 분단위), alert(예외) 포함.
+// 예약·접수 목록 — partner(테넌트), slot(호실 예약 시간대), requestedAt(컨펌 요청 시각 · 분단위) 포함.
+// 반려동물 추모는 호실을 시간대(slot)로 예약 — 안치/화장 일정 개념 없음. 영상 진행상태는 status 단일 출처.
 // 컨펌 대기 정렬 기준은 requestedAt 오름차순(먼저 요청된 순).
 export const RESERVATIONS = [
   // 무지개동산 반려동물장례식장 (P-001)
-  { id: "R-240615-01", partner: "무지개동산 반려동물장례식장", deceased: "콩이", chief: "홍성호", phone: "010-4082-0444", room: "1추모실", time: "06.15 안치 · 06.17 화장", requestedAt: "06.17 08:24", video: "컨펌대기", status: "review", alert: null, assignee: null },
-  { id: "R-240617-02", partner: "무지개동산 반려동물장례식장", deceased: "보리", chief: "김민재", phone: "010-9181-3047", room: "2추모실", time: "06.16 안치 · 06.18 화장", requestedAt: "06.18 09:10", video: "제작중", status: "rendering", alert: null, assignee: "정다은" },
-  { id: "R-240617-05", partner: "무지개동산 반려동물장례식장", deceased: "단지", chief: "강민서", phone: "010-7741-2230", room: "3추모실", time: "06.17 안치 · 06.18 화장", requestedAt: "06.17 22:05", video: "재작업", status: "rework", alert: null, assignee: "김도현" },
-  { id: "R-240617-06", partner: "무지개동산 반려동물장례식장", deceased: "나비", chief: "박은영", phone: "010-5521-7788", room: "4추모실", time: "06.17 안치 · 06.18 화장", requestedAt: "06.18 07:48", video: "제작중", status: "rendering", alert: null, assignee: "정다은" },
-  { id: "R-240614-09", partner: "무지개동산 반려동물장례식장", deceased: "가을", chief: "서동현", phone: "010-3092-6612", room: "1추모실", time: "06.14 안치 · 06.16 화장", requestedAt: "06.16 15:30", video: "발행완료", status: "published", alert: null, assignee: "김도현" },
+  { id: "R-240615-01", partner: "무지개동산 반려동물장례식장", deceased: "콩이", chief: "홍성호", phone: "010-4082-0444", room: "1호실", date: "2026-06-15", slot: "14:00~17:20", requestedAt: "06.17 08:24", status: "review", assignee: null },
+  { id: "R-240617-02", partner: "무지개동산 반려동물장례식장", deceased: "보리", chief: "김민재", phone: "010-9181-3047", room: "2호실", date: "2026-06-16", slot: "20:00~23:50", requestedAt: "06.18 09:10", status: "rendering", assignee: "정다은" },
+  { id: "R-240617-05", partner: "무지개동산 반려동물장례식장", deceased: "단지", chief: "강민서", phone: "010-7741-2230", room: "3호실", date: "2026-06-17", slot: "09:00~12:30", requestedAt: "06.17 22:05", status: "rendering", assignee: "김도현" },
+  { id: "R-240617-06", partner: "무지개동산 반려동물장례식장", deceased: "나비", chief: "박은영", phone: "010-5521-7788", room: "4호실", date: "2026-06-17", slot: "13:00~16:00", requestedAt: "06.18 07:48", status: "rendering", assignee: "정다은" },
+  { id: "R-240614-09", partner: "무지개동산 반려동물장례식장", deceased: "가을", chief: "서동현", phone: "010-3092-6612", room: "1호실", date: "2026-06-14", slot: "10:00~13:40", requestedAt: "06.16 15:30", status: "published", assignee: "김도현" },
   // 펫포레스트 추모관 (P-002)
-  { id: "R-240617-03", partner: "펫포레스트 추모관", deceased: "초코", chief: "이정훈", phone: "010-2274-1188", room: "특1추모실", time: "06.17 안치 · 06.18 화장", requestedAt: "06.18 10:02", video: "컨펌대기", status: "review", alert: null, assignee: null },
-  { id: "R-240617-07", partner: "펫포레스트 추모관", deceased: "모카", chief: "정우성", phone: "010-8845-1190", room: "1추모실", time: "06.17 안치 · 06.18 화장", requestedAt: "06.18 11:15", video: "제작중", status: "rendering", alert: null, assignee: "이수아" },
-  { id: "R-240617-08", partner: "펫포레스트 추모관", deceased: "두부", chief: "최지우", phone: "010-6610-7782", room: "2추모실", time: "06.17 안치 · 06.19 화장", requestedAt: "06.18 06:33", video: "제작중", status: "rendering", alert: "render-fail", assignee: "김도현" },
-  { id: "R-240616-10", partner: "펫포레스트 추모관", deceased: "루이", chief: "한가람", phone: "010-4471-9920", room: "특1추모실", time: "06.16 안치 · 06.17 화장", requestedAt: "06.16 18:20", video: "발행완료", status: "published", alert: null, assignee: "정다은" },
+  { id: "R-240617-03", partner: "펫포레스트 추모관", deceased: "초코", chief: "이정훈", phone: "010-2274-1188", room: "특1호실", date: "2026-06-17", slot: "11:00~14:30", requestedAt: "06.18 10:02", status: "review", assignee: null },
+  { id: "R-240617-07", partner: "펫포레스트 추모관", deceased: "모카", chief: "정우성", phone: "010-8845-1190", room: "1호실", date: "2026-06-17", slot: "15:00~18:20", requestedAt: "06.18 11:15", status: "rendering", assignee: "이수아" },
+  { id: "R-240617-08", partner: "펫포레스트 추모관", deceased: "두부", chief: "최지우", phone: "010-6610-7782", room: "2호실", date: "2026-06-17", slot: "18:00~21:10", requestedAt: "06.18 06:33", status: "rendering", assignee: "김도현" },
+  { id: "R-240616-10", partner: "펫포레스트 추모관", deceased: "루이", chief: "한가람", phone: "010-4471-9920", room: "특1호실", date: "2026-06-16", slot: "09:30~12:00", requestedAt: "06.16 18:20", status: "published", assignee: "정다은" },
 ];
 
 // 2차 가공 사유 (재가공 트랙)
@@ -65,31 +36,19 @@ export const SECOND_EDIT_REASONS = [
 
 // 2차 가공 큐 — 1차 완료(발행) 건을 불러온 재가공 작업. status: pending|rendering|published
 export const SECOND_EDIT_JOBS = [
-  { id: "SE-001", reservId: "R-240614-09", status: "pending", reason: "보호자 요청 수정" },
-  { id: "SE-002", reservId: "R-240616-10", status: "rendering", reason: "사진·영상 교체" },
+  { id: "SE-001", reservId: "R-240614-09", status: "pending", reason: "보호자 요청 수정", assignee: null },
+  { id: "SE-002", reservId: "R-240616-10", status: "rendering", reason: "사진·영상 교체", assignee: "정다은" },
+  { id: "SE-003", reservId: "R-240614-09", status: "published", reason: "BGM 변경", assignee: "김도현" },
 ];
 
-// 예외 라벨(컨펌 큐 상단 노출)
-export const RESERV_ALERT = {
-  "render-fail": { label: "렌더 실패", hint: "FFmpeg 잡 실패 — 재처리 필요" },
-};
-
 // 파트너사(반려동물 장례식장)
-//  - id: 고유 코드 — 내부 고정 식별자(매핑 키 · 추모실·템플릿·정산·디바이스 연결, 변경 불가)
+//  - id: 고유 코드 — 내부 고정 식별자(매핑 키 · 호실·템플릿·정산·디바이스 연결, 변경 불가)
 //  - idCode: ID 코드 — 파트너 로그인 ID(관리자가 부여·수정 가능)
 //  - unitPrice: 건당 단가(영상 1건, VAT 포함)
 export const PARTNERS = [
   { id: "P-001", idCode: "rainbow", name: "무지개동산 반려동물장례식장", region: "전남 영광군", manager: "정대현", rooms: 7, active: true, reservThisMonth: 24, revenue: 1800000, unitPrice: 75000 },
-  { id: "P-002", idCode: "petforest", name: "펫포레스트 추모관", region: "서울 서초구", manager: "한지수", rooms: 12, active: true, reservThisMonth: 41, revenue: 3075000, unitPrice: 90000 },
+  { id: "P-002", idCode: "petforest", name: "펫포레스트 추모관", region: "서울 서초구", manager: "한지수", rooms: 12, active: true, reservThisMonth: 41, revenue: 3690000, unitPrice: 90000 },
   { id: "P-003", idCode: "skypicnic", name: "하늘소풍 반려동물장례식장", region: "경기 안산시", manager: "오세영", rooms: 5, active: false, reservThisMonth: 0, revenue: 0, unitPrice: 75000 },
-];
-
-// 고객(보호자) 관리
-export const CUSTOMERS = [
-  { id: "C-01", chief: "홍성호", phone: "010-4082-0444", deceased: "콩이", partner: "무지개동산 반려동물장례식장", date: "06.15", status: "published" },
-  { id: "C-02", chief: "김민재", phone: "010-9181-3047", deceased: "보리", partner: "무지개동산 반려동물장례식장", date: "06.16", status: "review" },
-  { id: "C-03", chief: "이정훈", phone: "010-2274-1188", deceased: "초코", partner: "펫포레스트 추모관", date: "06.16", status: "rendering" },
-  { id: "C-04", chief: "박은영", phone: "010-5521-7788", deceased: "나비", partner: "펫포레스트 추모관", date: "06.14", status: "published" },
 ];
 
 // 콘텐츠 허브 자산 (선업로드 클립·사진) — 파트너사별 매칭
@@ -129,6 +88,19 @@ export const TEMPLATE_ELEMENTS = [
 ];
 export const elementDef = (type) => TEMPLATE_ELEMENTS.find((e) => e.type === type);
 
+// 기본 템플릿 — 신규 파트너 생성 시 이 구성을 복제해서 시작(이후 파트너별로 수정).
+// 클립은 파트너 콘텐츠 허브 자산에 연결되므로 기본 템플릿엔 두지 않음(기본 요소 4종 + BGM만).
+export const DEFAULT_TEMPLATE_ID = "__default__";
+export const DEFAULT_TEMPLATE = {
+  bgm: "b-1",
+  blocks: [
+    { id: "d-title", type: "title" },
+    { id: "d-slide", type: "slide" },
+    { id: "d-ai", type: "ai" },
+    { id: "d-letter", type: "letter" },
+  ],
+};
+
 // 파트너사별 템플릿 = { bgm: BGM 곡 id, blocks: [{ id, type, assetId? }] }. blocks 순서가 곧 영상 순서.
 // clip 블록만 assetId(콘텐츠 허브 자산 영상/이미지)를 가진다.
 export const TEMPLATE_ASSIGN = {
@@ -156,20 +128,18 @@ export const TEMPLATE_ASSIGN = {
   ] },
 };
 
-// 사이니지 디바이스 (라즈베리파이 ↔ 추모실 매핑) — 파트너사별
+// 사이니지 디바이스 (라즈베리파이 ↔ 호실 매핑) — 파트너사별
 // 사이니지 디바이스 — signal(신호세기 0~100), mode(표출 콘텐츠: 광고|대기|알림|제작영상), lastComm(오프라인 마지막 통신)
 export const DEVICES = [
   // 무지개동산 반려동물장례식장
-  { id: "RPI-0441", partner: "무지개동산 반려동물장례식장", room: "1추모실", status: "live", playing: "콩이 추모영상", mode: "제작영상", signal: 80, ip: "10.0.0.41" },
-  { id: "RPI-0442", partner: "무지개동산 반려동물장례식장", room: "2추모실", status: "live", playing: "보리 추모영상", mode: "제작영상", signal: 90, ip: "10.0.0.42" },
-  { id: "RPI-0443", partner: "무지개동산 반려동물장례식장", room: "3추모실", status: "offline", playing: "—", mode: "대기", signal: 0, lastComm: "26.06.18 02:14", ip: "10.0.0.43" },
-  { id: "RPI-0444", partner: "무지개동산 반려동물장례식장", room: "4추모실", status: "online", playing: "대기화면", mode: "대기", signal: 60, ip: "10.0.0.44" },
-  { id: "RPI-L01", partner: "무지개동산 반려동물장례식장", room: "종합안내 로비", status: "online", playing: "종합안내", mode: "알림", signal: 95, ip: "10.0.0.51" },
+  { id: "RPI-0441", partner: "무지개동산 반려동물장례식장", room: "1호실", status: "live", playing: "콩이 추모영상", mode: "제작영상", signal: 80, ip: "10.0.0.41" },
+  { id: "RPI-0442", partner: "무지개동산 반려동물장례식장", room: "2호실", status: "live", playing: "보리 추모영상", mode: "제작영상", signal: 90, ip: "10.0.0.42" },
+  { id: "RPI-0443", partner: "무지개동산 반려동물장례식장", room: "3호실", status: "offline", playing: "—", mode: "대기", signal: 0, lastComm: "26.06.18 02:14", ip: "10.0.0.43" },
+  { id: "RPI-0444", partner: "무지개동산 반려동물장례식장", room: "4호실", status: "online", playing: "대기화면", mode: "대기", signal: 60, ip: "10.0.0.44" },
   // 펫포레스트 추모관
-  { id: "RPI-S01", partner: "펫포레스트 추모관", room: "특1추모실", status: "live", playing: "모카 추모영상", mode: "제작영상", signal: 86, ip: "10.0.1.11" },
-  { id: "RPI-S02", partner: "펫포레스트 추모관", room: "1추모실", status: "live", playing: "두부 추모영상", mode: "제작영상", signal: 78, ip: "10.0.1.12" },
-  { id: "RPI-S03", partner: "펫포레스트 추모관", room: "2추모실", status: "online", playing: "대기화면", mode: "대기", signal: 64, ip: "10.0.1.13" },
-  { id: "RPI-SL01", partner: "펫포레스트 추모관", room: "종합안내 로비", status: "online", playing: "종합안내", mode: "알림", signal: 92, ip: "10.0.1.21" },
+  { id: "RPI-S01", partner: "펫포레스트 추모관", room: "특1호실", status: "live", playing: "모카 추모영상", mode: "제작영상", signal: 86, ip: "10.0.1.11" },
+  { id: "RPI-S02", partner: "펫포레스트 추모관", room: "1호실", status: "live", playing: "두부 추모영상", mode: "제작영상", signal: 78, ip: "10.0.1.12" },
+  { id: "RPI-S03", partner: "펫포레스트 추모관", room: "2호실", status: "online", playing: "대기화면", mode: "대기", signal: 64, ip: "10.0.1.13" },
 ];
 
 // 사이니지 콘텐츠 모드 (표출 전환 선택지)
@@ -177,29 +147,34 @@ export const SIGNAGE_MODES = ["광고", "대기", "알림", "제작영상"];
 
 // 외부 링크 (발행 HLS · 토큰 · 만료)
 export const LINKS = [
-  { id: "lk-1", deceased: "콩이", url: "memoria.works/v/8fa2c1", issued: "06.15", expires: "06.17 화장 후", views: 142, status: "published" },
-  { id: "lk-2", deceased: "나비", url: "memoria.works/v/2b7e90", issued: "06.14", expires: "06.16 화장 후", views: 88, status: "published" },
+  { id: "lk-1", deceased: "콩이", url: "memoria.works/v/8fa2c1", issued: "06.15", expires: "퇴실 시 자동 만료", views: 142, status: "published" },
+  { id: "lk-2", deceased: "나비", url: "memoria.works/v/2b7e90", issued: "06.14", expires: "퇴실 시 자동 만료", views: 88, status: "published" },
 ];
 
-// 정산 — 파트너사별
+// 정산 — 파트너사별 요약 (상세 화면의 청구=Σ매출건, 입금=Σ입금내역, 미수금=청구−입금과 일치)
+//   billed = count × 건당 단가 = SETTLEMENT_ITEMS 합계 · paid = SETTLEMENT_DEPOSITS 합계 · unpaid = billed − paid
 export const SETTLEMENT_PARTNERS = [
-  { partner: "무지개동산 반려동물장례식장", region: "전남 영광군", count: 12, billed: 900000, paid: 900000, unpaid: 0, status: "done" },
-  { partner: "펫포레스트 추모관", region: "서울 서초구", count: 8, billed: 620000, paid: 620000, unpaid: 0, status: "done" },
-  { partner: "하늘소풍 반려동물장례식장", region: "경기 안산시", count: 4, billed: 450000, paid: 300000, unpaid: 150000, status: "waiting" },
+  { partner: "무지개동산 반려동물장례식장", region: "전남 영광군", count: 6, billed: 450000, paid: 450000, unpaid: 0, status: "done" },
+  { partner: "펫포레스트 추모관", region: "서울 서초구", count: 5, billed: 450000, paid: 270000, unpaid: 180000, status: "waiting" },
+  { partner: "하늘소풍 반려동물장례식장", region: "경기 안산시", count: 0, billed: 0, paid: 0, unpaid: 0, status: "done" },
 ];
 
-// 정산 — 예약 건별 (단가 스냅샷 고정) · ymd: 기간 필터용 전체 날짜
+// 정산 — 예약 건별 (단가 스냅샷 고정) · ymd: 기간 필터용 전체 날짜 · amount = 해당 파트너 건당 단가
+//   무지개동산 6건×75,000 = 450,000 · 펫포레스트 5건×90,000 = 450,000 (하늘소풍은 비활성 — 매출 없음)
 export const SETTLEMENT_ITEMS = [
-  // 무지개동산 반려동물장례식장
-  { deceased: "가을", chief: "서동현", partner: "무지개동산 반려동물장례식장", ymd: "2026-05-22", date: "05.22", amount: 75000, status: "billed" },
-  { deceased: "달이", chief: "노유진", partner: "무지개동산 반려동물장례식장", ymd: "2026-05-30", date: "05.30", amount: 75000, status: "billed" },
-  { deceased: "콩이", chief: "홍성호", partner: "무지개동산 반려동물장례식장", ymd: "2026-06-12", date: "06.12", amount: 75000, status: "done" },
-  { deceased: "보리", chief: "김민재", partner: "무지개동산 반려동물장례식장", ymd: "2026-06-15", date: "06.15", amount: 75000, status: "done" },
+  // 무지개동산 반려동물장례식장 (75,000/건)
+  { deceased: "봄이", chief: "한도윤", partner: "무지개동산 반려동물장례식장", ymd: "2026-05-22", date: "05.22", amount: 75000, status: "done" },
+  { deceased: "달이", chief: "노유진", partner: "무지개동산 반려동물장례식장", ymd: "2026-05-30", date: "05.30", amount: 75000, status: "done" },
+  { deceased: "가을", chief: "서동현", partner: "무지개동산 반려동물장례식장", ymd: "2026-06-14", date: "06.14", amount: 75000, status: "billed" },
+  { deceased: "콩이", chief: "홍성호", partner: "무지개동산 반려동물장례식장", ymd: "2026-06-15", date: "06.15", amount: 75000, status: "billed" },
+  { deceased: "보리", chief: "김민재", partner: "무지개동산 반려동물장례식장", ymd: "2026-06-16", date: "06.16", amount: 75000, status: "waiting" },
   { deceased: "단지", chief: "강민서", partner: "무지개동산 반려동물장례식장", ymd: "2026-06-17", date: "06.17", amount: 75000, status: "waiting" },
-  // 펫포레스트 추모관
-  { deceased: "별이", chief: "윤상호", partner: "펫포레스트 추모관", ymd: "2026-05-28", date: "05.28", amount: 90000, status: "billed" },
-  { deceased: "초코", chief: "이정훈", partner: "펫포레스트 추모관", ymd: "2026-06-12", date: "06.12", amount: 90000, status: "done" },
-  { deceased: "나비", chief: "박은영", partner: "펫포레스트 추모관", ymd: "2026-06-14", date: "06.14", amount: 90000, status: "waiting" },
+  // 펫포레스트 추모관 (90,000/건)
+  { deceased: "별이", chief: "윤상호", partner: "펫포레스트 추모관", ymd: "2026-05-18", date: "05.18", amount: 90000, status: "done" },
+  { deceased: "모카", chief: "정우성", partner: "펫포레스트 추모관", ymd: "2026-05-28", date: "05.28", amount: 90000, status: "done" },
+  { deceased: "초코", chief: "이정훈", partner: "펫포레스트 추모관", ymd: "2026-06-12", date: "06.12", amount: 90000, status: "billed" },
+  { deceased: "나비", chief: "박은영", partner: "펫포레스트 추모관", ymd: "2026-06-14", date: "06.14", amount: 90000, status: "billed" },
+  { deceased: "두부", chief: "최지우", partner: "펫포레스트 추모관", ymd: "2026-06-17", date: "06.17", amount: 90000, status: "waiting" },
 ];
 
 // 발행된 거래명세서 내역 (파트너사별) — 발행 시 동결된 스냅샷
@@ -211,37 +186,12 @@ export const STATEMENTS = [
 
 // 입금 내역 (파트너사 수금 기록) — 청구 − 입금 = 미수금. 파트너사별 합계는 SETTLEMENT_PARTNERS.paid와 일치.
 export const SETTLEMENT_DEPOSITS = [
-  // 무지개동산 (청구 900,000 · 입금 900,000 · 미수금 0)
-  { id: "DP-2606-01", partner: "무지개동산 반려동물장례식장", date: "2026-06-01", amount: 450000, method: "계좌이체", memo: "5월분 정산금" },
-  { id: "DP-2606-04", partner: "무지개동산 반려동물장례식장", date: "2026-06-16", amount: 450000, method: "계좌이체", memo: "6월 1차" },
-  // 펫포레스트 (청구 620,000 · 입금 620,000 · 미수금 0)
-  { id: "DP-2606-02", partner: "펫포레스트 추모관", date: "2026-06-02", amount: 620000, method: "계좌이체", memo: "5월분 정산금" },
-  // 하늘소풍 (청구 450,000 · 입금 300,000 · 미수금 150,000)
-  { id: "DP-2606-03", partner: "하늘소풍 반려동물장례식장", date: "2026-06-05", amount: 300000, method: "계좌이체", memo: "부분 입금" },
-];
-
-// 간편장부 (수입/지출)
-export const LEDGER = [
-  { date: "05-31", who: "무지개동산 반려동물장례식장", memo: "5월 정산금 잔금", income: 450000, expense: 0, kind: "수입" },
-  { date: "05-31", who: "펫포레스트 추모관", memo: "5월 정산금", income: 620000, expense: 0, kind: "수입" },
-  { date: "05-28", who: "OpenAI", memo: "AI 타이틀 생성 사용료", income: 0, expense: 120000, kind: "지출" },
-  { date: "05-28", who: "솔라피", memo: "알림톡·SMS 발송", income: 0, expense: 80000, kind: "지출" },
-  { date: "05-20", who: "Cloudflare", memo: "R2 스토리지·CDN", income: 0, expense: 120000, kind: "지출" },
-];
-
-// 시스템 — 렌더 큐 3종 (BullBoard)
-export const JOB_QUEUES = [
-  { id: "q-ai", name: "AI 외부호출", waiting: 1, active: 2, completed: 318, failed: 3 },
-  { id: "q-ffmpeg", name: "FFmpeg 합성", waiting: 0, active: 1, completed: 642, failed: 0 },
-  { id: "q-proxy", name: "프록시 생성", waiting: 4, active: 3, completed: 1204, failed: 1 },
-];
-
-// 시스템 — 에러·외부 의존성 업타임 (Sentry)
-export const UPTIME = [
-  { name: "OpenAI (타이틀)", status: "online", latency: "1.8s", uptime: "99.94%" },
-  { name: "Kling (AI영상)", status: "online", latency: "12.4s", uptime: "99.2%" },
-  { name: "솔라피 (알림톡)", status: "online", latency: "0.4s", uptime: "99.99%" },
-  { name: "Supabase (서울)", status: "online", latency: "38ms", uptime: "100%" },
+  // 무지개동산 (청구 450,000 · 입금 450,000 · 미수금 0)
+  { id: "DP-2606-01", partner: "무지개동산 반려동물장례식장", date: "2026-06-01", amount: 150000, method: "계좌이체", memo: "5월분 정산금" },
+  { id: "DP-2606-04", partner: "무지개동산 반려동물장례식장", date: "2026-06-17", amount: 300000, method: "계좌이체", memo: "6월분 정산금" },
+  // 펫포레스트 (청구 450,000 · 입금 270,000 · 미수금 180,000)
+  { id: "DP-2606-02", partner: "펫포레스트 추모관", date: "2026-06-02", amount: 180000, method: "계좌이체", memo: "5월분 정산금" },
+  { id: "DP-2606-05", partner: "펫포레스트 추모관", date: "2026-06-16", amount: 90000, method: "계좌이체", memo: "6월 1차" },
 ];
 
 // 영상 편집기 — EDL 블록 (예약 1건: 콩이)
@@ -306,38 +256,36 @@ export const EDITOR_TIMELINE = {
   },
 };
 
+// 장면 전환 효과 목록 — 전환 효과 명칭은 여기서 단일 관리.
+// TRANSITION_TYPES: 관리자 영상 편집기(editor.jsx)용 — 정밀 편집 기준 명칭.
+// USER_TRANSITIONS: 유저 모바일 위저드(user.jsx)용 — 보호자 친화적 명칭.
+// (두 화면의 노출 수준이 달라 라벨셋을 분리하되, 하드코딩 없이 이 파일에서 함께 관리)
 export const TRANSITION_TYPES = ["페이드", "슬라이드", "와이프", "없음"];
+export const USER_TRANSITIONS = ["부드러운 페이드", "디졸브", "슬라이드", "전환 없음"];
 export const SUBTITLE_POS = ["상단", "중앙", "하단"];
 
 // 유저 모바일 — 7단계 위저드
 export const USER_STEPS = [
-  "개인정보 동의", "소스 업로드", "AI 변환", "장면 전환", "배경 음악", "편지 작성", "미리보기", "영상 완료",
+  "개인정보 동의", "AI 변환", "소스 업로드", "장면 전환", "배경 음악", "편지 작성", "미리보기", "영상 완료",
 ];
 
 export const USER_UPLOADS = [
-  { id: "u-1", name: "산책_봄날.jpg", kind: "photo", size: "3.2MB" },
-  { id: "u-2", name: "가족나들이_2019.jpg", kind: "photo", size: "4.1MB" },
+  { id: "u-1", name: "산책_봄날.jpg", kind: "photo", size: "3.2MB", thumb: swatch("#cfe0c3", "#9bbf86", "#6f9a57") },
+  { id: "u-2", name: "가족나들이_2019.jpg", kind: "photo", size: "4.1MB", thumb: swatch("#f3d9bf", "#e0ad7e", "#c98a52") },
   { id: "u-3", name: "산책영상.mp4", kind: "video", size: "82MB" },
-  { id: "u-4", name: "대표사진.jpg", kind: "photo", size: "2.8MB" },
-];
-
-// 상단 공통 알림(Bell)
-export const NOTIFICATIONS = [
-  { id: "n-1", kind: "review", text: "2추모실 보리 — 컨펌 요청" },
-  { id: "n-2", kind: "rendering", text: "3추모실 초코 — 슬라이드 블록 렌더링 중" },
-  { id: "n-3", kind: "info", text: "AI 외부호출 큐 실패 잡 3건 — 재처리 필요" },
+  { id: "u-4", name: "대표사진.jpg", kind: "photo", size: "2.8MB", thumb: swatch("#d6cfe6", "#a99bc8", "#8472ad") },
 ];
 
 // 공급자(거래명세서·문서 자동 삽입)
 export const COMPANY = {
   name: "메모리아웍스",
-  ceo: "한성용",
+  ceo: "박용진",
   biz: "296-32-01391",
   type: "정보통신업 / 미디어콘텐츠창작업",
   addr: "경기도 시흥시 서울대학로59-59 시그니처타워 444호",
   bank: "기업은행",
   account: "000-000000-00-000",
-  holder: "한성용 (메모리아웍스)",
+  holder: "박용진 (메모리아웍스)",
   notifyEmail: "ops@memoriaworks.kr",
   notifyPhone: "010-0000-0000",
 };
@@ -358,26 +306,42 @@ export const STORAGE = {
 // 파트너사 코드 — 등록순 4자리 (P-001 → 0001). 파일명 규칙에 사용.
 export const PARTNER_CODE = { "P-001": "0001", "P-002": "0002", "P-003": "0003" };
 
+// 다운로드 대상 종류 — 발행 최종본(mp4) · 원본 소스(보호자 업로드 사진·영상 묶음)
+export const DOWNLOAD_TARGETS = [
+  { key: "final", label: "발행 최종본", ext: "mp4" },
+  { key: "source", label: "원본 소스", ext: "zip" },
+  { key: "both", label: "최종본+원본", ext: "" },
+];
+
 // 발행 최종본 파일명 규칙: {파트너코드4}_{호실2}_{장례일시YYMMDDHHmm}.mp4
 //   파트너코드 = 등록순 4자리, 호실 = 숫자 2자리, 장례일시 = 년월일시분(24시간) — 예: 0001_01_2606171030.mp4
 export const videoFileName = (v) =>
   `${PARTNER_CODE[v.partnerId] || "0000"}_${String(v.room).padStart(2, "0")}_${v.datetime}.mp4`;
+// 원본 소스 묶음 파일명 — 보호자 업로드 원본(사진·영상) 일체 zip
+export const sourceFileName = (v) =>
+  `${PARTNER_CODE[v.partnerId] || "0000"}_${String(v.room).padStart(2, "0")}_${v.datetime}_src.zip`;
+// 다운로드 대상별 용량(MB) — final | source | both
+export const assetSize = (v, target) =>
+  target === "source" ? (v.srcMB || 0) : target === "both" ? (v.sizeMB || 0) + (v.srcMB || 0) : (v.sizeMB || 0);
+export const assetFileName = (v, target) => target === "source" ? sourceFileName(v) : videoFileName(v);
 
-// 발행 최종본 아카이브 — 스토리지 기간별 선택 다운로드 대상 (date: 화장일 YYYY-MM-DD · datetime: YYMMDDHHmm).
+// 발행 최종본 + 원본 소스 아카이브 — 스토리지 기간별 선택 다운로드 대상.
+//   sizeMB: 발행 최종본(mp4) 용량 · srcMB: 원본 소스(보호자 업로드 사진·영상) 묶음 용량
+//   date: 화장일 YYYY-MM-DD · datetime: YYMMDDHHmm
 export const FINAL_VIDEOS = [
   // 무지개동산 (0001)
-  { id: "fv-01", partnerId: "P-001", partner: "무지개동산 반려동물장례식장", deceased: "콩이", room: 1, datetime: "2606171030", date: "2026-06-17", sizeMB: 148 },
-  { id: "fv-02", partnerId: "P-001", partner: "무지개동산 반려동물장례식장", deceased: "가을", room: 1, datetime: "2606160930", date: "2026-06-16", sizeMB: 132 },
-  { id: "fv-03", partnerId: "P-001", partner: "무지개동산 반려동물장례식장", deceased: "보리", room: 2, datetime: "2606151610", date: "2026-06-15", sizeMB: 155 },
-  { id: "fv-04", partnerId: "P-001", partner: "무지개동산 반려동물장례식장", deceased: "달이", room: 2, datetime: "2605301345", date: "2026-05-30", sizeMB: 121 },
-  { id: "fv-05", partnerId: "P-001", partner: "무지개동산 반려동물장례식장", deceased: "봄이", room: 3, datetime: "2605221100", date: "2026-05-22", sizeMB: 118 },
-  { id: "fv-06", partnerId: "P-001", partner: "무지개동산 반려동물장례식장", deceased: "별이", room: 4, datetime: "2604281500", date: "2026-04-28", sizeMB: 109 },
+  { id: "fv-01", partnerId: "P-001", partner: "무지개동산 반려동물장례식장", deceased: "콩이", room: 1, datetime: "2606171030", date: "2026-06-17", sizeMB: 148, srcMB: 540 },
+  { id: "fv-02", partnerId: "P-001", partner: "무지개동산 반려동물장례식장", deceased: "가을", room: 1, datetime: "2606160930", date: "2026-06-16", sizeMB: 132, srcMB: 472 },
+  { id: "fv-03", partnerId: "P-001", partner: "무지개동산 반려동물장례식장", deceased: "보리", room: 2, datetime: "2606151610", date: "2026-06-15", sizeMB: 155, srcMB: 610 },
+  { id: "fv-04", partnerId: "P-001", partner: "무지개동산 반려동물장례식장", deceased: "달이", room: 2, datetime: "2605301345", date: "2026-05-30", sizeMB: 121, srcMB: 388 },
+  { id: "fv-05", partnerId: "P-001", partner: "무지개동산 반려동물장례식장", deceased: "봄이", room: 3, datetime: "2605221100", date: "2026-05-22", sizeMB: 118, srcMB: 415 },
+  { id: "fv-06", partnerId: "P-001", partner: "무지개동산 반려동물장례식장", deceased: "별이", room: 4, datetime: "2604281500", date: "2026-04-28", sizeMB: 109, srcMB: 352 },
   // 펫포레스트 (0002)
-  { id: "fv-07", partnerId: "P-002", partner: "펫포레스트 추모관", deceased: "루이", room: 1, datetime: "2606171820", date: "2026-06-17", sizeMB: 162 },
-  { id: "fv-08", partnerId: "P-002", partner: "펫포레스트 추모관", deceased: "초코", room: 1, datetime: "2606121130", date: "2026-06-12", sizeMB: 144 },
-  { id: "fv-09", partnerId: "P-002", partner: "펫포레스트 추모관", deceased: "나비", room: 2, datetime: "2606141600", date: "2026-06-14", sizeMB: 138 },
-  { id: "fv-10", partnerId: "P-002", partner: "펫포레스트 추모관", deceased: "모카", room: 1, datetime: "2605281000", date: "2026-05-28", sizeMB: 151 },
-  { id: "fv-11", partnerId: "P-002", partner: "펫포레스트 추모관", deceased: "두부", room: 2, datetime: "2604201330", date: "2026-04-20", sizeMB: 127 },
+  { id: "fv-07", partnerId: "P-002", partner: "펫포레스트 추모관", deceased: "루이", room: 1, datetime: "2606171820", date: "2026-06-17", sizeMB: 162, srcMB: 688 },
+  { id: "fv-08", partnerId: "P-002", partner: "펫포레스트 추모관", deceased: "초코", room: 1, datetime: "2606121130", date: "2026-06-12", sizeMB: 144, srcMB: 503 },
+  { id: "fv-09", partnerId: "P-002", partner: "펫포레스트 추모관", deceased: "나비", room: 2, datetime: "2606141600", date: "2026-06-14", sizeMB: 138, srcMB: 459 },
+  { id: "fv-10", partnerId: "P-002", partner: "펫포레스트 추모관", deceased: "모카", room: 1, datetime: "2605281000", date: "2026-05-28", sizeMB: 151, srcMB: 576 },
+  { id: "fv-11", partnerId: "P-002", partner: "펫포레스트 추모관", deceased: "두부", room: 2, datetime: "2604201330", date: "2026-04-20", sizeMB: 127, srcMB: 421 },
 ];
 
 // 사업부 (멀티 비즈니스 — 시뮬레이터 차용)
@@ -386,66 +350,80 @@ export const BIZ_UNITS = [
   { id: "biz-2", name: "+ 사업부 추가 예정", partners: 0, active: false },
 ];
 
-// ── 유저 입력 폼 빌더 ──────────────────────────────────────────
-// 공통 항목은 모든 폼에 고정(잠금). 파트너사별로 전용 항목만 커스텀.
-export const FORM_COMMON_FIELDS = [
-  { key: "ownerName", icon: "user", label: "고객 이름", required: true },
-  { key: "petName", icon: "paw", label: "반려동물 이름", required: true },
-  { key: "phone", icon: "phone", label: "연락처", required: true },
+// ── 유저 입력 폼 ──────────────────────────────────────────────
+// 시스템 고정 필드 정의 — 파트너사는 선택 항목만 표시/숨김 + 라벨명 변경 가능.
+// locked: true → 항상 표시, 파트너 수정 불가.
+export const FORM_FIELDS = [
+  // 영상 제작 필수 (잠금)
+  { key: "petName",    section: "영상 기본",   label: "반려동물 이름",  type: "텍스트",   required: true,  locked: true,  hint: "타이틀 자막 직접 사용" },
+  { key: "photos",     section: "영상 기본",   label: "사진 업로드",    type: "사진",     required: true,  locked: true,  hint: "슬라이드 세그먼트 (최소 1장 필수)" },
+  // 운영 필수 (잠금)
+  { key: "ownerName",  section: "운영",        label: "보호자 성함",    type: "텍스트",   required: true,  locked: true,  hint: "알림톡 수신자명 · 발행 링크 발송" },
+  { key: "phone",      section: "운영",        label: "연락처",         type: "전화번호", required: true,  locked: true,  hint: "URL · 발행 알림 발송" },
+  // 영상 상세 선택
+  { key: "species",    section: "영상 상세",   label: "품종",           type: "텍스트",   required: false, locked: false, hint: "자막 세부 정보" },
+  { key: "age",        section: "영상 상세",   label: "나이",           type: "숫자",     required: false, locked: false, hint: "자막 세부 정보" },
+  { key: "yearsWith",  section: "영상 상세",   label: "함께한 기간",    type: "텍스트",   required: false, locked: false, hint: "예: 13년" },
+  // 추모 콘텐츠 선택
+  { key: "letter",     section: "추모 콘텐츠", label: "추모 편지",      type: "장문",     required: false, locked: false, hint: "편지 씬 활성화 (없으면 씬 생략)" },
+  { key: "videoClips", section: "추모 콘텐츠", label: "추가 영상 클립", type: "동영상",   required: false, locked: false, hint: "슬라이드 보강" },
+  { key: "editMemo",   section: "추모 콘텐츠", label: "편집 요청 메모", type: "장문",     required: false, locked: false, hint: "작업자 전달 · 보호자에게 비노출" },
 ];
 
-// 항목 추가 시 선택하는 입력 타입
-export const FORM_FIELD_TYPES = ["텍스트", "장문", "숫자", "날짜", "선택", "사진"];
-
-// 파트너사별 유저 입력 폼 — 파트너사당 1개 템플릿
-export const FORM_TEMPLATES = {
-  "P-001": [
-    { id: "ff-1", label: "반려동물 품종", type: "텍스트", required: false },
-    { id: "ff-2", label: "나이(향년)", type: "숫자", required: false },
-    { id: "ff-3", label: "추모 한마디", type: "장문", required: false },
-  ],
-  "P-002": [
-    { id: "ff-4", label: "반려동물 품종", type: "텍스트", required: true },
-    { id: "ff-5", label: "함께한 기간", type: "텍스트", required: false },
-  ],
-  "P-003": [],
+// 파트너사별 폼 설정 — 선택 항목만 { hidden, label? } 오버라이드 가능
+export const FORM_CONFIGS = {
+  "P-001": {
+    species:    { hidden: false },
+    age:        { hidden: false },
+    yearsWith:  { hidden: true },
+    letter:     { hidden: false },
+    videoClips: { hidden: true },
+    editMemo:   { hidden: false },
+  },
+  "P-002": {
+    species:    { hidden: false },
+    age:        { hidden: true },
+    yearsWith:  { hidden: false },
+    letter:     { hidden: false },
+    videoClips: { hidden: false },
+    editMemo:   { hidden: false },
+  },
+  "P-003": {
+    species:    { hidden: true },
+    age:        { hidden: true },
+    yearsWith:  { hidden: true },
+    letter:     { hidden: false },
+    videoClips: { hidden: true },
+    editMemo:   { hidden: true },
+  },
 };
 
 // 파트너 예약 상세 — 보호자 영상제작 URL
 export const RESERV_DETAIL = {
-  id: "R-240616-02",
+  id: "R-240617-02",
   deceased: "보리",
   species: "포메라니안",
   age: 13,
   chief: "김민재",
   phone: "010-9181-3047",
-  room: "2추모실",
+  room: "2호실",
   in: "06.16 09:00",
   out: "06.18 07:00",
   status: "review",
   formUrl: "memoria.works/f/k7p2x9",
   code: "MK-240616-02",
   smsSentAt: "06.16 10:24",
-  // 유저가 URL에서 입력 → 예약정보에 붙는 데이터 (폼 템플릿 기준)
+  // 유저가 URL에서 입력 → 예약정보에 붙는 데이터
   form: [
-    { label: "고객 이름", value: "김민재", common: true },
-    { label: "반려동물 이름", value: "보리", common: true },
-    { label: "연락처", value: "010-9181-3047", common: true },
-    { label: "반려동물 품종", value: "포메라니안" },
-    { label: "나이(향년)", value: "13살" },
-    { label: "추모 한마디", value: "보리야, 늘 곁에 있어줘서 고마웠어." },
+    { key: "ownerName",  label: "보호자 성함",    value: "김민재" },
+    { key: "phone",      label: "연락처",         value: "010-9181-3047" },
+    { key: "petName",    label: "반려동물 이름",   value: "보리" },
+    { key: "photos",     label: "사진 업로드",     value: "3장 업로드됨" },
+    { key: "species",    label: "품종",            value: "포메라니안" },
+    { key: "age",        label: "나이",            value: "13" },
+    { key: "letter",     label: "추모 편지",       value: "보리야, 늘 곁에 있어줘서 고마웠어. 무지개다리 건너서도 행복하길." },
   ],
 };
-
-
-// 알림톡 — 발신번호 + 템플릿 관리 (솔라피, 운영사 선행작업·임계경로)
-export const SENDER_NO = { number: "1668-0000", status: "pending" }; // approved | pending
-export const ALIMTALK = [
-  { id: "at-1", name: "예약 접수 완료", to: "보호자", status: "approved", body: "[메모리아웍스] {보호자}님, {반려동물} 추모영상 제작이 접수되었습니다. 링크에서 사진·영상을 올려주세요." },
-  { id: "at-2", name: "영상 제작 완료", to: "보호자", status: "approved", body: "[메모리아웍스] {반려동물}의 추모영상이 완성되었습니다. 아래 링크에서 확인하실 수 있어요." },
-  { id: "at-3", name: "컨펌 요청", to: "운영자", status: "pending", body: "[메모리아웍스] {추모실} {반려동물} 영상 컨펌 요청이 도착했습니다." },
-  { id: "at-4", name: "발행 완료", to: "보호자", status: "pending", body: "[메모리아웍스] {반려동물} 추모영상이 발행되었습니다. 링크는 퇴실 시 만료됩니다." },
-];
 
 // ─────────────────────────────────────────────────────────────
 // 관리자 계정 권한체계 — 마스터 관리자 / 작업자 (파트너·유저는 1:1이라 권한 없음)
@@ -485,7 +463,7 @@ export const DEFAULT_WORKER_PERMS = ["overview", "customer", "producing", "secon
 // loginId = 로그인 아이디(고유). 비밀번호는 목업이라 저장 안 함 — 마스터가 초기 비번 발급 후 재설정만 노출.
 // status invited = 계정 발급됨 · 첫 로그인(비번 변경) 전.
 export const ADMIN_ACCOUNTS = [
-  { id: "u-master", name: "한성용", role: "master", loginId: "master", email: "ceo@memoriaworks.kr", status: "active", lastLogin: "방금 전", perms: [] },
+  { id: "u-master", name: "박용진", role: "master", loginId: "master", email: "ceo@memoriaworks.kr", status: "active", lastLogin: "방금 전", perms: [] },
   { id: "u-w1", name: "정다은", role: "worker", loginId: "daeun", email: "daeun@memoriaworks.kr", status: "active", lastLogin: "오늘 09:12", perms: ["overview", "customer", "producing", "secondedit", "templates", "content"] },
   { id: "u-w2", name: "김도현", role: "worker", loginId: "dohyun", email: "dohyun@memoriaworks.kr", status: "active", lastLogin: "어제 18:40", perms: ["overview", "producing", "secondedit", "templates", "content"] },
   { id: "u-w3", name: "이수아", role: "worker", loginId: "sua", email: "sua@memoriaworks.kr", status: "invited", lastLogin: "—", perms: ["producing"] },

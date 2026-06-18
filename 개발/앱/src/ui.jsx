@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { ChevronLeft, ChevronRight, Calendar as CalIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar as CalIcon, Copy, Check, Eye, EyeOff } from "lucide-react";
 import {
   SANS, SERIF, NAVY, MASTER, BG, SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT,
   INK, MUTE, FAINT, NAV_TEXT, NAV_FAINT, STATUS, RADIUS,
@@ -27,7 +27,7 @@ export function Tag({ s, label }) {
 
 // 골드 액션 버튼
 export function Btn({ children, onClick, variant = "gold", size = "md", ...rest }) {
-  const h = size === "sm" ? 30 : 36;
+  const h = size === "sm" ? 34 : 36;
   const styles =
     variant === "gold"
       ? { background: GOLD, color: "#fff", border: "none" }
@@ -68,15 +68,15 @@ export function Card({ children, title, action, pad = true, className = "" }) {
 }
 
 // KPI 메트릭 카드
-export function Metric({ label, value, sub, accent }) {
+export function Metric({ label, value, sub, accent, style: sx }) {
   return (
     <div
       className="flex flex-col px-4 py-3"
-      style={{ background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS }}
+      style={{ background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS, ...sx }}
     >
       <span className="text-[12px]" style={{ color: MUTE }}>{label}</span>
       <span
-        className="mt-1 text-[22px] font-bold tabular-nums"
+        className="mt-1 text-[22px] font-bold tabular-nums whitespace-nowrap"
         style={{ color: accent || INK, fontFamily: SANS }}
       >
         {value}
@@ -86,8 +86,12 @@ export function Metric({ label, value, sub, accent }) {
   );
 }
 
-export function MetricRow({ items }) {
-  return (
+export function MetricRow({ items, fit }) {
+  return fit ? (
+    <div className="flex gap-3">
+      {items.map((m, i) => <Metric key={i} {...m} style={{ width: 180 }} />)}
+    </div>
+  ) : (
     <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${items.length}, minmax(0,1fr))` }}>
       {items.map((m, i) => <Metric key={i} {...m} />)}
     </div>
@@ -377,6 +381,48 @@ export function DateField({ label, value, onChange, req, placeholder = "YYYY-MM-
           </button>
         </div>
       </Modal>
+    </label>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// 클립보드 복사 버튼 — 관리자(ID코드·링크)·파트너 콘솔 공용.
+// (이전엔 admin.jsx·partner.jsx에 각각 중복 정의돼 있던 것을 통합)
+// ─────────────────────────────────────────────────────────────
+export function CopyBtn({ text, label = "복사" }) {
+  const [done, setDone] = useState(false);
+  const copy = () => {
+    try { navigator.clipboard && navigator.clipboard.writeText(text); } catch (e) {}
+    setDone(true);
+    setTimeout(() => setDone(false), 1500);
+  };
+  return (
+    <Btn size="sm" variant="neutral" onClick={copy}>
+      {done ? <><Check className="h-3.5 w-3.5" /> 복사됨</> : <><Copy className="h-3.5 w-3.5" /> {label}</>}
+    </Btn>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// 비밀번호 입력 칸 (표시/숨김 토글) — 관리자·파트너 비밀번호 변경/재설정 공용.
+// placeholder·autoFocus는 선택 props (관리자 재설정 모달에서 사용).
+// ─────────────────────────────────────────────────────────────
+export function PwField({ label, value, onChange, placeholder, autoFocus }) {
+  const [show, setShow] = useState(false);
+  return (
+    <label className="block">
+      <div className="mb-1 text-[12px] font-semibold" style={{ color: MUTE }}>{label}</div>
+      <div className="relative">
+        <input
+          type={show ? "text" : "password"} value={value} autoFocus={autoFocus} autoComplete="off"
+          onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+          className="w-full pl-3 pr-10 text-[13px] outline-none focus-visible:ring-1"
+          style={{ height: 38, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} />
+        <button type="button" onClick={() => setShow((v) => !v)} tabIndex={-1}
+          className="absolute right-2 top-1/2 -translate-y-1/2 p-1" style={{ color: FAINT }} aria-label={show ? "숨기기" : "표시"}>
+          {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </button>
+      </div>
     </label>
   );
 }
