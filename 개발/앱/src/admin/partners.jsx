@@ -8,6 +8,8 @@ import { Tag, Btn, Card, Summary, Table, PageHeader, Modal, CopyBtn } from "../u
 import { useStore, actions } from "../store.js";
 import * as D from "../data.js";
 
+const won = (v) => (v || 0).toLocaleString() + "원"; // 금액 포맷 — 상세/목록 공용
+
 function PartnerRegisterModal({ open, onClose }) {
   const { partners } = useStore();
   const blank = { bizUnit: D.BIZ_UNITS.find((b) => b.active)?.name || "", idCode: "", name: "", region: "", rooms: "", bizNo: "", ceo: "", address: "", bizType: "", bizItem: "", manager: "", phone: "", email: "" };
@@ -114,7 +116,6 @@ function PartnerDetail({ partner: p, unitPrice, onBack, go }) {
   const rs = reservations.filter((r) => r.partner === p.name);
   const dv = devices.filter((d) => d.partner === p.name);
   const settle = D.SETTLEMENT_PARTNERS.find((x) => x.partner === p.name);
-  const won = (v) => (v || 0).toLocaleString() + "원";
   const cnt = (s) => rs.filter((r) => r.status === s).length;
   const online = dv.filter((d) => d.status !== "offline").length;
   const row = (label, val) => (

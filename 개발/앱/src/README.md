@@ -56,9 +56,11 @@ App.jsx                 최상위 — 권한 전환(관리자/파트너/유저) 
 그래서 정적 참조 검사기를 둡니다 — **파일을 옮기거나 import를 손댄 뒤 꼭 실행**하세요.
 
 ```bash
-npm run check     # src/ 전체: 사용했지만 import 안 한 심볼 / 미해결 JSX 태그 탐지
+npm run check     # check-refs + check-scope 연속 실행
 npm run build     # 모듈 그래프·named export 해석 검증
 ```
 
-- `scripts/check-refs.mjs` — 참조 검사(같은 폴더 `shared.jsx`도 인식)
+- `scripts/check-refs.mjs` — 모듈 단위 참조 검사(import 누락·미해결 JSX 태그)
+- `scripts/check-scope.mjs` — **스코프 인식** undefined 참조 검사. 한 컴포넌트에서 정의한
+  헬퍼를 다른 컴포넌트에서 쓰는 류(check-refs가 못 잡는 함수 스코프 오류 → 흰화면)를 탐지.
 - `scripts/gen-imports.mjs` — 코드 조각이 필요로 하는 import 헤더 자동 생성(분리 작업 보조)

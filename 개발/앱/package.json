@@ -6,7 +6,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "check": "node scripts/check-refs.mjs"
+    "check": "node scripts/check-refs.mjs && node scripts/check-scope.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
@@ -15,6 +15,8 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@babel/parser": "^8.0.0",
+    "@babel/traverse": "^8.0.0",
     "@vitejs/plugin-react": "^4.3.4",
     "vite": "^5.4.11"
   }
