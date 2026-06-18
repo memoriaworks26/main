@@ -38,11 +38,9 @@ function AddElementMenu({ addable, onAdd }) {
   const place = React.useCallback(() => {
     const r = btnRef.current?.getBoundingClientRect();
     if (!r) return;
-    const H = 8 + addable.length * 37;
-    const below = window.innerHeight - r.bottom;
-    const up = below < H && r.top > below;
-    const left = Math.max(8, Math.min(r.left + r.width / 2 - W / 2, window.innerWidth - W - 8));
-    setPos({ left, width: W, top: up ? undefined : r.bottom + 4, bottom: up ? window.innerHeight - r.top + 4 : undefined });
+    const left = Math.max(8, Math.min(r.left, window.innerWidth - W - 8)); // 버튼 왼쪽 끝에 맞춤
+    const maxH = Math.min(8 + addable.length * 37, Math.max(140, window.innerHeight - r.bottom - 12));
+    setPos({ left, width: W, top: r.bottom + 4, maxH }); // 항상 트리거 바로 아래
   }, [addable.length]);
   React.useEffect(() => {
     if (!open) return;
@@ -62,7 +60,7 @@ function AddElementMenu({ addable, onAdd }) {
         <Plus className="h-3.5 w-3.5" /> 요소 추가
       </button>
       {open && pos && addable.length > 0 && (
-        <div className="fixed z-50 overflow-hidden py-1" style={{ left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS, boxShadow: "0 8px 24px rgba(0,0,0,.14)" }}>
+        <div className="fixed z-50 overflow-y-auto py-1" style={{ left: pos.left, top: pos.top, width: pos.width, maxHeight: pos.maxH, background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS, boxShadow: "0 8px 24px rgba(0,0,0,.14)" }}>
           {addable.map((d) => {
             const E = TPL_EL[d.type] || {}; const Icon = E.icon || Sparkles;
             return (
@@ -140,7 +138,7 @@ export function Templates() {
               <Search className="h-4 w-4 shrink-0" style={{ color: FAINT }} strokeWidth={1.9} />
               <input value={q} onChange={(e) => setQ(e.target.value)} className="ml-2 w-full bg-transparent text-[13px] outline-none" placeholder="파트너사·지역·담당자 검색" style={{ color: INK }} />
             </div>
-            <Btn size="sm" variant="neutral" onClick={() => setOpen(D.DEFAULT_TEMPLATE_ID)}><LayoutTemplate className="h-4 w-4" /> 기본 템플릿 편집</Btn>
+            <Btn size="sm" variant="neutral" className="whitespace-nowrap" onClick={() => setOpen(D.DEFAULT_TEMPLATE_ID)}><LayoutTemplate className="h-4 w-4" /> 기본 템플릿 편집</Btn>
           </div>
         } />
       <SaveBar dirty={dirty} onSave={saveTpls} onReset={resetTpls} label="저장하지 않은 템플릿 변경이 있습니다 — 화면을 벗어나면 사라집니다." />
@@ -238,7 +236,8 @@ export function Templates() {
                           borderLeft: "3px solid " + E.color,
                           borderRadius: RADIUS,
                           opacity: isDragging ? 0.45 : 1,
-                          transform: isTarget ? "scale(1.012)" : "scale(1)",
+                          transform: isTarget ? "scale(1.012)" : "none", // scale(1)도 fixed 자식의 기준이 돼 드롭다운이 어긋남 → 평소엔 none
+
                           boxShadow: isTarget ? "0 2px 10px rgba(0,0,0,.08)" : "none",
                           transition: "transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease, border-color 0.1s ease",
                         }}>

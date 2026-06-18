@@ -61,6 +61,7 @@ export function Production({ onOpenEditor, account }) {
           const cur = st(r);
           const who = r.assignee;
           const mine = who && who === me;
+          const canEdit = mine; // 담당자 본인만 편집기 진입(마스터 포함 예외 없음)
           return (
             <div key={r.id} className="flex items-center gap-3 px-3 py-2.5"
               style={{ borderTop: i ? "1px solid " + LINE : "none" }}>
@@ -83,7 +84,8 @@ export function Production({ onOpenEditor, account }) {
               <div className="ml-auto flex shrink-0 items-center gap-2">
                 <Tag s={cur} />
                 {cur !== "review" && (
-                  <Btn size="sm" variant="ghost" onClick={() => onOpenEditor(r)}>
+                  <Btn size="sm" variant="ghost" disabled={!canEdit} onClick={() => onOpenEditor(r)}
+                    title={canEdit ? undefined : "담당자(" + who + ")만 편집기에 들어갈 수 있습니다"}>
                     편집기 열기 <ChevronRight className="h-3.5 w-3.5" />
                   </Btn>
                 )}
@@ -207,6 +209,7 @@ export function SecondEdit({ onOpenEditor, account }) {
           const r = reservOf(j.reservId);
           if (!r) return null;
           const mine = j.assignee === me;
+          const canEdit = mine; // 담당자 본인만 편집기 진입(마스터 포함 예외 없음)
           return (
             <div key={j.id} className="flex items-center gap-3 px-3 py-2.5" style={{ borderTop: i ? "1px solid " + LINE : "none" }}>
               <div className="min-w-0 flex-1">
@@ -229,7 +232,8 @@ export function SecondEdit({ onOpenEditor, account }) {
                   </>
                 ) : (
                   <>
-                    <Btn size="sm" variant="ghost" onClick={() => onOpenEditor(r)}>편집기 열기 <ChevronRight className="h-3.5 w-3.5" /></Btn>
+                    <Btn size="sm" variant="ghost" disabled={!canEdit} onClick={() => onOpenEditor(r)}
+                      title={canEdit ? undefined : "담당자(" + j.assignee + ")만 편집기에 들어갈 수 있습니다"}>편집기 열기 <ChevronRight className="h-3.5 w-3.5" /></Btn>
                     {j.assignee && (
                       <span className="inline-flex items-center gap-1.5 group" title={mine ? "내가 받음 — 클릭 시 해제" : "담당: " + j.assignee}>
                         <span className="flex h-5 w-5 items-center justify-center rounded-full text-[9.5px] font-bold text-white" style={{ background: mine ? GOLD : "#3f5e87" }}>{j.assignee.slice(0, 1)}</span>

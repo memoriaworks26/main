@@ -351,8 +351,9 @@ export const BIZ_UNITS = [
 ];
 
 // ── 유저 입력 폼 ──────────────────────────────────────────────
+// 단일 폼 = 고유 링크 URL(접수 시 생성)에서 보호자가 작성하는 폼. forms.jsx=설계도, user.jsx=실제 화면.
 // 시스템 고정 필드 정의 — 파트너사는 선택 항목만 표시/숨김 + 라벨명 변경 가능.
-// locked: true → 항상 표시, 파트너 수정 불가.
+// locked: true → 항상 표시, 파트너 수정 불가. section은 소분류(태그).
 export const FORM_FIELDS = [
   // 영상 제작 필수 (잠금)
   { key: "petName",    section: "영상 기본",   label: "반려동물 이름",  type: "텍스트",   required: true,  locked: true,  hint: "타이틀 자막 직접 사용" },

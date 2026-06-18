@@ -1,44 +1,53 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
-  ChevronLeft, Undo2, Redo2, Save, Film, Check, Upload, Image as ImageIcon,
-  Music, Play, Type, Sparkles, ArrowRightLeft, Captions, Trash2, RotateCcw,
+  ChevronLeft, Undo2, Redo2, Save, Check, Upload, Image as ImageIcon,
+  Music, Play, Type, Sparkles, ArrowRightLeft, Trash2, RotateCcw,
   Volume2, Clapperboard, Mail, RefreshCw, Plus, SplitSquareHorizontal,
 } from "lucide-react";
 import { SERIF, NAVY, MASTER, BG, SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, STATUS, RADIUS } from "./theme.js";
 import { Btn } from "./ui.jsx";
 import { toast } from "./toast.jsx";
+import { genFrame, photoThumb } from "./lib/media.js";
 import * as D from "./data.js";
-import { actions } from "./store.js";
+import { useStore, actions } from "./store.js";
 
 const SCALE = 12; // px/초
 const BLOCK_ICON = { title: Type, clip: Clapperboard, slide: ImageIcon, ai: Sparkles, letter: Mail };
-const KIND_LABEL = { title: "타이틀", clip: "클립", slide: "추억 슬라이드", ai: "추억 영상", letter: "편지", subtitle: "자막", audio: "음악", transition: "장면 전환" };
+const KIND_LABEL = { title: "타이틀", clip: "클립", slide: "추억 슬라이드", ai: "추억 영상", letter: "편지", audio: "음악", transition: "장면 전환" };
 const BLOCK_COLOR = { title: GOLD, clip: "#3f5e87", slide: "#2f4763", ai: "#51607a", letter: "#5a6470" };
 
-// 장면전환은 블록 경계에 매핑. 자막은 시간축 자유배치 — VideoEditor state가 소유(추가·이동·길이조절).
-// 모든 블록 사이(경계)에 장면 전환. 명시되지 않은 경계는 기본값(페이드).
+// 장면전환은 블록 경계에 매핑. 모든 블록 사이(경계)에 장면 전환. 명시되지 않은 경계는 기본값(페이드).
 const BLOCK_TRANS_OVERRIDE = { "blk-2": "슬라이드", "blk-4": "슬라이드" };
 const blockTrans = (id) => BLOCK_TRANS_OVERRIDE[id] || "페이드";
 
-// 자막 드래그 스냅(초) + 초기 자막 시드(data.js 자막을 start/dur로 변환)
-const SUB_SNAP = 0.5;
-const snap = (v) => Math.round(v / SUB_SNAP) * SUB_SNAP;
-function seedSubs() {
-  return (D.EDITOR_TIMELINE.subtitles || []).map((s, i) => ({
-    id: s.id || "sub" + (i + 1),
-    text: s.text,
-    start: s.start ?? 0,
-    dur: Math.max(1, (s.end ?? (s.start ?? 0) + 3) - (s.start ?? 0)),
-    pos: s.pos || "하단",
-    size: s.size || 48,
-    color: s.color || "#f3e9c8",
-  }));
+
+// 예약 → 그 파트너 템플릿(store.templates) → 편집기 블록.
+// 템플릿 blocks({ type, assetId? })를 elementDef(라벨·소스·길이) + clip은 콘텐츠 허브 자산명으로 보강.
+// (편집기가 EDITOR_BLOCKS 고정 더미 대신 이걸 쓰면 템플릿 수정이 제작에 즉시 반영된다)
+function buildBlocks(tpl, content, reservation) {
+  return (tpl?.blocks || []).map((b) => {
+    const def = D.elementDef(b.type) || {};
+    if (b.type === "clip") {
+      const asset = content.find((a) => a.id === b.assetId);
+      return {
+        id: b.id, type: "clip", label: def.label || "클립",
+        source: asset ? asset.name : "자산 미지정",
+        detail: "콘텐츠 허브 · " + (asset && asset.kind === "photo" ? "이미지" : "영상"),
+        dur: def.dur || 10, status: asset ? "done" : "standby",
+      };
+    }
+    return {
+      id: b.id, type: b.type, label: def.label, source: def.source, detail: def.source,
+      dur: def.dur || 0, status: "done",
+      ...(b.type === "title" ? { text: reservation?.deceased } : {}),
+    };
+  });
 }
 
 // 블록 → 타임라인 세그먼트 (단일 시간축)
-function segments() {
+function segments(blocks) {
   let acc = 0;
-  const segs = D.EDITOR_BLOCKS.map((b) => {
+  const segs = blocks.map((b) => {
     const seg = { ...b, start: acc, left: acc * SCALE, w: b.dur * SCALE };
     acc += b.dur;
     return seg;
@@ -47,16 +56,16 @@ function segments() {
 }
 
 // ════════════════════════════════════════════════════════════
-// 블록이 곧 타임라인의 칸. 자막·전환은 블록 안/경계에, 음악은 전체 1트랙.
+// 블록이 곧 타임라인의 칸. 전환은 블록 경계에, 음악은 전체 1트랙.
 // ════════════════════════════════════════════════════════════
 
 // ── 왼쪽: 편집할 블록 ──────────────────────────────────────────
-function BlockList({ sel, onSel }) {
+function BlockList({ blocks, sel, onSel }) {
   return (
     <div>
       <div className="mb-2.5 text-[13px] font-bold" style={{ color: INK }}>편집할 블록 <span className="font-normal" style={{ color: FAINT }}>· 순서 고정</span></div>
       <div className="space-y-2">
-        {D.EDITOR_BLOCKS.map((b, i) => {
+        {blocks.map((b, i) => {
           const Icon = BLOCK_ICON[b.type];
           const on = sel.scope === "block" && sel.id === b.id;
           return (
@@ -81,8 +90,7 @@ function BlockList({ sel, onSel }) {
 }
 
 // ── 가운데: 미리보기 ───────────────────────────────────────────
-function PreviewBox({ label, badge, badgeColor, big }) {
-  const name = D.EDITOR_RESERVATION.deceased;
+function PreviewBox({ label, badge, badgeColor, big, name }) {
   return (
     <div className="flex flex-col">
       <div className="mb-1.5 flex items-center gap-2">
@@ -103,7 +111,7 @@ function PreviewBox({ label, badge, badgeColor, big }) {
   );
 }
 
-function Preview() {
+function Preview({ name }) {
   return (
     <div>
       <div className="mb-2 flex items-center gap-2">
@@ -111,8 +119,8 @@ function Preview() {
         <span className="text-[13px] font-bold" style={{ color: INK }}>미리보기 · 원본과 비교</span>
       </div>
       <div className="grid grid-cols-2 gap-4">
-        <PreviewBox label="유저가 만든 원본" badge="원본 · 수정불가" badgeColor={{ bg: "rgba(90,100,112,.15)", c: "#5a6470" }} />
-        <PreviewBox label="내가 편집 중" badge="작업본" badgeColor={{ bg: GOLD_SOFT, c: GOLD_D }} big />
+        <PreviewBox label="유저가 만든 원본" badge="원본 · 수정불가" badgeColor={{ bg: "rgba(90,100,112,.15)", c: "#5a6470" }} name={name} />
+        <PreviewBox label="내가 편집 중" badge="작업본" badgeColor={{ bg: GOLD_SOFT, c: GOLD_D }} big name={name} />
       </div>
       <div className="mt-1.5 text-[11.5px]" style={{ color: FAINT }}>서버에서 렌더한 영상을 그대로 재생합니다. 수정하면 그 부분만 다시 만들어 보여줍니다.</div>
     </div>
@@ -129,45 +137,15 @@ function RowLabel({ name, color }) {
   );
 }
 
-function Timeline({ sel, onSel, subs, setSubs, onAddSub }) {
-  const { segs, total, width } = segments();
+function Timeline({ blocks, bgmName, sel, onSel }) {
+  const { segs, total, width } = segments(blocks);
   const on = (scope, id) => sel.scope === scope && sel.id === id;
   const ticks = []; for (let s = 0; s <= total; s += 10) ticks.push(s);
-
-  // 자막 드래그: move(이동) / left·right(양끝 길이조절). 안 움직였으면 클릭=선택.
-  function startDrag(e, mode, sub) {
-    e.preventDefault(); e.stopPropagation();
-    const startX = e.clientX;
-    const orig = { start: sub.start, dur: sub.dur };
-    const MIN = 1;
-    let moved = false;
-    const onMove = (ev) => {
-      if (Math.abs(ev.clientX - startX) > 3) moved = true;
-      const d = (ev.clientX - startX) / SCALE;
-      setSubs((prev) => prev.map((s) => {
-        if (s.id !== sub.id) return s;
-        if (mode === "move") return { ...s, start: snap(Math.max(0, Math.min(orig.start + d, total - s.dur))) };
-        if (mode === "left") {
-          const ns = snap(Math.max(0, Math.min(orig.start + d, orig.start + orig.dur - MIN)));
-          return { ...s, start: ns, dur: snap(orig.start + orig.dur - ns) };
-        }
-        return { ...s, dur: snap(Math.max(MIN, Math.min(orig.dur + d, total - orig.start))) };
-      }));
-    };
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      if (!moved) onSel({ scope: "cap", kind: "subtitle", id: sub.id });
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-  }
 
   return (
     <div className="mt-5">
       <div className="mb-2 flex items-center justify-between">
-        <div className="text-[13px] font-bold" style={{ color: INK }}>타임라인 <span className="font-normal" style={{ color: FAINT }}>· 자막은 끌어서 이동, 양끝을 끌어 길이 조절</span></div>
-        <button onClick={onAddSub} className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] font-semibold" style={{ borderRadius: RADIUS, color: GOLD_D, border: "1px solid " + LINE2, background: "#fff" }}><Plus className="h-3.5 w-3.5" /> 자막 추가</button>
+        <div className="text-[13px] font-bold" style={{ color: INK }}>타임라인 <span className="font-normal" style={{ color: FAINT }}>· 블록·음악을 눌러 편집</span></div>
       </div>
       <div className="overflow-x-auto pb-1">
         <div style={{ minWidth: width + 72 }}>
@@ -212,28 +190,6 @@ function Timeline({ sel, onSel, subs, setSubs, onAddSub }) {
             </div>
           </div>
 
-          {/* 자막 (시간축 자유 배치 · 끌어서 이동, 양끝으로 길이조절) */}
-          <div className="mb-1.5 flex items-stretch gap-2">
-            <RowLabel name="자막" color="#5a6470" />
-            <div className="relative flex-1" style={{ height: 30 }}>
-              {subs.length === 0 && <span className="absolute left-1 top-1/2 -translate-y-1/2 text-[11px]" style={{ color: FAINT }}>자막 없음 — 오른쪽 위 ‘자막 추가’</span>}
-              {subs.map((s) => {
-                const sc = on("cap", s.id);
-                return (
-                  <div key={s.id} onPointerDown={(e) => startDrag(e, "move", s)}
-                    className="absolute top-0 flex h-full items-center overflow-hidden text-left"
-                    style={{ left: s.start * SCALE, width: Math.max(s.dur * SCALE, 18), background: "#5a6470", borderRadius: 4, border: sc ? "2.5px solid " + GOLD : "1px solid rgba(0,0,0,.12)", cursor: "grab", touchAction: "none" }}
-                    title={"끌어서 이동 · 양끝을 끌어 길이 조절 (" + s.start + "s · " + s.dur + "s)"}>
-                    <span onPointerDown={(e) => startDrag(e, "left", s)} className="absolute left-0 top-0 z-10 h-full" style={{ width: 6, cursor: "ew-resize", background: "rgba(255,255,255,.32)" }} />
-                    <Captions className="pointer-events-none ml-2 h-3.5 w-3.5 shrink-0 text-white" style={{ opacity: 0.9 }} />
-                    <span className="pointer-events-none truncate px-1 text-[11px] text-white">{s.text}</span>
-                    <span onPointerDown={(e) => startDrag(e, "right", s)} className="absolute right-0 top-0 z-10 h-full" style={{ width: 6, cursor: "ew-resize", background: "rgba(255,255,255,.32)" }} />
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
           {/* 음악 (전체 1트랙) */}
           <div className="flex items-stretch gap-2">
             <RowLabel name="음악" color="#3a7468" />
@@ -242,7 +198,7 @@ function Timeline({ sel, onSel, subs, setSubs, onAddSub }) {
                 className="absolute top-0 flex h-full items-center gap-1.5 overflow-hidden px-2.5 text-left outline-none"
                 style={{ left: 0, width: width - 3, background: "#3a7468", borderRadius: 4, border: on("audio", "bgm") ? "2.5px solid " + GOLD : "1px solid rgba(0,0,0,.12)" }}>
                 <Music className="h-3.5 w-3.5 shrink-0 text-white" style={{ opacity: 0.9 }} />
-                <span className="truncate text-[11px] text-white">{(D.EDITOR_TIMELINE.audio[0] || {}).file?.split("/").pop() || "배경 음악"} · 전체</span>
+                <span className="truncate text-[11px] text-white">{bgmName} · 전체</span>
               </button>
             </div>
           </div>
@@ -287,18 +243,59 @@ function PromptManager() {
   );
 }
 
-function PropPanel({ sel, subs, updateSub, deleteSub }) {
+// 예시 소스 — 편지(예약 이름 기반) + 추억 슬라이드에 들어간 사진 썸네일(실제 장면 SVG)
+const exampleLetter = (name) => `사랑하는 ${name}에게.\n늘 곁에서 함께해줘서 고마웠어.\n무지개다리 너머에서 아프지 말고 행복하게 지내.`;
+const SLIDE_PHOTOS = [0, 1, 2, 3, 4, 5].map((i) => photoThumb(i));
+const genDefault = (id) => ({ list: [{ id: id + "-v0", auto: true }], sel: id + "-v0" });
+// 예시 시드 — 타이틀·슬라이드·AI 블록에 결과물 누적 상태를 미리 채움(자동본 + 생성본 몇 개, 최근본 선택)
+function seedGens(blocks) {
+  const counts = { title: 3, slide: 4, ai: 2 };
+  const out = {};
+  blocks.forEach((b) => {
+    const n = counts[b.type];
+    if (!n) return;
+    const list = Array.from({ length: n }, (_, i) => ({ id: b.id + "-v" + i, auto: i === 0 }));
+    out[b.id] = { list, sel: list[list.length - 1].id };
+  });
+  return out;
+}
+
+// 만든 결과물 누적 — 선택한 버전이 영상에 들어간다. "만들기"를 누를 때마다 아래에 쌓임.
+function GenHistory({ kind, name, gen, onSelect }) {
+  return (
+    <div className="mt-3">
+      <div className="mb-1.5 text-[11.5px] font-semibold" style={{ color: MUTE }}>
+        만든 결과물 <span className="font-normal" style={{ color: FAINT }}>· 선택한 버전이 영상에 들어갑니다 ({gen.list.length})</span>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {gen.list.map((v, i) => {
+          const on = v.id === gen.sel;
+          return (
+            <button key={v.id} onClick={() => onSelect(v.id)} className="relative overflow-hidden text-left outline-none transition focus-visible:ring-1"
+              style={{ borderRadius: 6, border: "2px solid " + (on ? GOLD : LINE2) }} title={on ? "영상에 적용됨" : "이 버전을 적용"}>
+              <img src={genFrame(kind, i, name)} alt="" className="block w-full" style={{ aspectRatio: "16/9", objectFit: "cover" }} />
+              <div className="px-1.5 py-1 text-[10.5px] font-semibold" style={{ color: on ? GOLD_D : MUTE, background: on ? GOLD_SOFT : "#faf8f3" }}>{v.auto ? "자동본" : "버전 " + i}</div>
+              {on && <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full" style={{ background: GOLD }}><Check className="h-2.5 w-2.5 text-white" strokeWidth={3} /></span>}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function PropPanel({ blocks, reservation, bgmName, gens, onGenerate, onSelectGen, sel }) {
   let item;
-  if (sel.scope === "block") item = D.EDITOR_BLOCKS.find((b) => b.id === sel.id);
-  else if (sel.scope === "cap") item = subs.find((s) => s.id === sel.id);
+  if (sel.scope === "block") item = blocks.find((b) => b.id === sel.id);
   else if (sel.scope === "audio") item = D.EDITOR_TIMELINE.audio[0];
   else if (sel.scope === "trans") item = { effect: blockTrans(sel.id) };
   const k = sel.kind;
   const [effect, setEffect] = useState(item && item.effect ? item.effect : "페이드");
-  const [pos, setPos] = useState(item && item.pos ? item.pos : "하단");
   const [vol, setVol] = useState(item && item.volume != null ? item.volume : 100);
   if (!item) return null;
-  const Icon = BLOCK_ICON[k] || (k === "subtitle" ? Captions : k === "audio" ? Music : k === "transition" ? ArrowRightLeft : ImageIcon);
+  const gen = sel.scope === "block" ? (gens[item.id] || genDefault(item.id)) : null; // 타이틀·슬라이드·AI 결과물 히스토리
+  const name = reservation?.deceased || D.EDITOR_RESERVATION.deceased;
+  const Icon = BLOCK_ICON[k] || (k === "audio" ? Music : k === "transition" ? ArrowRightLeft : ImageIcon);
 
   return (
     <div className="flex h-full flex-col">
@@ -311,35 +308,49 @@ function PropPanel({ sel, subs, updateSub, deleteSub }) {
         {/* 소스 파일 (영상/클립/슬라이드/AI/음악) */}
         {(k === "video" || k === "audio" || k === "clip" || k === "slide" || k === "ai") && (
           <Field label={k === "audio" ? "지금 음악" : "지금 들어간 파일"}>
-            <div className="px-3 py-2.5 text-[12.5px]" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: INK, wordBreak: "break-all" }}>{(item.file || item.source || "").split("/").pop()}</div>
+            <div className="px-3 py-2.5 text-[12.5px]" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: INK, wordBreak: "break-all" }}>{k === "audio" ? bgmName : (item.file || item.source || "").split("/").pop()}</div>
             <button onClick={() => toast(k === "audio" ? "음악 파일 선택 창을 엽니다" : "파일 선택 창을 엽니다")} className="mt-2 flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><Upload className="h-4 w-4" /> {k === "audio" ? "다른 음악으로 바꾸기" : "다른 파일로 바꾸기"}</button>
           </Field>
         )}
 
         {k === "title" && (
           <>
-            <Field label="화면에 보일 글자"><input className={inputCls} style={{ ...inputStyle, fontFamily: SERIF }} defaultValue={item.text || D.EDITOR_RESERVATION.deceased} /></Field>
+            <Field label="화면에 보일 글자"><input className={inputCls} style={{ ...inputStyle, fontFamily: SERIF }} defaultValue={item.text || reservation?.deceased || D.EDITOR_RESERVATION.deceased} /></Field>
             <Field label="보이는 시간 (초)"><input className={inputCls} style={inputStyle} defaultValue={item.dur} /></Field>
             <Field label="AI 문구 (타이틀)"><select className={inputCls} style={inputStyle}>{D.PROMPTS.filter((p) => p.target === "타이틀").map((p) => <option key={p.id}>{p.name}</option>)}</select></Field>
-            <button onClick={() => toast("AI로 다시 생성 요청됨 — 렌더 큐에 추가")} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> AI로 다시 만들기</button>
+            <button onClick={() => onGenerate(item.id)} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> AI로 만들기</button>
+            <GenHistory kind="title" name={name} gen={gen} onSelect={(vid) => onSelectGen(item.id, vid)} />
             <PromptManager />
           </>
         )}
 
         {(k === "clip" || k === "slide") && <Field label="보이는 시간 (초)"><input className={inputCls} style={inputStyle} defaultValue={item.dur} /></Field>}
-        {k === "slide" && <button onClick={() => toast("사진으로 다시 생성 요청됨 — 렌더 큐에 추가")} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> 사진으로 다시 만들기</button>}
+        {k === "slide" && (
+          <>
+            <Field label={`들어간 사진 (${SLIDE_PHOTOS.length}장)`}>
+              <div className="grid grid-cols-4 gap-1.5">
+                {SLIDE_PHOTOS.map((src, i) => (
+                  <img key={i} src={src} alt="" className="block w-full" style={{ aspectRatio: "1", objectFit: "cover", borderRadius: 4, border: "1px solid " + LINE2 }} />
+                ))}
+              </div>
+            </Field>
+            <button onClick={() => onGenerate(item.id)} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> 사진으로 만들기</button>
+            <GenHistory kind="slide" name={name} gen={gen} onSelect={(vid) => onSelectGen(item.id, vid)} />
+          </>
+        )}
 
         {k === "ai" && (
           <>
             <Field label="보이는 시간 (초)"><input className={inputCls} style={inputStyle} defaultValue={item.dur} /></Field>
             <Field label="AI 문구 (영상)"><select className={inputCls} style={inputStyle}>{D.PROMPTS.filter((p) => p.target === "AI영상").map((p) => <option key={p.id}>{p.name}</option>)}</select></Field>
-            <button onClick={() => toast("AI로 다시 생성 요청됨 — 렌더 큐에 추가")} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> AI로 다시 만들기</button>
+            <button onClick={() => onGenerate(item.id)} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> AI로 만들기</button>
+            <GenHistory kind="ai" name={name} gen={gen} onSelect={(vid) => onSelectGen(item.id, vid)} />
             <PromptManager />
           </>
         )}
 
         {k === "letter" && (
-          <Field label="편지 내용"><textarea rows={7} defaultValue={D.EDITOR_LETTER} className="w-full resize-none p-3 text-[13.5px] leading-relaxed outline-none" style={{ ...inputStyle, height: "auto", fontFamily: SERIF }} /></Field>
+          <Field label="편지 내용"><textarea rows={7} defaultValue={exampleLetter(reservation?.deceased || D.EDITOR_RESERVATION.deceased)} className="w-full resize-none p-3 text-[13.5px] leading-relaxed outline-none" style={{ ...inputStyle, height: "auto", fontFamily: SERIF }} /></Field>
         )}
 
         {k === "transition" && (
@@ -355,34 +366,6 @@ function PropPanel({ sel, subs, updateSub, deleteSub }) {
             </Field>
             <Field label="효과 길이"><select className={inputCls} style={inputStyle} defaultValue="0.5초 (기본)"><option>0.3초</option><option>0.5초 (기본)</option><option>1.0초</option></select></Field>
             <button onClick={() => toast("장면 전환 효과를 뺐습니다")} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-semibold" style={{ border: "1px solid " + LINE2, borderRadius: RADIUS, color: MUTE }}><Trash2 className="h-4 w-4" /> 효과 빼기</button>
-          </>
-        )}
-
-        {k === "subtitle" && (
-          <>
-            <Field label="자막 글자"><textarea rows={3} value={item.text} onChange={(e) => updateSub(item.id, { text: e.target.value })} className="w-full resize-none p-3 text-[13.5px] leading-relaxed outline-none" style={{ ...inputStyle, height: "auto" }} /></Field>
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="시작 (초)"><input type="number" step="0.5" min="0" value={item.start} onChange={(e) => updateSub(item.id, { start: Math.max(0, +e.target.value) })} className={inputCls} style={inputStyle} /></Field>
-              <Field label="길이 (초)"><input type="number" step="0.5" min="1" value={item.dur} onChange={(e) => updateSub(item.id, { dur: Math.max(1, +e.target.value) })} className={inputCls} style={inputStyle} /></Field>
-            </div>
-            <Field label="위치">
-              <div className="grid grid-cols-3 gap-1.5">
-                {D.SUBTITLE_POS.map((p) => (
-                  <button key={p} onClick={() => updateSub(item.id, { pos: p })} className="py-2 text-[13px] font-bold" style={{ background: item.pos === p ? GOLD_SOFT : "#fff", border: "1.5px solid " + (item.pos === p ? GOLD : LINE2), borderRadius: RADIUS, color: item.pos === p ? GOLD_D : MUTE }}>{p}</button>
-                ))}
-              </div>
-            </Field>
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="글씨체"><select className={inputCls} style={inputStyle}><option>Nanum Myeongjo</option><option>Pretendard</option></select></Field>
-              <Field label="크기"><input type="number" min="10" value={item.size} onChange={(e) => updateSub(item.id, { size: +e.target.value })} className={inputCls} style={inputStyle} /></Field>
-            </div>
-            <Field label="색상">
-              <div className="flex items-center gap-2">
-                <span className="h-9 w-11 shrink-0" style={{ background: item.color, border: "1px solid " + LINE2, borderRadius: RADIUS }} />
-                <input value={item.color} onChange={(e) => updateSub(item.id, { color: e.target.value })} className={inputCls} style={inputStyle} />
-              </div>
-            </Field>
-            <button onClick={() => deleteSub(item.id)} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-semibold" style={{ border: "1px solid " + LINE2, borderRadius: RADIUS, color: MUTE }}><Trash2 className="h-4 w-4" /> 자막 지우기</button>
           </>
         )}
 
@@ -403,23 +386,37 @@ function PropPanel({ sel, subs, updateSub, deleteSub }) {
 
 // ── 메인 ───────────────────────────────────────────────────────
 export default function VideoEditor({ reservation, onClose }) {
-  const [sel, setSel] = useState({ scope: "block", kind: "title", id: D.EDITOR_BLOCKS[0].id });
-  const [subs, setSubs] = useState(seedSubs);
+  const store = useStore(); // 템플릿·콘텐츠·파트너 구독 → 템플릿 변경이 제작에 즉시 반영
+  // 열린 예약의 파트너 → 그 파트너 템플릿(없으면 기본 템플릿) → 편집기 블록·BGM
+  const { blocks, bgmName } = useMemo(() => {
+    const partner = store.partners.find((p) => p.name === reservation?.partner);
+    const tpl = (partner && store.templates[partner.id]) || store.templates[D.DEFAULT_TEMPLATE_ID] || { bgm: null, blocks: [] };
+    return {
+      blocks: buildBlocks(tpl, store.content, reservation),
+      bgmName: (D.BGM.find((b) => b.id === tpl.bgm) || {}).name || "배경 음악",
+    };
+  }, [store.partners, store.templates, store.content, reservation]);
+
+  const firstBlockSel = () => ({ scope: "block", kind: blocks[0]?.type || "title", id: blocks[0]?.id });
+  const [sel, setSel] = useState(firstBlockSel);
+  const [gens, setGens] = useState(() => seedGens(blocks)); // 블록별 생성 결과물 누적·선택
   const name = (reservation && (reservation.deceased || reservation.name)) || D.EDITOR_RESERVATION.deceased;
 
-  const updateSub = (id, patch) => setSubs((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
-  const deleteSub = (id) => {
-    setSubs((prev) => prev.filter((s) => s.id !== id));
-    setSel({ scope: "block", kind: "title", id: D.EDITOR_BLOCKS[0].id });
-  };
-  const addSub = () => {
-    const id = "sub-" + Date.now();
-    setSubs((prev) => {
-      const start = prev.length ? Math.min(60, Math.max(...prev.map((s) => s.start + s.dur))) : 0;
-      return [...prev, { id, text: "새 자막", start, dur: 4, pos: "하단", size: 48, color: "#f3e9c8" }];
+  // "만들기" → 새 결과물 추가(최신 선택) · 썸네일은 버튼 하단 히스토리에 누적
+  const generate = (blockId) => {
+    setGens((g) => {
+      const cur = g[blockId] || genDefault(blockId);
+      const v = { id: blockId + "-v" + Date.now() };
+      return { ...g, [blockId]: { list: [...cur.list, v], sel: v.id } };
     });
-    setSel({ scope: "cap", kind: "subtitle", id });
+    toast("새 결과물을 만들었습니다");
   };
+  const selectGen = (blockId, vid) => setGens((g) => ({ ...g, [blockId]: { ...(g[blockId] || genDefault(blockId)), sel: vid } }));
+
+  // 템플릿 변경 등으로 선택한 블록이 사라지면 첫 블록으로 복귀
+  useEffect(() => {
+    if (sel.scope === "block" && !blocks.find((b) => b.id === sel.id)) setSel(firstBlockSel());
+  }, [blocks]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 토스트는 전역 toast()(App 루트의 <ToastHost/>)로 통일 — editor 자체 토스트 미보유.
   const publish = () => {
@@ -443,31 +440,30 @@ export default function VideoEditor({ reservation, onClose }) {
           <span className="h-4 w-px" style={{ background: "#2c3744" }} />
           <button onClick={() => toast("자동 생성본으로 되돌렸습니다")} className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] font-semibold" style={{ color: "#aab2bf" }}><RotateCcw className="h-3.5 w-3.5" /> 자동본으로</button>
           <Btn size="sm" variant="neutral" onClick={() => toast("저장되었습니다")}><Save className="h-3.5 w-3.5" /> 저장</Btn>
-          <Btn size="sm" onClick={() => toast("영상 재생성 요청됨 — 렌더 큐에 추가")}><Film className="h-3.5 w-3.5" /> 영상 다시 만들기</Btn>
           <Btn size="sm" onClick={publish}><Check className="h-4 w-4" strokeWidth={2.4} /> 확정·발행</Btn>
         </div>
       </div>
 
       <div className="flex items-center gap-2 px-5 py-1.5 text-[12px]" style={{ background: "#faf7f1", borderBottom: "1px solid " + LINE, color: MUTE }}>
         <span className="flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ background: GOLD }}>?</span>
-        왼쪽에서 <b style={{ color: INK }}>블록</b>을 고르거나 아래 <b style={{ color: INK }}>타임라인</b>에서 블록·자막·음악을 눌러 편집하세요.
+        왼쪽에서 <b style={{ color: INK }}>블록</b>을 고르거나 아래 <b style={{ color: INK }}>타임라인</b>에서 블록·음악을 눌러 편집하세요.
       </div>
 
       <div className="flex flex-1 overflow-hidden">
         <aside className="w-64 shrink-0 overflow-y-auto px-3.5 py-4" style={{ background: SURFACE, borderRight: "1px solid " + LINE }}>
-          <BlockList sel={sel} onSel={setSel} />
+          <BlockList blocks={blocks} sel={sel} onSel={setSel} />
         </aside>
         <div className="flex flex-1 flex-col overflow-y-auto px-6 py-5">
-          <Preview />
-          <Timeline sel={sel} onSel={setSel} subs={subs} setSubs={setSubs} onAddSub={addSub} />
+          <Preview name={name} />
+          <Timeline blocks={blocks} bgmName={bgmName} sel={sel} onSel={setSel} />
         </div>
         <aside className="w-80 shrink-0 overflow-y-auto" style={{ background: SURFACE, borderLeft: "1px solid " + LINE }}>
-          <PropPanel key={sel.scope + sel.id} sel={sel} subs={subs} updateSub={updateSub} deleteSub={deleteSub} />
+          <PropPanel key={sel.scope + sel.id} blocks={blocks} reservation={reservation} bgmName={bgmName} gens={gens} onGenerate={generate} onSelectGen={selectGen} sel={sel} />
         </aside>
       </div>
 
       <div className="flex items-center gap-3 px-5 py-2 text-[11.5px]" style={{ background: SURFACE, borderTop: "1px solid " + LINE, color: FAINT }}>
-        <Volume2 className="h-3.5 w-3.5" /> 배경 음악: {D.EDITOR_RESERVATION.bgm}
+        <Volume2 className="h-3.5 w-3.5" /> 배경 음악: {bgmName}
         <span className="ml-auto">확정하면 전체가 하나로 합쳐져 발행됩니다.</span>
       </div>
     </div>

@@ -1,27 +1,43 @@
 // [파트너] 예약 접수(Intake) — 호실·시간대 선택과 보호자/반려동물 정보 입력.
 import React, { useState } from "react";
 import {
-  Check,
+  Check, ChevronUp, ChevronDown,
 } from "lucide-react";
-import { SURFACE, LINE, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS } from "../theme.js";
+import { SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS } from "../theme.js";
 import { Btn, Card, PageHeader, DateField, CopyBtn } from "../ui.jsx";
 import { useStore } from "../store.js";
 import * as D from "../data.js";
-import { usePartner, HOURS, MINS, pad2, parseSlot, overlaps } from "./shared.jsx";
+import { usePartner, pad2, parseSlot, overlaps } from "./shared.jsx";
 
-function TimeChips({ items, value, onChange, suffix }) {
+// 시간 스테퍼 — HH : MM 위/아래 화살표(골드). 시는 1씩(0~23), 분은 10씩(00~50) 순환.
+function StepArrow({ dir, onClick, label }) {
+  const Icon = dir === "up" ? ChevronUp : ChevronDown;
   return (
-    <div className="mt-1 flex flex-wrap gap-1">
-      {items.map((v) => {
-        const on = v === value;
-        return (
-          <button key={v} type="button" onClick={() => onChange(v)}
-            className="shrink-0 px-2.5 text-[12.5px] font-semibold tabular-nums outline-none"
-            style={{ height: 32, minWidth: 44, borderRadius: RADIUS, background: on ? GOLD : SURFACE, color: on ? "#fff" : MUTE, border: "1px solid " + (on ? GOLD : LINE) }}>
-            {pad2(v)}{suffix}
-          </button>
-        );
-      })}
+    <button type="button" onClick={onClick} aria-label={label}
+      className="flex h-7 w-10 items-center justify-center outline-none transition hover:bg-[#f6f3ec] focus-visible:ring-1"
+      style={{ borderRadius: RADIUS, color: GOLD_D }}>
+      <Icon className="h-4 w-4" strokeWidth={2.2} />
+    </button>
+  );
+}
+function NumCol({ value, suffix, onUp, onDown, label }) {
+  return (
+    <div className="flex flex-col items-center gap-0.5">
+      <StepArrow dir="up" onClick={onUp} label={label + " 올리기"} />
+      <div className="flex items-baseline gap-0.5 py-0.5">
+        <span className="text-[26px] font-bold leading-none tabular-nums" style={{ color: INK }}>{pad2(value)}</span>
+        <span className="text-[12px]" style={{ color: FAINT }}>{suffix}</span>
+      </div>
+      <StepArrow dir="down" onClick={onDown} label={label + " 내리기"} />
+    </div>
+  );
+}
+function TimeStepper({ h, m, onH, onM }) {
+  return (
+    <div className="inline-flex items-center gap-2 px-3 py-2" style={{ background: SURFACE, border: "1px solid " + LINE2, borderRadius: RADIUS }}>
+      <NumCol value={h} suffix="시" label="시" onUp={() => onH((h + 1) % 24)} onDown={() => onH((h + 23) % 24)} />
+      <span className="text-[20px] font-bold" style={{ color: FAINT }}>:</span>
+      <NumCol value={m} suffix="분" label="분" onUp={() => onM((m + 10) % 60)} onDown={() => onM((m + 50) % 60)} />
     </div>
   );
 }
@@ -98,22 +114,15 @@ export function Intake() {
               </div>
             </div>
 
-            <div className="mt-4 space-y-3.5 border-t pt-4" style={{ borderColor: LINE }}>
+            <div className="mt-4 flex flex-wrap items-end gap-x-5 gap-y-3 border-t pt-4" style={{ borderColor: LINE }}>
               <div>
-                <span className="text-[12px] font-semibold" style={{ color: MUTE }}>시작 — 시간 <span className="font-normal tabular-nums" style={{ color: GOLD_D }}>{pad2(sH)}시</span></span>
-                <TimeChips items={HOURS} value={sH} onChange={setSH} suffix="시" />
+                <span className="text-[12px] font-semibold" style={{ color: MUTE }}>시작 시간</span>
+                <div className="mt-1.5"><TimeStepper h={sH} m={sM} onH={setSH} onM={setSM} /></div>
               </div>
+              <span className="pb-5 text-[15px] font-bold" style={{ color: FAINT }}>~</span>
               <div>
-                <span className="text-[12px] font-semibold" style={{ color: MUTE }}>시작 — 분 <span className="font-normal tabular-nums" style={{ color: GOLD_D }}>{pad2(sM)}분</span></span>
-                <TimeChips items={MINS} value={sM} onChange={setSM} suffix="분" />
-              </div>
-              <div>
-                <span className="text-[12px] font-semibold" style={{ color: MUTE }}>종료 — 시간 <span className="font-normal tabular-nums" style={{ color: GOLD_D }}>{pad2(eH)}시</span></span>
-                <TimeChips items={HOURS} value={eH} onChange={setEH} suffix="시" />
-              </div>
-              <div>
-                <span className="text-[12px] font-semibold" style={{ color: MUTE }}>종료 — 분 <span className="font-normal tabular-nums" style={{ color: GOLD_D }}>{pad2(eM)}분</span></span>
-                <TimeChips items={MINS} value={eM} onChange={setEM} suffix="분" />
+                <span className="text-[12px] font-semibold" style={{ color: MUTE }}>종료 시간</span>
+                <div className="mt-1.5"><TimeStepper h={eH} m={eM} onH={setEH} onM={setEM} /></div>
               </div>
             </div>
 

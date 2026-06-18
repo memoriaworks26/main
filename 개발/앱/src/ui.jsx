@@ -26,7 +26,7 @@ export function Tag({ s, label }) {
 }
 
 // 골드 액션 버튼
-export function Btn({ children, onClick, variant = "gold", size = "md", ...rest }) {
+export function Btn({ children, onClick, variant = "gold", size = "md", className = "", ...rest }) {
   const h = size === "sm" ? 34 : 36;
   const styles =
     variant === "gold"
@@ -37,7 +37,7 @@ export function Btn({ children, onClick, variant = "gold", size = "md", ...rest 
   return (
     <button
       onClick={onClick}
-      className="inline-flex items-center justify-center gap-1.5 px-3.5 text-[13px] font-bold outline-none transition focus-visible:ring-1 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:opacity-40"
+      className={"inline-flex items-center justify-center gap-1.5 px-3.5 text-[13px] font-bold outline-none transition focus-visible:ring-1 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:opacity-40 " + className}
       style={{ ...styles, height: h, borderRadius: RADIUS, fontFamily: SANS }}
       {...rest}
     >

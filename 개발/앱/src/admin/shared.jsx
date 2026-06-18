@@ -26,14 +26,12 @@ export function SearchSelect({ value, options, onChange, placeholder = "전체",
   const [pos, setPos] = useState(null); // 트리거 기준 fixed 좌표(부모 overflow에 안 잘리게)
   const ref = React.useRef(null);
   const btnRef = React.useRef(null);
-  // 트리거의 화면 좌표 측정 → 아래 공간이 좁으면 위로 펼침
+  // 트리거 화면 좌표 측정 → 항상 바로 아래로 펼치고, 아래 공간에 맞춰 높이 제한(목록은 내부 스크롤)
   const place = React.useCallback(() => {
     const r = btnRef.current?.getBoundingClientRect();
     if (!r) return;
-    const MENU = 300; // 검색창 + 목록 대략 높이
-    const below = window.innerHeight - r.bottom;
-    const up = below < MENU && r.top > below;
-    setPos({ left: r.left, width: r.width, top: up ? undefined : r.bottom + 4, bottom: up ? window.innerHeight - r.top + 4 : undefined });
+    const maxH = Math.min(340, Math.max(140, window.innerHeight - r.bottom - 12));
+    setPos({ left: r.left, width: r.width, top: r.bottom + 4, maxH });
   }, []);
   React.useEffect(() => {
     if (!open) return;
@@ -54,12 +52,12 @@ export function SearchSelect({ value, options, onChange, placeholder = "전체",
         <ChevronDown className="h-3.5 w-3.5 shrink-0" style={{ color: FAINT }} />
       </button>
       {open && pos && (
-        <div className="fixed z-50 overflow-hidden" style={{ left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS, boxShadow: "0 8px 24px rgba(0,0,0,.14)" }}>
-          <div className="flex items-center gap-2 px-2.5 py-2" style={{ borderBottom: "1px solid " + LINE }}>
+        <div className="fixed z-50 flex flex-col overflow-hidden" style={{ left: pos.left, top: pos.top, width: pos.width, maxHeight: pos.maxH, background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS, boxShadow: "0 8px 24px rgba(0,0,0,.14)" }}>
+          <div className="flex shrink-0 items-center gap-2 px-2.5 py-2" style={{ borderBottom: "1px solid " + LINE }}>
             <Search className="h-3.5 w-3.5 shrink-0" style={{ color: FAINT }} />
             <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="검색" className="w-full bg-transparent text-[12.5px] outline-none" style={{ color: INK }} />
           </div>
-          <div className="max-h-60 overflow-y-auto py-1">
+          <div className="min-h-0 flex-1 overflow-y-auto py-1">
             {list.length === 0 && <div className="px-3 py-2 text-[12px]" style={{ color: FAINT }}>검색 결과 없음</div>}
             {list.map((o) => (
               <button key={o.value} onClick={() => { onChange(o.value); setOpen(false); setQ(""); }}
