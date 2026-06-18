@@ -9,7 +9,7 @@ import VideoEditor from "./editor.jsx";
 // ─────────────────────────────────────────────────────────────
 // Memoria Works — 통합 인터페이스 (목업 / 권한 전환)
 // 디자인: 디자인_가이드.md · IA: 메뉴구조_IA.md · 더미데이터
-// 따뜻한 아이보리 + 네이비/골드 · 고인 성함 명조 · 빨강 배제 · lucide
+// 따뜻한 아이보리 + 네이비/골드 · 반려동물 이름 명조 · 빨강 배제 · lucide
 // ─────────────────────────────────────────────────────────────
 
 const MASTER_TABS = [
@@ -61,7 +61,11 @@ export default function App() {
         .mw-track { height: 3px; background: rgba(63,94,135,.18); overflow: hidden; border-radius: 2px; }
         .mw-fill { height: 100%; width: 40%; background: #3f5e87; animation: mw-move 1.4s ease-in-out infinite; }
         @keyframes mw-move { 0% { transform: translateX(-110%) } 100% { transform: translateX(320%) } }
-        @media (prefers-reduced-motion: reduce) { .mw-fill { animation: none; width: 100% } }
+        .mw-fade { animation: mw-fade .16s ease-out; }
+        .mw-pop { animation: mw-pop .18s cubic-bezier(.2,.7,.3,1); }
+        @keyframes mw-fade { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes mw-pop { from { opacity: 0; transform: translateY(6px) scale(.985) } to { opacity: 1; transform: none } }
+        @media (prefers-reduced-motion: reduce) { .mw-fill { animation: none; width: 100% } .mw-fade, .mw-pop { animation: none } }
         ::-webkit-scrollbar { width: 9px; height: 9px; }
         ::-webkit-scrollbar-thumb { background: #cfc8bb; border-radius: 5px; }
       `}</style>
@@ -73,7 +77,7 @@ export default function App() {
       ) : (
         <>
           {view === "admin" && <AdminConsole onOpenEditor={openEditor} />}
-          {view === "partner" && <PartnerConsole onOpenEditor={openEditor} />}
+          {view === "partner" && <PartnerConsole />}
           {view === "user" && <UserMobile />}
         </>
       )}

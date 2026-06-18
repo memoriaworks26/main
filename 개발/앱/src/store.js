@@ -1,0 +1,91 @@
+// ─────────────────────────────────────────────────────────────
+// 목 DB — 클라이언트 인메모리 스토어 (백엔드 아님). data.js를 seed로 1회 적재.
+// 모든 화면이 useStore()로 구독 → 한 곳에서 바꾸면 전 화면 전파.
+// 본개발 시 actions 내부의 setState만 Supabase 호출로 교체하면 됨.
+// ─────────────────────────────────────────────────────────────
+import { useSyncExternalStore } from "react";
+import * as D from "./data.js";
+
+let state = {
+  reservations: D.RESERVATIONS.map((r) => ({ ...r })),
+  accounts: D.ADMIN_ACCOUNTS.map((a) => ({ ...a })),
+  devices: D.DEVICES.map((d) => ({ ...d })),
+  secondJobs: D.SECOND_EDIT_JOBS.map((j) => ({ ...j })),
+  storageClasses: D.STORAGE.classes.map((c) => ({ ...c })),
+  templates: Object.fromEntries(Object.entries(D.TEMPLATE_ASSIGN).map(([k, v]) => [k, { bgm: v.bgm, blocks: v.blocks.map((b) => ({ ...b })) }])), // 파트너별 { bgm, blocks }
+  formTemplates: Object.fromEntries(Object.entries(D.FORM_TEMPLATES).map(([k, v]) => [k, v.map((f) => ({ ...f }))])), // 파트너별 입력폼 항목
+  rooms: D.ROOMS.map((r) => ({ ...r })),               // 추모실(명칭·위치 편집) — 파트너 대시보드
+  partners: D.PARTNERS.map((p) => ({ ...p })),         // 파트너사(건당 단가 편집)
+  settlementItems: D.SETTLEMENT_ITEMS.map((i) => ({ ...i })), // 정산 매출 건(추가·수정·삭제)
+  content: D.CONTENT.map((c) => ({ ...c })),           // 콘텐츠 허브 자산(클립·사진) — 즉시 추가 전파
+};
+
+// 정산 매출 건 식별 키 (ymd·항목명) — admin과 동일 규칙
+const siKey = (it) => it.ymd + "·" + it.deceased;
+
+const listeners = new Set();
+const getSnapshot = () => state;            // 상태 미변경 시 동일 참조 → 무한루프 방지
+const subscribe = (l) => { listeners.add(l); return () => listeners.delete(l); };
+// patch: 부분 객체 또는 (prev)=>부분 객체. 매 변경마다 새 최상위 state 객체 생성.
+function set(patch) {
+  const next = typeof patch === "function" ? patch(state) : patch;
+  state = { ...state, ...next };
+  listeners.forEach((l) => l());
+}
+
+// 전체 상태 구독 (컴포넌트에서 필요한 부분만 구조분해 후 로컬 가공)
+export function useStore() {
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+}
+
+const mapById = (arr, id, patch) => arr.map((x) => (x.id === id ? { ...x, ...patch } : x));
+
+export const actions = {
+  // 예약 (편집·컨펌 큐 ↔ 고객관리 ↔ 정산 ↔ 사이니지 공유)
+  setReservationStatus: (id, status) => set((s) => ({ reservations: mapById(s.reservations, id, { status }) })),
+  setReservationAssignee: (id, assignee) => set((s) => ({ reservations: mapById(s.reservations, id, { assignee }) })),
+
+  // 관리자 계정
+  addAccount: (acct) => set((s) => ({ accounts: [...s.accounts, acct] })),
+  removeAccount: (id) => set((s) => ({ accounts: s.accounts.filter((a) => a.id !== id) })),
+  setAccountPerms: (id, perms) => set((s) => ({ accounts: mapById(s.accounts, id, { perms }) })),
+  toggleAccountPerm: (id, key) => set((s) => ({
+    accounts: s.accounts.map((a) => a.id !== id ? a : { ...a, perms: (a.perms || []).includes(key) ? a.perms.filter((p) => p !== key) : [...(a.perms || []), key] }),
+  })),
+
+  // 사이니지 디바이스 (파트너 라이브 컨트롤 ↔ 관리자 사이니지 공유)
+  setDeviceMode: (id, mode) => set((s) => ({ devices: mapById(s.devices, id, { mode }) })),
+  setDevicePlay: (id, play) => set((s) => ({ devices: mapById(s.devices, id, { play }) })),
+
+  // 2차 가공 큐
+  addSecondJob: (job) => set((s) => ({ secondJobs: [...s.secondJobs, job] })),
+  setSecondJobStatus: (id, status) => set((s) => ({ secondJobs: mapById(s.secondJobs, id, { status }) })),
+  setSecondJobAssignee: (id, assignee) => set((s) => ({ secondJobs: mapById(s.secondJobs, id, { assignee }) })),
+  removeSecondJob: (id) => set((s) => ({ secondJobs: s.secondJobs.filter((j) => j.id !== id) })),
+
+  // 스토리지 보존 정책
+  setRetention: (key, retention) => set((s) => ({ storageClasses: s.storageClasses.map((c) => (c.key === key ? { ...c, retention } : c)) })),
+
+  // 영상 템플릿 (파트너별 요소 구성·순서 + BGM 편집)
+  setTemplateBgm: (pid, bgm) => set((s) => ({ templates: { ...s.templates, [pid]: { ...s.templates[pid], bgm } } })),
+  setTemplateBlocks: (pid, blocks) => set((s) => ({ templates: { ...s.templates, [pid]: { ...s.templates[pid], blocks } } })),
+
+  // 콘텐츠 허브 자산 (즉시 추가 → 템플릿 클립 드롭다운·허브에 즉시 반영)
+  addContent: (asset) => set((s) => ({ content: [asset, ...s.content] })),
+
+  // 유저 입력 폼 (파트너별 항목 배열)
+  setFormFields: (pid, fields) => set((s) => ({ formTemplates: { ...s.formTemplates, [pid]: fields } })),
+
+  // 추모실 (명칭·위치 편집 — 파트너 대시보드)
+  setRoom: (id, patch) => set((s) => ({ rooms: mapById(s.rooms, id, patch) })),
+
+  // 파트너사 건당 단가 + 신규 등록
+  setPartnerPrice: (id, unitPrice) => set((s) => ({ partners: mapById(s.partners, id, { unitPrice }) })),
+  addPartner: (partner) => set((s) => ({ partners: [...s.partners, partner] })),
+  updatePartner: (id, patch) => set((s) => ({ partners: mapById(s.partners, id, patch) })),
+
+  // 정산 매출 건 (추가·금액수정·삭제)
+  addSettlementItem: (item) => set((s) => ({ settlementItems: [...s.settlementItems, item] })),
+  updateSettlementItem: (key, patch) => set((s) => ({ settlementItems: s.settlementItems.map((i) => (siKey(i) === key ? { ...i, ...patch } : i)) })),
+  removeSettlementItem: (key) => set((s) => ({ settlementItems: s.settlementItems.filter((i) => siKey(i) !== key) })),
+};
