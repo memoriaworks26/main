@@ -6,6 +6,7 @@ import PartnerConsole from "./partner.jsx";
 import UserMobile from "./user.jsx";
 import VideoEditor from "./editor.jsx";
 import { ToastHost } from "./toast.jsx";
+import { getToken } from "./lib/userLink.js";
 
 // ─────────────────────────────────────────────────────────────
 // Memoria Works — 통합 인터페이스 (목업 / 권한 전환)
@@ -55,6 +56,16 @@ export default function App() {
   const closeEditor = () => setEditor(null);
   const switchView = (v) => { setAsPartner(null); setView(v); };
   const loginAsPartner = (partner) => { setAsPartner(partner); setView("partner"); };
+
+  // 보호자 토큰 링크(/u/<token> 또는 ?t=)로 진입하면 마스터 내비 없이 유저 페이지만 노출.
+  if (getToken()) {
+    return (
+      <div style={{ background: BG, minHeight: "100vh", fontFamily: SANS, color: INK }}>
+        <UserMobile />
+        <ToastHost />
+      </div>
+    );
+  }
 
   return (
     <div className="min-w-[1080px]" style={{ background: BG, minHeight: "100vh", fontFamily: SANS, color: INK }}>

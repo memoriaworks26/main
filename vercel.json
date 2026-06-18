@@ -1,4 +1,7 @@
 {
   "buildCommand": "npm --prefix '개발/앱' install && npm --prefix '개발/앱' run build",
-  "outputDirectory": "개발/앱/dist"
+  "outputDirectory": "개발/앱/dist",
+  "rewrites": [
+    { "source": "/u/:token", "destination": "/index.html" }
+  ]
 }

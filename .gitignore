@@ -1,0 +1,7 @@
+# OS
+.DS_Store
+
+# 의존성 · 빌드 산출물 (앱)
+node_modules/
+dist/
+*.log

@@ -320,6 +320,9 @@ function PropPanel({ blocks, edits, onEdit, reservation, bgmName, gens, onGenera
   const effect = (edits[transKey] && edits[transKey].effect) || blockTrans(sel.id);
   const au = edits.audio || {};
   const vol = au.volume != null ? au.volume : (item.volume != null ? item.volume : 100);
+  // 추억 슬라이드 — 사진 조합 + 사진 사이 전환(기본 페이드). 편집값에 보관.
+  const slideTrans = item.slideTrans || SLIDE_PHOTOS.slice(1).map(() => "페이드");
+  const setSlideTrans = (i, v) => { const n = slideTrans.slice(); n[i] = v; onEdit(item.id, { slideTrans: n }); };
   const Icon = BLOCK_ICON[k] || (k === "audio" ? Music : k === "transition" ? ArrowRightLeft : ImageIcon);
 
   return (
@@ -352,12 +355,32 @@ function PropPanel({ blocks, edits, onEdit, reservation, bgmName, gens, onGenera
         {(k === "clip" || k === "slide") && <Field label="보이는 시간 (초)"><input type="number" min="1" className={inputCls} style={inputStyle} value={item.dur} onChange={(e) => onEdit(item.id, { dur: Math.max(1, +e.target.value || 0) })} /></Field>}
         {k === "slide" && (
           <>
-            <Field label={`들어간 사진 (${SLIDE_PHOTOS.length}장)`}>
-              <div className="grid grid-cols-4 gap-1.5">
+            <Field label={`사진 조합 · 사이 전환 (${SLIDE_PHOTOS.length}장)`}>
+              <div className="px-2.5 py-2.5" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS }}>
                 {SLIDE_PHOTOS.map((src, i) => (
-                  <img key={i} src={src} alt="" className="block w-full" style={{ aspectRatio: "1", objectFit: "cover", borderRadius: 4, border: "1px solid " + LINE2 }} />
+                  <React.Fragment key={i}>
+                    {/* 사진 */}
+                    <div className="flex items-center gap-2.5">
+                      <img src={src} alt="" className="shrink-0" style={{ width: 64, aspectRatio: "16/9", objectFit: "cover", borderRadius: 4, border: "1px solid " + LINE2 }} />
+                      <span className="text-[12px] font-semibold" style={{ color: INK }}>사진 {i + 1}</span>
+                      <span className="ml-auto text-[10.5px]" style={{ color: FAINT }}>2.5초</span>
+                    </div>
+                    {/* 사진 사이 전환 */}
+                    {i < SLIDE_PHOTOS.length - 1 && (
+                      <div className="flex items-center gap-1.5 py-1" style={{ paddingLeft: 26 }}>
+                        <span className="h-3.5 w-px" style={{ background: LINE2 }} />
+                        <ArrowRightLeft className="h-3 w-3 shrink-0" style={{ color: GOLD_D }} />
+                        <select value={slideTrans[i]} onChange={(e) => setSlideTrans(i, e.target.value)}
+                          className="text-[11.5px] outline-none" style={{ height: 26, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK, padding: "0 6px" }}>
+                          {D.TRANSITION_TYPES.map((t) => <option key={t}>{t}</option>)}
+                        </select>
+                        <span className="h-3.5 w-px" style={{ background: LINE2 }} />
+                      </div>
+                    )}
+                  </React.Fragment>
                 ))}
               </div>
+              <button onClick={() => toast("사진 추가/순서 변경은 유저 업로드 기준으로 구성됩니다")} className="mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-[12.5px] font-semibold" style={{ border: "1px dashed " + LINE2, borderRadius: RADIUS, color: GOLD_D }}><Plus className="h-3.5 w-3.5" /> 사진 추가 · 순서 변경</button>
             </Field>
             <button onClick={() => onGenerate(item.id)} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> 사진으로 만들기</button>
             <GenHistory kind="slide" name={name} gen={gen} onSelect={(vid) => onSelectGen(item.id, vid)} />

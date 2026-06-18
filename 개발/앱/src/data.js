@@ -261,12 +261,25 @@ export const EDITOR_TIMELINE = {
 // USER_TRANSITIONS: 유저 모바일 위저드(user.jsx)용 — 보호자 친화적 명칭.
 // (두 화면의 노출 수준이 달라 라벨셋을 분리하되, 하드코딩 없이 이 파일에서 함께 관리)
 export const TRANSITION_TYPES = ["페이드", "슬라이드", "와이프", "없음"];
-export const USER_TRANSITIONS = ["부드러운 페이드", "디졸브", "슬라이드", "전환 없음"];
+// USER_TRANSITIONS — 대표 전환 10개. ko=화면 표시(한글), x=ffmpeg xfade transition 값.
+//   (실제 렌더: ffmpeg -filter_complex xfade=transition=<x>. x:"none"은 전환 없음.)
+export const USER_TRANSITIONS = [
+  { ko: "전환 없음", x: "none" },
+  { ko: "페이드", x: "fade" },
+  { ko: "디졸브", x: "dissolve" },
+  { ko: "검정 페이드", x: "fadeblack" },
+  { ko: "흰색 페이드", x: "fadewhite" },
+  { ko: "왼쪽 와이프", x: "wipeleft" },
+  { ko: "왼쪽 슬라이드", x: "slideleft" },
+  { ko: "원형 열기", x: "circleopen" },
+  { ko: "방사형", x: "radial" },
+  { ko: "줌인", x: "zoomin" },
+];
 export const SUBTITLE_POS = ["상단", "중앙", "하단"];
 
 // 유저 모바일 — 7단계 위저드
 export const USER_STEPS = [
-  "개인정보 동의", "AI 변환", "소스 업로드", "장면 전환", "배경 음악", "편지 작성", "미리보기", "영상 완료",
+  "개인정보 동의", "AI 변환", "소스 업로드·장면 전환", "배경 음악", "편지 작성", "미리보기", "영상 완료",
 ];
 
 export const USER_UPLOADS = [
