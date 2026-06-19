@@ -6,6 +6,7 @@ import {
 import { SURFACE, LINE, LINE2, GOLD, GOLD_D, INK, MUTE, FAINT, RADIUS } from "../theme.js";
 import { Btn, PageHeader } from "../ui.jsx";
 import { toast } from "../toast.jsx";
+import { confirm } from "../confirm.jsx";
 import { useStore, actions } from "../store.js";
 import * as D from "../data.js";
 import { SearchSelect } from "./shared.jsx";
@@ -74,7 +75,7 @@ export function FormBuilder() {
   return (
     <div>
       <PageHeader title="유저 입력 폼" sub="파트너사별 폼 — 필수 항목 고정 · 선택 항목 표시/숨김 · 라벨 변경" right={
-        <Btn size="sm" onClick={() => toast(partner.name + " 폼이 저장되었습니다")}><Check className="h-3.5 w-3.5" /> 저장</Btn>
+        <Btn size="sm" onClick={async () => { if (await confirm({ title: "폼 저장", message: partner.name + " 유저 입력 폼 설정을 저장합니다." })) toast(partner.name + " 폼이 저장되었습니다"); }}><Check className="h-3.5 w-3.5" /> 저장</Btn>
       } />
       <div className="flex gap-4">
         {/* 파트너사 선택 */}

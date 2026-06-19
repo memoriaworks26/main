@@ -1,13 +1,16 @@
 // [파트너] 오늘 현황 대시보드 — 타임라인(호실×시간) + 빠른 슬롯 편집.
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Check, ChevronRight, Pencil, Plus,
 } from "lucide-react";
-import { SERIF, SURFACE, LINE, LINE2, GOLD_D, INK, MUTE, FAINT, RADIUS } from "../theme.js";
-import { Btn, MetricRow, Table, PageHeader } from "../ui.jsx";
+import { SERIF, SURFACE, LINE, LINE2, GOLD, GOLD_D, INK, MUTE, FAINT, RADIUS } from "../theme.js";
+import { Btn, MetricRow, Table, PageHeader, useTableSort } from "../ui.jsx";
 import { RoomCard } from "../roomcard.jsx";
 import { useStore, actions } from "../store.js";
-import { usePartner, pad2, CASE_ROOMS, parseSlot, TIMELINE_START, TIMELINE_END, BLOCK_COLOR, hasRoomConflict } from "./shared.jsx";
+import { confirm } from "../confirm.jsx";
+import { CUSTOMER_COLS, customerSortValue, toCustomerRow, renderCustomerCell } from "../admin/customers.jsx";
+import { usePartner, pad2, minToStr, CASE_ROOMS, parseSlot, TIMELINE_START, TIMELINE_END, BLOCK_COLOR, hasRoomConflict } from "./shared.jsx";
+import { TimeStepper } from "./intake.jsx";
 
 function SlotEditCell({ r, rows }) {
   const [editing, setEditing] = useState(false);
@@ -79,24 +82,33 @@ function RoomSelect({ value, rows, slot, id, onChange }) {
   );
 }
 
+const SNAP = 10; // 예약 단위 = 10분 스냅
+
+// 시간 선택 — 예약 추가와 동일한 시·분 스테퍼로 통일. value/onChange는 "HH:MM" 문자열.
 function TimeInput({ value, onChange }) {
-  return (
-    <input type="time" value={value} onChange={(e) => onChange(e.target.value)}
-      className="px-2 tabular-nums text-[12.5px] outline-none focus-visible:ring-1"
-      style={{ height: 30, background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS, color: INK, width: 92 }} />
-  );
+  const [vh, vm] = (value || "").split(":");
+  const h = vh === "" || vh == null ? TIMELINE_START / 60 : parseInt(vh, 10);
+  const m = vm === "" || vm == null ? 0 : parseInt(vm, 10);
+  const set = (hh, mm) => onChange(pad2(hh) + ":" + pad2(mm));
+  return <TimeStepper h={h} m={m} onH={(v) => set(v, m)} onM={(v) => set(h, v)} />;
 }
 
 function TodayTimeline({ rows, onDetail }) {
   const [openId, setOpenId] = useState(null);
   const [timeEdit, setTimeEdit] = useState({ startStr: "", endStr: "" });
+  const [drag, setDrag] = useState(null); // { id, mode:"move"|"start"|"end", room, origStart, origEnd, startX, trackW, moved, preview:{start,end} }
+  const dragRef = useRef(null);
+  useEffect(() => { dragRef.current = drag; }, [drag]);
 
-  const caseRooms = [...new Set(rows.map((r) => r.room))].sort();
+  const caseRooms = CASE_ROOMS; // 빈 호실도 표시 — 드래그로 호실 이동(드롭) 가능하게
   const ticks = [];
-  for (let h = 8; h <= 24; h += 2) ticks.push(h);
+  for (let h = TIMELINE_START / 60; h <= TIMELINE_END / 60; h += 3) ticks.push(h);
   const pct = (min) => Math.max(0, Math.min(100, ((min - TIMELINE_START) / (TIMELINE_END - TIMELINE_START)) * 100));
   const sorted = [...rows].sort((a, b) => parseSlot(a.slot).start - parseSlot(b.slot).start);
-  const isDone = (r) => r.status === "published";
+
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const snap = (m) => Math.round(m / SNAP) * SNAP; // 10분 단위로 반올림
+  const slotOf = (s, e) => minToStr(s) + "~" + minToStr(e);
 
   const openAccordion = (id) => {
     if (openId === id) { setOpenId(null); return; }
@@ -111,6 +123,66 @@ function TodayTimeline({ rows, onDetail }) {
     setOpenId(null);
   };
 
+  // 타임라인 바 드래그 — 본체:이동 / 양끝:리사이즈. 10분 스냅, 겹침·역전 시 커밋 취소
+  const startDrag = (e, r, mode) => {
+    if (e.button != null && e.button !== 0) return;
+    e.preventDefault();
+    const track = e.currentTarget.closest("[data-track]");
+    if (!track) return;
+    const { start, end } = parseSlot(r.slot);
+    setDrag({ id: r.id, mode, room: r.room, origStart: start, origEnd: end,
+      startX: e.clientX, trackW: track.getBoundingClientRect().width, moved: false, preview: { start, end, room: r.room } });
+  };
+
+  useEffect(() => {
+    if (!drag) return;
+    const span = TIMELINE_END - TIMELINE_START;
+    const onMove = (e) => {
+      const d = dragRef.current; if (!d) return;
+      const dxMin = ((e.clientX - d.startX) / d.trackW) * span;
+      const moved = d.moved || Math.abs(e.clientX - d.startX) > 3;
+      let s = d.origStart, en = d.origEnd, room = d.mode === "move" ? d.preview.room : d.room;
+      if (d.mode === "move") {
+        const delta = snap(dxMin);
+        s = d.origStart + delta; en = d.origEnd + delta;
+        if (s < TIMELINE_START) { en += TIMELINE_START - s; s = TIMELINE_START; }
+        if (en > TIMELINE_END) { s -= en - TIMELINE_END; en = TIMELINE_END; }
+        // 세로 위치로 드롭할 호실 판정 — 커서 아래 호실 트랙
+        const el = document.elementFromPoint(e.clientX, e.clientY);
+        const t = el && el.closest("[data-room]");
+        if (t && t.getAttribute("data-room")) room = t.getAttribute("data-room");
+      } else if (d.mode === "start") {
+        s = clamp(snap(d.origStart + dxMin), TIMELINE_START, d.origEnd - SNAP);
+      } else {
+        en = clamp(snap(d.origEnd + dxMin), d.origStart + SNAP, TIMELINE_END);
+      }
+      setDrag((p) => p && { ...p, moved, preview: { start: s, end: en, room } });
+    };
+    const onUp = async () => {
+      const d = dragRef.current;
+      setDrag(null); // 드래그 종료(리스너 해제) 후 확인 — 컨펌 취소 시 원위치
+      if (!d) return;
+      if (!d.moved && d.mode === "move") { openAccordion(d.id); return; } // 이동 없이 클릭 → 상세
+      if (!d.preview) return;
+      const newSlot = slotOf(d.preview.start, d.preview.end);
+      const room = d.preview.room;
+      const ok = d.preview.start < d.preview.end && !hasRoomConflict(rows, room, newSlot, d.id);
+      const changed = newSlot !== slotOf(d.origStart, d.origEnd) || room !== d.room;
+      if (!ok || !changed) return; // 충돌·역전이거나 변화 없음 → 취소
+      const r = rows.find((x) => x.id === d.id);
+      const who = r ? r.deceased : "예약";
+      const msg = room !== d.room
+        ? `${who} · 호실 ${d.room} → ${room}\n예약시간을 ${newSlot}으로 변경합니다.`
+        : `${who} · 예약시간을 ${newSlot}으로 변경합니다.`;
+      if (await confirm({ title: "예약 변경", message: msg, confirmLabel: "변경" })) {
+        actions.updateReservation(d.id, { slot: newSlot, room });
+      }
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => { window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp); };
+  }, [drag?.id, drag?.mode]);
+
   return (
     <div className="mt-3 overflow-hidden" style={{ border: "1px solid " + LINE, borderRadius: 8, background: "#faf9f6" }}>
       {/* 눈금 헤더 */}
@@ -120,29 +192,47 @@ function TodayTimeline({ rows, onDetail }) {
         </div>
       </div>
 
-      {/* 호실별 행 */}
-      {caseRooms.map((roomName, ri) => {
-        const roomRows = sorted.filter((r) => r.room === roomName);
+      {/* 호실별 행 — 드래그 중인 예약은 드롭 대상 호실 행에 표시(effRoom) */}
+      {rows.length > 0 && caseRooms.map((roomName, ri) => {
+        const effRoom = (r) => (drag && drag.id === r.id && drag.mode === "move") ? drag.preview.room : r.room;
+        const roomRows = sorted.filter((r) => effRoom(r) === roomName);
+        const dropTarget = drag && drag.mode === "move" && drag.preview.room === roomName && drag.room !== roomName;
         return (
           <div key={roomName} style={{ borderBottom: ri < caseRooms.length - 1 ? "1px solid " + LINE : undefined }}>
             <div className="relative flex items-center px-3 py-2.5">
               <span className="w-20 shrink-0 text-[12px] font-bold" style={{ color: INK }}>{roomName}</span>
-              <div className="relative h-7 flex-1 rounded" style={{ background: "#eeece6" }}>
+              <div data-track data-room={roomName} className="relative h-7 flex-1 rounded" style={{ background: dropTarget ? "#e3dbc8" : "#eeece6", outline: dropTarget ? "2px dashed " + BLOCK_COLOR : "none", outlineOffset: -2 }}>
                 {ticks.slice(1, -1).map((h) => (
                   <div key={h} className="absolute top-0 h-full" style={{ left: pct(h * 60) + "%", width: 1, background: "#ddd8ce" }} />
                 ))}
                 {roomRows.map((r) => {
-                  const { start, end } = parseSlot(r.slot);
-                  const left = pct(start);
-                  const width = Math.max(1, pct(end) - left);
+                  const dragging = drag && drag.id === r.id;
+                  const seg = dragging ? drag.preview : parseSlot(r.slot);
+                  const left = pct(seg.start);
+                  const width = Math.max(1.5, pct(seg.end) - left);
                   const open = openId === r.id;
+                  const bad = dragging && (seg.start >= seg.end || hasRoomConflict(rows, drag.preview.room, slotOf(seg.start, seg.end), r.id));
                   return (
-                    <button key={r.id} onClick={() => openAccordion(r.id)}
-                      title={r.deceased + " · " + r.slot}
-                      className="absolute top-1 flex h-5 items-center overflow-hidden px-1.5 text-[11px] font-bold text-white outline-none transition hover:brightness-95"
-                      style={{ left: left + "%", width: width + "%", background: BLOCK_COLOR, borderRadius: 3, border: open ? "2px solid " + INK : "none" }}>
-                      <span className="truncate">{r.deceased}</span>
-                    </button>
+                    <div key={r.id} title={r.deceased + " · " + r.slot}
+                      className="absolute top-1 h-5 select-none text-[11px] font-bold text-white transition-[background] hover:brightness-95"
+                      style={{ left: left + "%", width: width + "%", background: bad ? "#b04a3a" : BLOCK_COLOR, borderRadius: 3,
+                        border: open ? "2px solid " + INK : "none", touchAction: "none", zIndex: dragging ? 5 : 1,
+                        boxShadow: dragging ? "0 2px 8px rgba(0,0,0,.25)" : "none" }}>
+                      {/* 좌측 리사이즈 핸들 */}
+                      <div onPointerDown={(e) => startDrag(e, r, "start")} className="absolute left-0 top-0 z-10 h-full" style={{ width: 7, cursor: "ew-resize" }} />
+                      {/* 본체 — 드래그 이동 / 이동 없이 누르면 상세 */}
+                      <div onPointerDown={(e) => startDrag(e, r, "move")} className="flex h-full items-center overflow-hidden px-2"
+                        style={{ cursor: dragging && drag.mode === "move" ? "grabbing" : "grab" }}>
+                        <span className="truncate">{r.deceased}</span>
+                      </div>
+                      {/* 우측 리사이즈 핸들 */}
+                      <div onPointerDown={(e) => startDrag(e, r, "end")} className="absolute right-0 top-0 z-10 h-full" style={{ width: 7, cursor: "ew-resize" }} />
+                      {/* 드래그 중 시간 라벨 */}
+                      {dragging && (
+                        <span className="absolute -top-5 left-0 z-20 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold tabular-nums"
+                          style={{ background: bad ? "#b04a3a" : INK, color: "#fff" }}>{slotOf(seg.start, seg.end)}{drag.preview.room !== drag.room ? " · " + drag.preview.room : ""}</span>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -167,7 +257,9 @@ function TodayTimeline({ rows, onDetail }) {
                       {r.status === "published"
                         ? <span className="px-2 py-[2px] text-[11px] font-bold" style={{ background: "#e9f1ee", color: "#3a7468", borderRadius: 4 }}>발행 완료</span>
                         : r.status === "review"
-                        ? <span className="px-2 py-[2px] text-[11px] font-bold" style={{ background: "#f4ead7", color: "#9a6a1c", borderRadius: 4 }}>컨펌 대기</span>
+                        ? <span className="px-2 py-[2px] text-[11px] font-bold" style={{ background: "#f4ead7", color: "#9a6a1c", borderRadius: 4 }}>접수 대기</span>
+                        : r.status === "confirm"
+                        ? <span className="px-2 py-[2px] text-[11px] font-bold" style={{ background: "#ece8f4", color: "#6d5aa6", borderRadius: 4 }}>컨펌 대기</span>
                         : <span className="px-2 py-[2px] text-[11px] font-bold" style={{ background: "#e9eef5", color: "#3f5e87", borderRadius: 4 }}>작업중</span>}
                     </div>
                   </div>
@@ -237,20 +329,43 @@ export function PDashboard({ onNew, onDetail }) {
   // 호실 ↔ 사이니지 디바이스 매핑(자사) — 실시간 표출 상태 표시용
   const myDevices = devices.filter((d) => d.partner === PARTNER.name);
   const deviceOf = (r) => myDevices.find((d) => d.room === r.name);
-  const liveCount = myDevices.filter((d) => d.status === "live").length;
 
-  // 오늘 예약 — 자사 예약 건. 퇴실 처리는 이 화면에서만 가능(예약 목록에서는 불가).
-  const todayRows = reservations.filter((r) => r.partner === PARTNER.name);
-  const inProgressCount = todayRows.filter((r) => r.status === "rendering").length;
-  // 퇴실 처리 — 호실별 현황 카드에서, 사이니지가 표출 중(live)일 때만 가능(목업 — 호실 id 기준).
-  const [out, setOut] = useState(() => new Set());
+  // 오늘 예약 — 자사 예약 중 오늘자만. 퇴실 처리는 이 화면에서만 가능(예약 목록에서는 불가).
+  // (목업: 고정 today 상수가 없어 자사 예약의 최신 날짜를 '오늘'로 사용)
+  const mine = reservations.filter((r) => r.partner === PARTNER.name);
+  const today = mine.reduce((m, r) => (r.date > m ? r.date : m), "");
+  const todayRows = mine.filter((r) => r.date === today);
+  const inProgressCount = todayRows.filter((r) => r.status === "rendering" || r.status === "confirm").length;
+  // 현재 시각(분) — 호실 카드 점유 판정용. 30초마다 갱신해 시간 경과·퇴실이 실시간 반영되도록.
+  const [nowMin, setNowMin] = useState(() => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); });
+  useEffect(() => {
+    const t = setInterval(() => { const d = new Date(); setNowMin(d.getHours() * 60 + d.getMinutes()); }, 30000);
+    return () => clearInterval(t);
+  }, []);
+  // 호실 점유 = 현재 시각이 예약 시간대[시작~종료] 안에 있는 오늘 예약(자사). 퇴실(종료=현재시각) 시 자동으로 빈 호실 처리.
+  const activeReservOf = (roomName) => todayRows.find((r) => { if (r.room !== roomName) return false; const { start, end } = parseSlot(r.slot); return start <= nowMin && nowMin < end; });
+  // 호실 카드 '신규 예약' → 해당 호실 + 현재 시각을 시작으로 프리필(분은 10분 스냅, 종료는 +3시간·24:00 캡).
+  const newReservForRoom = (roomName) => {
+    const d = new Date();
+    const sH = d.getHours(), sM = Math.floor(d.getMinutes() / 10) * 10;
+    const endTotal = Math.min(sH * 60 + sM + 180, 24 * 60);
+    const dateStr = d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+    return { room: roomName, date: dateStr, sH, sM, eH: Math.floor(endTotal / 60), eM: endTotal % 60 };
+  };
+  // 퇴실 처리 — 호실별 현황 카드에서 해당 예약의 종료 시간을 '현재 시각'으로 변경(실제 퇴실 시점 기록).
   const [timelineOpen, setTimelineOpen] = useState(false);
-  const checkoutRoom = (room) => { if (window.confirm(`${room.name}${room.deceased ? " (" + room.deceased + ")" : ""} 퇴실 처리할까요?\n퇴실 시 보호자 영상제작 URL이 자동 무효화됩니다.`)) setOut((s) => new Set(s).add(room.id)); };
-  const isDone = (r) => r.status === "published"; // 영상 완성 여부
-  const todayCols = [
-    { key: "deceased", label: "반려동물" }, { key: "guardian", label: "보호자" }, { key: "room", label: "호실" },
-    { key: "slot", label: "예약시간" }, { key: "video", label: "영상" }, { key: "state", label: "상태", align: "right" },
-  ];
+  const checkoutRoom = async (room, reserv) => {
+    if (!reserv) return;
+    const now = new Date();
+    const nowStr = pad2(now.getHours()) + ":" + pad2(now.getMinutes());
+    const { startStr } = parseSlot(reserv.slot);
+    if (!(await confirm({ title: "퇴실 처리", message: `${room.name}${room.deceased ? " (" + room.deceased + ")" : ""} 호실을 퇴실 처리합니다.\n예약 종료 시간이 현재 시각(${nowStr})으로 변경됩니다.`, confirmLabel: "퇴실", danger: true }))) return;
+    actions.updateReservation(reserv.id, { slot: startStr + "~" + nowStr });
+  };
+  // 표 표시용 정렬본(타임라인·호실/시간 셀의 충돌검사는 원본 todayRows 유지)
+  // 컬럼·렌더는 관리자 고객관리와 동일하게 통일 — 자사 화면이라 '파트너사' 컬럼만 제외
+  const { rows: todaySorted, sort, onSortChange } = useTableSort(todayRows.map(toCustomerRow), { value: customerSortValue });
+  const todayCols = CUSTOMER_COLS.filter((c) => c.key !== "partner" && c.key !== "date");
 
   return (
     <div>
@@ -271,7 +386,7 @@ export function PDashboard({ onNew, onDetail }) {
             호실별 현황 <span className="font-normal" style={{ color: FAINT }}>· 실시간 사이니지</span>
           </div>
           <div className="flex items-center gap-2">
-            <Btn size="sm" onClick={onNew}><Plus className="h-4 w-4" /> 신규 예약</Btn>
+            <Btn size="sm" onClick={() => onNew()}><Plus className="h-4 w-4" /> 신규 예약</Btn>
             <button
               onClick={() => setTimelineOpen((v) => !v)}
               className="flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold outline-none transition hover:opacity-80"
@@ -286,24 +401,25 @@ export function PDashboard({ onNew, onDetail }) {
         {timelineOpen && <TodayTimeline rows={todayRows} onDetail={onDetail} />}
 
         <div className="flex flex-wrap gap-3.5" style={{ marginTop: timelineOpen ? 16 : 0 }}>
-          {rooms.map((r) => <RoomCard key={r.id} room={r} device={deviceOf(r)} reserv={reservations.find((x) => x.partner === PARTNER.name && x.room === r.name)} onOpenReserv={onDetail} readOnly onSave={(id, patch) => actions.setRoom(id, patch)} onCheckout={checkoutRoom} checkedOut={out.has(r.id)} onNew={onNew} />)}
+          {rooms.map((r) => {
+            // 사이니지 카드 점유자 = 현재 시각이 예약 시간대 안인 오늘 예약(진행중). 시간 경과·퇴실 시 빈 호실로 전환.
+            const rv = activeReservOf(r.name);
+            const roomView = rv
+              ? { ...r, deceased: rv.deceased, chief: rv.chief, status: rv.status,
+                  age: rv.deceased === r.deceased ? r.age : undefined, species: rv.deceased === r.deceased ? r.species : undefined }
+              : { ...r, deceased: null };
+            return <RoomCard key={r.id} room={roomView} device={deviceOf(r)} reserv={rv} onOpenReserv={onDetail} readOnly onSave={(id, patch) => actions.setRoom(id, patch)} onCheckout={checkoutRoom} onNew={() => onNew(newReservForRoom(r.name))} />;
+          })}
         </div>
 
         {/* 오늘 예약 리스트 — 상세 진입 · 호실 변경 · 퇴실 처리 */}
         <div className="mb-2 mt-6 text-[13px] font-bold" style={{ color: INK }}>오늘 예약 리스트 <span className="font-normal" style={{ color: FAINT }}>· 호실·시간 변경 · 퇴실 처리</span></div>
-        <Table cols={todayCols} rows={todayRows} empty="오늘 예약이 없습니다." renderCell={(r, k) =>
-          k === "deceased" ? <button onClick={() => onDetail(r)} style={{ fontFamily: SERIF, fontWeight: 700, color: INK }} className="hover:underline">{r.deceased}</button> :
-          k === "guardian" ? <span className="whitespace-nowrap">{r.chief} <span className="tabular-nums" style={{ color: FAINT }}>{r.phone}</span></span> :
-          k === "room" ? <RoomSelect value={r.room} rows={todayRows} slot={r.slot} id={r.id} onChange={(v) => actions.setReservationRoom(r.id, v)} /> :
-          k === "slot" ? <SlotEditCell r={r} rows={todayRows} /> :
-          k === "video" ? (
-            r.status === "published" ? <span className="px-2 py-[2px] text-[11.5px] font-bold" style={{ background: "#e9f1ee", color: "#3a7468", borderRadius: 4 }}>발행 완료</span> :
-            r.status === "review" ? <span className="px-2 py-[2px] text-[11.5px] font-bold" style={{ background: "#f4ead7", color: "#9a6a1c", borderRadius: 4 }}>컨펌 대기</span> :
-            <span className="px-2 py-[2px] text-[11.5px] font-bold" style={{ background: "#e9eef5", color: "#3f5e87", borderRadius: 4 }}>작업중</span>) :
-          k === "state" ? (
-            r.status === "published" ? <span className="px-2 py-[2px] text-[11.5px] font-bold" style={{ background: "#eceef0", color: "#5a6470", borderRadius: 4 }}>종료</span> :
-            r.status === "review" ? <span className="px-2 py-[2px] text-[11.5px] font-bold" style={{ background: "#eeece6", color: "#8a857b", borderRadius: 4 }}>접수</span> :
-            <span className="px-2 py-[2px] text-[11.5px] font-bold" style={{ background: "#e9eef5", color: "#3f5e87", borderRadius: 4 }}>진행중</span>) : r[k]
+        <Table cols={todayCols} rows={todaySorted} sort={sort} onSortChange={onSortChange} empty="오늘 예약이 없습니다." onRowClick={(r) => onDetail(r)} renderCell={(r, k) =>
+          k === "deceased" ? <span style={{ fontFamily: SERIF, fontWeight: 700, color: INK }} className="hover:underline">{r.deceased}</span> :
+          // 호실·시간 셀은 인라인 편집 컨트롤 — 셀 클릭이 상세 이동으로 번지지 않도록 차단
+          k === "room" ? <span onClick={(e) => e.stopPropagation()}><RoomSelect value={r.room} rows={todayRows} slot={r.slot} id={r.id} onChange={(v) => actions.setReservationRoom(r.id, v)} /></span> :
+          k === "slot" ? <span onClick={(e) => e.stopPropagation()}><SlotEditCell r={r} rows={todayRows} /></span> :
+          renderCustomerCell(r, k)
         } />
       </div>
     </div>

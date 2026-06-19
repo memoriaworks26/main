@@ -1,20 +1,24 @@
-// 관리자 콘솔 공용 헬퍼 — 여러 화면에서 함께 쓰는 컴포넌트.\n// SaveBar: 미저장(초안) 경고/저장 바 · SearchSelect: 검색형 드롭다운(옵션 多).
-import React, { useState, useEffect, useRef, useCallback } from "react";
+// 관리자 콘솔 공용 헬퍼 — 여러 화면에서 함께 쓰는 컴포넌트.
+// SaveBar: 미저장(초안) 경고/저장 바 · SearchSelect: 검색형 드롭다운(옵션 多).
+import React, { useState } from "react";
 import {
   AlertTriangle, Check, ChevronDown, Search,
 } from "lucide-react";
 import { SURFACE, LINE, GOLD, GOLD_D, GOLD_SOFT, INK, FAINT, RADIUS } from "../theme.js";
 import { Btn } from "../ui.jsx";
+import { confirm } from "../confirm.jsx";
 
 export function SaveBar({ dirty, onSave, onReset, label = "저장하지 않은 변경사항이 있습니다 — 화면을 벗어나면 사라집니다." }) {
   if (!dirty) return null;
+  const doSave = async () => { if (await confirm({ title: "변경사항 저장", message: "변경한 내용을 저장합니다." })) onSave?.(); };
+  const doReset = async () => { if (await confirm({ title: "되돌리기", message: "저장하지 않은 변경을 모두 되돌립니다.", danger: true, confirmLabel: "되돌리기" })) onReset?.(); };
   return (
     <div className="mb-3 flex items-center gap-2 px-4 py-2.5" style={{ background: GOLD_SOFT, border: "1px solid " + GOLD, borderRadius: RADIUS }}>
       <AlertTriangle className="h-4 w-4 shrink-0" style={{ color: GOLD_D }} />
       <span className="text-[12.5px] font-semibold" style={{ color: GOLD_D }}>{label}</span>
       <div className="ml-auto flex items-center gap-2">
-        <Btn size="sm" variant="neutral" onClick={onReset}>되돌리기</Btn>
-        <Btn size="sm" onClick={onSave}><Check className="h-3.5 w-3.5" /> 저장</Btn>
+        <Btn size="sm" variant="neutral" onClick={doReset}>되돌리기</Btn>
+        <Btn size="sm" onClick={doSave}><Check className="h-3.5 w-3.5" /> 저장</Btn>
       </div>
     </div>
   );

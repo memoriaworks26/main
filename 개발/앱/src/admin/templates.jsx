@@ -1,12 +1,14 @@
 // [추모영상 제작] 영상 템플릿 — 파트너별 BGM/요소 구성 편집.
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState } from "react";
 import {
   AlertTriangle, ChevronDown, ChevronRight, ChevronUp, Clapperboard, GripVertical, Image, LayoutTemplate, Mail, Music, Music2, Plus, Search, Sparkles, Trash2, Type, Upload,
 } from "lucide-react";
 import { SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, STATUS, RADIUS } from "../theme.js";
 import { Btn, PageHeader } from "../ui.jsx";
 import { useStore, actions } from "../store.js";
+import { confirm } from "../confirm.jsx";
 import * as D from "../data.js";
+import { matchQuery } from "../lib/util.js";
 import { SaveBar, SearchSelect } from "./shared.jsx";
 
 const TPL_EL = {
@@ -123,7 +125,7 @@ export function Templates() {
   const partners = allPartners.filter((p) => p.active);
   const [open, setOpen] = useState(null); // 펼친 파트너사 id (1곳)
   const [q, setQ] = useState(""); // 파트너사 검색어
-  const filtered = partners.filter((p) => { const s = q.trim().toLowerCase(); return !s || (p.name + " " + (p.region || "") + " " + (p.manager || "")).toLowerCase().includes(s); });
+  const filtered = partners.filter((p) => matchQuery(q, p.name, p.region, p.manager));
 
   // 맨 위 기본 템플릿(신규 파트너 복제 원본) + 파트너사 목록 (검색 중에는 기본 템플릿 행 숨김)
   const defaultRow = { id: D.DEFAULT_TEMPLATE_ID, name: "기본 템플릿", isDefault: true };
@@ -161,7 +163,7 @@ export function Templates() {
 
           const setBlocks = (fn) => setTpls((m) => ({ ...m, [p.id]: { ...(m[p.id] || { bgm: null, blocks: [] }), blocks: fn((m[p.id] && m[p.id].blocks) || []) } }));
           const addBlock = (type) => setBlocks((bs) => [...bs, { id: "e-" + Date.now(), type, ...(type === "clip" ? { assetId: null } : {}) }]);
-          const removeBlock = (id) => setBlocks((bs) => bs.filter((b) => b.id !== id));
+          const removeBlock = async (id) => { if (await confirm({ title: "요소 삭제", message: "이 템플릿 요소를 삭제합니다.", danger: true })) setBlocks((bs) => bs.filter((b) => b.id !== id)); };
           const setAsset = (id, assetId) => setBlocks((bs) => bs.map((b) => (b.id === id ? { ...b, assetId } : b)));
           const move = (id, dir) => setBlocks((bs) => {
             const i = bs.findIndex((b) => b.id === id); const j = i + dir;

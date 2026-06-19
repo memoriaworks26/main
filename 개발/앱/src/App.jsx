@@ -6,6 +6,7 @@ import PartnerConsole from "./partner.jsx";
 import UserMobile from "./user.jsx";
 import VideoEditor from "./editor.jsx";
 import { ToastHost } from "./toast.jsx";
+import { ConfirmHost } from "./confirm.jsx";
 import { getToken } from "./lib/userLink.js";
 
 // ─────────────────────────────────────────────────────────────
@@ -63,6 +64,7 @@ export default function App() {
       <div style={{ background: BG, minHeight: "100vh", fontFamily: SANS, color: INK }}>
         <UserMobile />
         <ToastHost />
+        <ConfirmHost />
       </div>
     );
   }
@@ -78,6 +80,7 @@ export default function App() {
         .mw-pop { animation: mw-pop .18s cubic-bezier(.2,.7,.3,1); }
         @keyframes mw-fade { from { opacity: 0 } to { opacity: 1 } }
         @keyframes mw-pop { from { opacity: 0; transform: translateY(6px) scale(.985) } to { opacity: 1; transform: none } }
+        @keyframes mw-eq { from { transform: scaleY(.35) } to { transform: scaleY(1) } }
         @media (prefers-reduced-motion: reduce) { .mw-fill { animation: none; width: 100% } .mw-fade, .mw-pop { animation: none } }
         ::-webkit-scrollbar { width: 9px; height: 9px; }
         ::-webkit-scrollbar-thumb { background: #cfc8bb; border-radius: 5px; }
@@ -85,16 +88,18 @@ export default function App() {
 
       <MasterNav view={view} setView={switchView} />
 
-      {editor ? (
-        <VideoEditor reservation={editor} onClose={closeEditor} />
-      ) : (
-        <>
-          {view === "admin" && <AdminConsole onOpenEditor={openEditor} onLoginAsPartner={loginAsPartner} />}
-          {view === "partner" && <PartnerConsole asPartner={asPartner} onBackToAdmin={asPartner ? () => switchView("admin") : null} />}
-          {view === "user" && <UserMobile />}
-        </>
+      {/* 콘솔은 항상 마운트 유지 — 편집기는 위에 오버레이로 띄워, 닫으면(발행·컨펌·뒤로가기) 직전 화면(큐 등)으로 복귀 */}
+      {view === "admin" && <AdminConsole onOpenEditor={openEditor} onLoginAsPartner={loginAsPartner} />}
+      {view === "partner" && <PartnerConsole asPartner={asPartner} onBackToAdmin={asPartner ? () => switchView("admin") : null} />}
+      {view === "user" && <UserMobile />}
+
+      {editor && (
+        <div className="fixed inset-x-0 bottom-0" style={{ top: 44, zIndex: 40, background: BG }}>
+          <VideoEditor reservation={editor} onClose={closeEditor} />
+        </div>
       )}
       <ToastHost />
+      <ConfirmHost />
     </div>
   );
 }

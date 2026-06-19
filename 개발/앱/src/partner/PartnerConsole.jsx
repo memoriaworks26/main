@@ -4,9 +4,10 @@ import React, { useState } from "react";
 import {
   AlertTriangle, Check, FilePlus, LayoutGrid, ListChecks, Lock, LogOut, MonitorPlay, Settings, X,
 } from "lucide-react";
-import { NAVY, BG, LINE, GOLD, GOLD_D, INK, MUTE, FAINT, NAV_LINE } from "../theme.js";
+import { NAVY, BG, LINE, LINE2, GOLD, GOLD_D, INK, MUTE, FAINT, NAV_LINE, RADIUS } from "../theme.js";
 import { Logo, Btn, Card, PageHeader, NavItem, NavSection, Modal, PwField } from "../ui.jsx";
 import { toast } from "../toast.jsx";
+import { useStore, actions } from "../store.js";
 import * as D from "../data.js";
 import { PartnerCtx, ICON } from "./shared.jsx";
 import { PDashboard } from "./dashboard.jsx";
@@ -53,12 +54,53 @@ function PwChangeModal({ open, onClose }) {
   );
 }
 
+// ── 고객센터 (보호자 문의처) — 파트너가 자사 번호 등록 → 유저링크 하단 '장례식장' 문의처에 노출 ──
+function PartnerCsCard({ partnerId }) {
+  const { partners } = useStore();
+  const live = partners.find((p) => p.id === partnerId) || {};
+  const [phone, setPhone] = useState(live.csPhone || "");
+  const [hours, setHours] = useState(live.csHours || "");
+
+  const dirty = phone.trim() !== (live.csPhone || "") || hours.trim() !== (live.csHours || "");
+  const save = () => {
+    actions.updatePartner(partnerId, { csPhone: phone.trim(), csHours: hours.trim() });
+    toast("고객센터 정보가 저장되었습니다 — 보호자 화면 문의처에 반영됩니다");
+  };
+
+  return (
+    <Card title="고객센터 (보호자 문의처)">
+      <div className="text-[12px]" style={{ color: MUTE }}>
+        보호자가 보는 영상제작 화면 하단에 <b style={{ color: INK }}>장례식장 문의처</b>로 표시됩니다. (본사 고객센터와 함께 노출)
+      </div>
+      <div className="mt-3 max-w-md space-y-3">
+        <label className="block">
+          <div className="mb-1 text-[12px] font-semibold" style={{ color: MUTE }}>전화번호</div>
+          <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="예: 061-352-0444"
+            className="w-full px-3 text-[13px] tabular-nums outline-none" style={{ height: 36, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} />
+        </label>
+        <label className="block">
+          <div className="mb-1 text-[12px] font-semibold" style={{ color: MUTE }}>운영시간 <span style={{ color: FAINT }}>(선택)</span></div>
+          <input value={hours} onChange={(e) => setHours(e.target.value)} placeholder="예: 연중무휴 09:00–20:00"
+            className="w-full px-3 text-[13px] outline-none" style={{ height: 36, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} />
+        </label>
+        <div className="flex items-center gap-2">
+          <Btn size="sm" onClick={save} disabled={!dirty || !phone.trim()}><Check className="h-4 w-4" /> 저장</Btn>
+          {dirty && <span className="text-[11px]" style={{ color: FAINT }}>저장하지 않은 변경사항</span>}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 export default function PartnerConsole({ asPartner, onBackToAdmin }) {
   const partner = asPartner || D.PARTNERS[0];
   const [page, setPage] = useState("dashboard");
   const [detail, setDetail] = useState(null);
+  const [intakePrefill, setIntakePrefill] = useState(null); // 호실 카드 신규예약 프리필(호실·현재 시각)
   const [pwOpen, setPwOpen] = useState(false);
   const go = (p) => { setDetail(null); setPage(p); };
+  // 예약 접수 이동 + 프리필(호실 카드 신규예약 → 해당 호실·현재 시각). prefill에 room 없으면 무시.
+  const goIntake = (prefill) => { setDetail(null); setIntakePrefill(prefill && prefill.room ? prefill : null); setPage("intake"); };
   const openDetail = (r) => setDetail(r); // 현재 화면 위에 상세 오버레이 (대시보드·예약 목록 공용)
 
   return (
@@ -104,13 +146,14 @@ export default function PartnerConsole({ asPartner, onBackToAdmin }) {
       <div className="flex flex-1 flex-col" style={{ background: BG }}>
         <main className="flex-1 py-4 pl-2 pr-4">
           {detail ? <ReservDetail reserv={detail} onBack={() => setDetail(null)} /> : <>
-          {page === "dashboard" && <PDashboard onNew={() => go("intake")} onDetail={openDetail} />}
-          {page === "intake" && <Intake />}
-          {page === "list" && <PList onDetail={openDetail} onNew={() => go("intake")} />}
+          {page === "dashboard" && <PDashboard onNew={goIntake} onDetail={openDetail} />}
+          {page === "intake" && <Intake prefill={intakePrefill} />}
+          {page === "list" && <PList onDetail={openDetail} onNew={() => goIntake()} />}
           {page === "live" && <Live />}
           {page === "settings" && (
             <div>
-              <PageHeader title="설정" sub="자사 정보 · 고유 코드 · 비밀번호" />
+              <PageHeader title="설정" sub="자사 정보 · 고객센터 · 고유 코드 · 비밀번호" />
+              <div className="mb-4"><PartnerCsCard partnerId={partner.id} /></div>
               <div className="grid grid-cols-2 gap-4">
                 <Card title="파트너사 정보">
                   <div className="space-y-2.5 text-[13px]" style={{ color: INK }}>

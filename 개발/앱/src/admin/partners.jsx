@@ -1,22 +1,52 @@
 // [총괄] 파트너사 관리 — 목록·상세·신규 등록 모달.
 import React, { useState, useEffect } from "react";
 import {
-  Check, ChevronRight, Plus, Search, X,
+  Check, ChevronRight, Plus, Search, X, Upload, Image as ImageIcon,
 } from "lucide-react";
 import { SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, STATUS, RADIUS } from "../theme.js";
-import { Tag, Btn, Card, Summary, Table, PageHeader, Modal, CopyBtn } from "../ui.jsx";
+import { Tag, Btn, Card, Summary, Table, PageHeader, Modal, CopyBtn, useTableSort } from "../ui.jsx";
 import { useStore, actions } from "../store.js";
+import { confirm } from "../confirm.jsx";
 import * as D from "../data.js";
+import { won, parseNum as num } from "../lib/format.js";
+import { matchQuery } from "../lib/util.js";
+const today = () => new Date().toISOString().slice(0, 10); // 계약일 자동 기입용 (YYYY-MM-DD)
 
-const won = (v) => (v || 0).toLocaleString() + "원"; // 금액 포맷 — 상세/목록 공용
+// 파트너사 로고 입력 — 파일 선택 → data URL. 등록 모달·상세 편집 공용.
+function LogoInput({ value, onChange }) {
+  const ref = React.useRef(null);
+  const onPick = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => onChange(reader.result);
+    reader.readAsDataURL(file);
+    e.target.value = ""; // 같은 파일 재선택 허용
+  };
+  return (
+    <div className="flex items-center gap-3">
+      <div className="flex shrink-0 items-center justify-center overflow-hidden" style={{ width: 56, height: 56, background: SURFACE, border: "1px solid " + LINE2, borderRadius: RADIUS }}>
+        {value ? <img src={value} alt="로고" className="h-full w-full object-contain" /> : <ImageIcon className="h-5 w-5" style={{ color: FAINT }} strokeWidth={1.8} />}
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button type="button" onClick={() => ref.current?.click()}
+          className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] font-semibold outline-none hover:bg-black/[.02]"
+          style={{ border: "1px solid " + LINE2, color: GOLD_D, borderRadius: RADIUS }}>
+          <Upload className="h-3.5 w-3.5" /> {value ? "변경" : "로고 업로드"}
+        </button>
+        {value && <button type="button" onClick={() => onChange("")} className="px-2 py-1.5 text-[12px] outline-none hover:opacity-70" style={{ color: FAINT }}>제거</button>}
+      </div>
+      <input ref={ref} type="file" accept="image/*" className="hidden" onChange={onPick} />
+    </div>
+  );
+}
 
 function PartnerRegisterModal({ open, onClose }) {
   const { partners } = useStore();
-  const blank = { bizUnit: D.BIZ_UNITS.find((b) => b.active)?.name || "", idCode: "", name: "", region: "", rooms: "", bizNo: "", ceo: "", address: "", bizType: "", bizItem: "", manager: "", phone: "", email: "" };
+  const blank = { bizUnit: D.BIZ_UNITS.find((b) => b.active)?.name || "", idCode: "", name: "", region: "", rooms: "", bizNo: "", ceo: "", address: "", bizType: "", bizItem: "", manager: "", phone: "", email: "", logo: "", memo: "" };
   const [f, setF] = useState(blank);
   useEffect(() => { if (open) setF(blank); /* eslint-disable-next-line */ }, [open]);
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
-  const num = (v) => Number(String(v).replace(/[^\d]/g, "")) || 0;
   const idCode = f.idCode.trim();
   const dupCode = !!idCode && partners.some((p) => String(p.idCode || "").toLowerCase() === idCode.toLowerCase());
   const canSubmit = !!f.name.trim() && !!idCode && !dupCode;
@@ -24,13 +54,15 @@ function PartnerRegisterModal({ open, onClose }) {
     const nums = partners.map((p) => parseInt(String(p.id).replace(/\D/g, ""), 10)).filter((n) => !isNaN(n));
     return "P-" + String((nums.length ? Math.max(...nums) : 0) + 1).padStart(3, "0");
   };
-  const submit = () => {
+  const submit = async () => {
     if (!canSubmit) return;
+    if (!(await confirm({ title: "파트너사 등록", message: `${f.name.trim()} 파트너사를 신규 등록합니다.` }))) return;
     actions.addPartner({
       id: nextId(), idCode,
       bizUnit: f.bizUnit, name: f.name.trim(), region: f.region.trim(), rooms: num(f.rooms),
       bizNo: f.bizNo.trim(), ceo: f.ceo.trim(), address: f.address.trim(), bizType: f.bizType.trim(), bizItem: f.bizItem.trim(),
       manager: f.manager.trim(), phone: f.phone.trim(), email: f.email.trim(),
+      logo: f.logo || "", memo: f.memo.trim(), contractDate: today(),
       active: true, reservThisMonth: 0, revenue: 0, unitPrice: 0,
     });
     onClose();
@@ -56,6 +88,10 @@ function PartnerRegisterModal({ open, onClose }) {
       </div>
       <div className="space-y-5 overflow-y-auto px-5 py-4" style={{ maxHeight: "70vh" }}>
         {section("기본 정보", <>
+          <div className="col-span-2">
+            <span className="text-[12px] font-semibold" style={{ color: MUTE }}>로고</span>
+            <div className="mt-1"><LogoInput value={f.logo} onChange={(v) => setF((s) => ({ ...s, logo: v }))} /></div>
+          </div>
           <label className="block">
             <span className="text-[12px] font-semibold" style={{ color: MUTE }}>사업부</span>
             <select value={f.bizUnit} onChange={set("bizUnit")} className="mt-1 w-full px-3 text-[13px] outline-none" style={{ height: 34, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }}>
@@ -71,6 +107,12 @@ function PartnerRegisterModal({ open, onClose }) {
           </label>
           {field("지역", "region")}
           {field("호실 수", "rooms", { inputMode: "numeric" })}
+          <label className="block">
+            <span className="text-[12px] font-semibold" style={{ color: MUTE }}>계약일</span>
+            <input value={today()} disabled
+              className="mt-1 w-full px-3 text-[13px] tabular-nums outline-none" style={{ height: 34, background: SURFACE, border: "1px solid " + LINE2, borderRadius: RADIUS, color: FAINT }} />
+            <span className="mt-1 block text-[10.5px]" style={{ color: FAINT }}>등록일로 자동 기입됩니다</span>
+          </label>
         </>)}
         {section("사업자 정보", <>
           {field("사업자등록번호", "bizNo", { inputMode: "numeric", placeholder: "000-00-00000" })}
@@ -84,6 +126,12 @@ function PartnerRegisterModal({ open, onClose }) {
           {field("전화번호", "phone", { inputMode: "tel", placeholder: "010-0000-0000" })}
           <div className="col-span-2">{field("이메일", "email", { type: "email", placeholder: "name@example.com" })}</div>
         </>)}
+        {section("비고", <>
+          <div className="col-span-2">
+            <textarea value={f.memo} onChange={set("memo")} rows={3} placeholder="특이사항·메모를 자유롭게 적어주세요"
+              className="w-full px-3 py-2 text-[13px] outline-none" style={{ background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK, resize: "vertical" }} />
+          </div>
+        </>)}
       </div>
       <div className="flex items-center justify-end gap-2 px-5" style={{ height: 56, borderTop: "1px solid " + LINE }}>
         <Btn size="sm" variant="neutral" onClick={onClose}>취소</Btn>
@@ -94,23 +142,24 @@ function PartnerRegisterModal({ open, onClose }) {
 }
 
 // ── 파트너사 상세 (관리자 드릴다운 — 스토어 기반 실시간) ───────────
-function PartnerDetail({ partner: p, unitPrice, onBack, go }) {
+function PartnerDetail({ partner: p, onBack, go }) {
   const goLink = (page) => go && (
     <button onClick={() => go(page)} className="flex items-center gap-0.5 text-[12px] font-semibold outline-none hover:underline" style={{ color: GOLD }}>바로가기 <ChevronRight className="h-3.5 w-3.5" /></button>
   );
   const { partners, reservations, devices } = useStore();
   const [editing, setEditing] = useState(false);
-  const seed = () => ({ idCode: p.idCode || "", name: p.name, region: p.region, manager: p.manager, unitPrice: String(p.unitPrice || ""), active: p.active });
+  // 건당 단가는 [정산 내역]에서 관리 — 파트너사 편집에서는 다루지 않음
+  const seed = () => ({ idCode: p.idCode || "", name: p.name, region: p.region, manager: p.manager, phone: p.phone || "", logo: p.logo || "", memo: p.memo || "", active: p.active });
   const [f, setF] = useState(seed);
   const startEdit = () => { setF(seed()); setEditing(true); };
   const cancelEdit = () => setEditing(false);
-  const num = (v) => Number(String(v).replace(/[^\d]/g, "")) || 0;
   const idCode = f.idCode.trim();
   const dupCode = !!idCode && partners.some((x) => x.id !== p.id && String(x.idCode || "").toLowerCase() === idCode.toLowerCase());
   const canSave = !!f.name.trim() && !!idCode && !dupCode;
-  const save = () => {
+  const save = async () => {
     if (!canSave) return;
-    actions.updatePartner(p.id, { idCode, name: f.name.trim(), region: f.region.trim(), manager: f.manager.trim(), unitPrice: num(f.unitPrice), active: f.active });
+    if (!(await confirm({ title: "파트너사 정보 저장", message: "변경한 파트너사 정보를 저장합니다." }))) return;
+    actions.updatePartner(p.id, { idCode, name: f.name.trim(), region: f.region.trim(), manager: f.manager.trim(), phone: f.phone.trim(), logo: f.logo || "", memo: f.memo.trim(), active: f.active });
     setEditing(false);
   };
   const rs = reservations.filter((r) => r.partner === p.name);
@@ -131,7 +180,7 @@ function PartnerDetail({ partner: p, unitPrice, onBack, go }) {
   );
   return (
     <div>
-      <PageHeader title={p.name} sub={p.region + " · 파트너사 상세"} back={{ onClick: onBack, label: "파트너사 관리" }}
+      <PageHeader title={p.name} sub={p.region + " · 파트너사 상세"} back={{ onClick: onBack, label: "뒤로" }}
         right={<div className="flex items-center gap-2">
           <Tag s={(editing ? f.active : p.active) ? "online" : "offline"} label={(editing ? f.active : p.active) ? "활성" : "비활성"} />
           {editing
@@ -139,12 +188,13 @@ function PartnerDetail({ partner: p, unitPrice, onBack, go }) {
             : <Btn size="sm" variant="neutral" onClick={startEdit}>수정</Btn>}
         </div>} />
       <div className="mb-4">
-        <Summary items={[["담당자", p.manager], ["호실", p.rooms + "실"], ["이번달 예약", p.reservThisMonth + "건"], ["건당 단가", won(unitPrice || p.unitPrice)]]} />
+        <Summary items={[["담당자", p.manager], ["호실", p.rooms + "실"], ["이번달 예약", p.reservThisMonth + "건"], ["계약일", p.contractDate || "—"]]} />
       </div>
       <div className="grid grid-cols-2 gap-4">
         <Card title="기본 정보">
           {editing ? (
             <div className="space-y-2.5">
+              <div className="flex items-center justify-between gap-3 text-[13px]"><span className="shrink-0" style={{ color: MUTE }}>로고</span><LogoInput value={f.logo} onChange={(v) => setF((s) => ({ ...s, logo: v }))} /></div>
               <div className="flex items-center justify-between text-[13px]"><span style={{ color: MUTE }}>고유 코드 <span style={{ color: FAINT }}>(고정)</span></span><span className="tabular-nums font-semibold" style={{ color: GOLD_D }}>{p.id}</span></div>
               <label className="flex items-center justify-between gap-3 text-[13px]">
                 <span className="shrink-0" style={{ color: MUTE }}>ID 코드 <span style={{ color: FAINT }}>(로그인 ID)</span></span>
@@ -155,8 +205,8 @@ function PartnerDetail({ partner: p, unitPrice, onBack, go }) {
               {editRow("상호", "name")}
               {editRow("지역", "region")}
               {editRow("담당자", "manager")}
+              {editRow("담당자 전화번호", "phone", { inputMode: "tel", placeholder: "010-0000-0000" })}
               {row("호실 수", p.rooms + "실")}
-              {editRow("건당 단가(원)", "unitPrice", { inputMode: "numeric", className: "w-44 px-2.5 text-right text-[13px] tabular-nums outline-none focus-visible:ring-1" })}
               <label className="flex items-center justify-between text-[13px]">
                 <span style={{ color: MUTE }}>운영 상태</span>
                 <button type="button" onClick={() => setF((s) => ({ ...s, active: !s.active }))}
@@ -164,20 +214,35 @@ function PartnerDetail({ partner: p, unitPrice, onBack, go }) {
                   {f.active ? "활성" : "비활성"}
                 </button>
               </label>
+              {row("계약일", <span className="tabular-nums">{p.contractDate || "—"}</span>)}
+              <label className="block text-[13px]">
+                <span style={{ color: MUTE }}>비고</span>
+                <textarea value={f.memo} onChange={(e) => setF((s) => ({ ...s, memo: e.target.value }))} rows={3} placeholder="특이사항·메모"
+                  className="mt-1 w-full px-2.5 py-2 text-[13px] outline-none focus-visible:ring-1" style={{ background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS, color: INK, resize: "vertical" }} />
+              </label>
             </div>
           ) : (
             <div className="space-y-2">
+              {row("로고", p.logo
+                ? <img src={p.logo} alt="로고" className="object-contain" style={{ height: 40, maxWidth: 120, border: "1px solid " + LINE2, borderRadius: RADIUS, background: SURFACE }} />
+                : <span style={{ color: FAINT }}>미등록</span>)}
               {row("상호", p.name)}{row("지역", p.region)}{row("담당자", p.manager)}
+              {row("담당자 전화번호", p.phone || "—")}
               {row("고유 코드", p.id)}
               {row("ID 코드", <span className="flex items-center gap-1.5">{p.idCode || "—"}{p.idCode && <CopyBtn text={p.idCode} />}</span>)}
               {row("초기 비밀번호", <span className="flex items-center gap-1.5"><span style={{ color: GOLD_D }}>{p.idCode || "—"}</span>{p.idCode && <CopyBtn text={p.idCode} />}</span>)}
-              {row("호실 수", p.rooms + "실")}{row("건당 단가", won(unitPrice || p.unitPrice))}
+              {row("호실 수", p.rooms + "실")}
+              {row("계약일", <span className="tabular-nums">{p.contractDate || "—"}</span>)}
+              <div className="pt-1 text-[13px]">
+                <div className="mb-1" style={{ color: MUTE }}>비고</div>
+                <div className="px-2.5 py-2 whitespace-pre-wrap" style={{ background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS, color: p.memo ? INK : FAINT, minHeight: 36 }}>{p.memo || "메모 없음"}</div>
+              </div>
             </div>
           )}
         </Card>
         <Card title="영상 진행 현황" action={goLink("production")}>
           <div className="space-y-2">
-            {row("컨펌 대기", cnt("review") + "건")}{row("작업 중", cnt("rendering") + "건")}{row("발행 완료", cnt("published") + "건")}
+            {row("접수 대기", cnt("review") + "건")}{row("작업 중", cnt("rendering") + "건")}{row("컨펌 대기", cnt("confirm") + "건")}{row("발행 완료", cnt("published") + "건")}
             {row("누적 예약", rs.length + "건")}
           </div>
         </Card>
@@ -212,14 +277,15 @@ export function PartnersManage({ go, onLoginAsPartner }) {
   const [adding, setAdding] = useState(false);
   const [statusF, setStatusF] = useState("all"); // all | active | inactive
   const [q, setQ] = useState("");
-  const rows = partners
+  const filtered = partners
     .filter((p) => statusF === "all" || (statusF === "active" ? p.active : !p.active))
-    .filter((p) => { const s = q.trim().toLowerCase(); return !s || (p.name + " " + (p.idCode || "") + " " + p.region + " " + p.manager).toLowerCase().includes(s); });
+    .filter((p) => matchQuery(q, p.name, p.idCode, p.region, p.manager));
+  const { rows, sort, onSortChange } = useTableSort(filtered, { value: (r, k) => k === "active" ? (r.active ? 1 : 0) : r[k] });
   const cnt = { all: partners.length, active: partners.filter((p) => p.active).length, inactive: partners.filter((p) => !p.active).length };
-  if (sel) return <PartnerDetail partner={partners.find((x) => x.id === sel.id) || sel} unitPrice={(partners.find((x) => x.id === sel.id) || {}).unitPrice} onBack={() => setSel(null)} go={go} />;
+  if (sel) return <PartnerDetail partner={partners.find((x) => x.id === sel.id) || sel} onBack={() => setSel(null)} go={go} />;
   return (
     <div>
-      <PageHeader title="파트너사 관리" sub="반려동물 장례식장(파트너사) 등록 · 건당 단가 · 사업부 · 계정·권한 (테넌트)" right={
+      <PageHeader title="파트너사 관리" sub="반려동물 장례식장(파트너사) 등록 · 사업부 · 계정·권한 (테넌트)" right={
         <div className="flex items-center gap-2">
           <div className="flex items-center px-3" style={{ height: 36, width: 220, background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS }}>
             <Search className="h-4 w-4 shrink-0" style={{ color: FAINT }} strokeWidth={1.9} />
@@ -251,8 +317,10 @@ export function PartnersManage({ go, onLoginAsPartner }) {
         </div>
       </div>
       <Table
-        cols={[{ key: "idCode", label: "ID 코드" }, { key: "name", label: "파트너사" }, { key: "region", label: "지역" }, { key: "manager", label: "담당자" }, { key: "rooms", label: "호실", align: "right" }, { key: "unitPrice", label: "건당 단가", align: "right" }, { key: "reservThisMonth", label: "이번달 예약", align: "right" }, { key: "active", label: "상태" }]}
+        cols={[{ key: "name", label: "파트너사", sortable: true }, { key: "idCode", label: "ID 코드", sortable: true }, { key: "region", label: "지역", sortable: true }, { key: "manager", label: "담당자", sortable: true }, { key: "phone", label: "전화번호", sortable: true }, { key: "rooms", label: "호실", align: "right", sortable: true }, { key: "reservThisMonth", label: "이번달 예약", align: "right", sortable: true }, { key: "contractDate", label: "계약일", sortable: true }, { key: "active", label: "상태", sortable: true }]}
         rows={rows}
+        sort={sort}
+        onSortChange={onSortChange}
         renderCell={(r, k) =>
           k === "idCode" ? (
             <button onClick={() => onLoginAsPartner && onLoginAsPartner(r)}
@@ -265,16 +333,13 @@ export function PartnersManage({ go, onLoginAsPartner }) {
               <Tag s={r.active ? "online" : "offline"} label={r.active ? "활성" : "비활성"} />
             </button>
           ) :
+          k === "phone" ? <span className="tabular-nums">{r.phone || "—"}</span> :
+          k === "contractDate" ? <span className="tabular-nums">{r.contractDate || "—"}</span> :
           k === "rooms" ? <span className="tabular-nums">{r.rooms}실</span> :
-          k === "reservThisMonth" ? <span className="tabular-nums">{r.reservThisMonth}건</span> :
-          k === "unitPrice" ? (
-            <button onClick={() => setSel(r)} className="tabular-nums hover:underline" style={{ color: INK }}>
-              {won(r.unitPrice)}
-            </button>
-          ) : r[k]
+          k === "reservThisMonth" ? <span className="tabular-nums">{r.reservThisMonth}건</span> : r[k]
         }
       />
-      <p className="mt-3 text-[11px]" style={{ color: FAINT }}>※ ID 코드 클릭 시 해당 파트너 계정으로 접속합니다. 건당 단가 클릭 시 상세로 이동하여 수정할 수 있습니다.</p>
+      <p className="mt-3 text-[11px]" style={{ color: FAINT }}>※ ID 코드 클릭 시 해당 파트너 계정으로 접속합니다. 건당 단가는 <b style={{ color: MUTE }}>정산 내역</b>에서 관리합니다.</p>
     </div>
   );
 }

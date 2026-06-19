@@ -78,7 +78,7 @@ const localDefs = (text) => {
   // function / 단순 const·let·var 선언
   for (const m of text.matchAll(/(?:function|const|let|var)\s+([A-Za-z_$][\w$]*)/g)) set.add(m[1]);
   // 구조분해 선언 const {a, b} / const [a, b] 내부 식별자
-  for (const m of text.matchAll(/(?:const|let|var)\s*[\[{]([^\]}]*)[\]}]/g))
+  for (const m of text.matchAll(/(?:const|let|var)\s*[[{]([^\]}]*)[\]}]/g))
     for (const part of m[1].split(",")) {
       const name = part.trim().split(/[:=]/).pop().trim().replace(/[.]{3}/, "");
       if (/^[A-Za-z_$][\w$]*$/.test(name)) set.add(name);
@@ -123,7 +123,7 @@ for (const file of targets) {
     if (resolve(file) !== siblingShared)
       for (const m of readFileSync(siblingShared, "utf8").matchAll(/export\s+(?:const|function|let)\s+([A-Za-z_$][\w$]*)/g))
         fileSymbols.set(m[1], "./shared.jsx");
-  } catch (_) {}
+  } catch { /* shared.jsx 없거나 파싱 실패 시 무시 */ }
 
   // 1) + 2) 공유 심볼 / lucide 아이콘
   for (const [sym, mod] of fileSymbols)

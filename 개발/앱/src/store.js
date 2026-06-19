@@ -10,6 +10,8 @@ let state = {
   reservations: D.RESERVATIONS.map((r) => ({ ...r })),
   accounts: D.ADMIN_ACCOUNTS.map((a) => ({ ...a })),
   devices: D.DEVICES.map((d) => ({ ...d })),
+  signageSources: D.SIGNAGE_SOURCES.map((s) => ({ ...s })), // 사이니지 표출 소스(광고·대기·알림) — 라이브 컨트롤 소스 관리
+  signageNotice: { ...D.SIGNAGE_NOTICE }, // 알림 모드 다음 예약 안내 문구(템플릿)
   secondJobs: D.SECOND_EDIT_JOBS.map((j) => ({ ...j })),
   storageClasses: D.STORAGE.classes.map((c) => ({ ...c })),
   templates: {
@@ -22,10 +24,11 @@ let state = {
   partners: D.PARTNERS.map((p) => ({ ...p })),         // 파트너사(건당 단가 편집)
   settlementItems: D.SETTLEMENT_ITEMS.map((i) => ({ ...i })), // 정산 매출 건(추가·수정·삭제)
   content: D.CONTENT.map((c) => ({ ...c })),           // 콘텐츠 허브 자산(클립·사진) — 즉시 추가 전파
+  company: { ...D.COMPANY },                            // 회사정보 — 고객센터 연락처 등 편집값(설정 ↔ 유저링크 공유)
 };
 
-// 정산 매출 건 식별 키 (ymd·항목명) — admin과 동일 규칙
-const siKey = (it) => it.ymd + "·" + it.deceased;
+// 정산 매출 건 식별 키 (ymd·항목명) — store 액션과 admin UI가 공유(단일 정의).
+export const siKey = (it) => it.ymd + "·" + it.deceased;
 
 const listeners = new Set();
 const getSnapshot = () => state;            // 상태 미변경 시 동일 참조 → 무한루프 방지
@@ -50,9 +53,15 @@ export const actions = {
   setReservationAssignee: (id, assignee) => set((s) => ({ reservations: mapById(s.reservations, id, { assignee }) })),
   setReservationRoom: (id, room) => set((s) => ({ reservations: mapById(s.reservations, id, { room }) })),
   updateReservation: (id, patch) => set((s) => ({ reservations: mapById(s.reservations, id, patch) })),
+  removeReservation: (id) => set((s) => ({ reservations: s.reservations.filter((r) => r.id !== id) })),
+  removeReservations: (ids) => set((s) => { const rm = new Set(ids); return { reservations: s.reservations.filter((r) => !rm.has(r.id)) }; }),
+
+  // 회사정보 (고객센터 연락처 등 — 환경설정에서 편집 → 유저링크 문의처에 반영)
+  updateCompany: (patch) => set((s) => ({ company: { ...s.company, ...patch } })),
 
   // 관리자 계정
   addAccount: (acct) => set((s) => ({ accounts: [...s.accounts, acct] })),
+  updateAccount: (id, patch) => set((s) => ({ accounts: mapById(s.accounts, id, patch) })),
   removeAccount: (id) => set((s) => ({ accounts: s.accounts.filter((a) => a.id !== id) })),
   setAccountPerms: (id, perms) => set((s) => ({ accounts: mapById(s.accounts, id, { perms }) })),
   toggleAccountPerm: (id, key) => set((s) => ({
@@ -62,11 +71,26 @@ export const actions = {
   // 사이니지 디바이스 (파트너 라이브 컨트롤 ↔ 관리자 사이니지 공유)
   setDeviceMode: (id, mode) => set((s) => ({ devices: mapById(s.devices, id, { mode }) })),
   setDevicePlay: (id, play) => set((s) => ({ devices: mapById(s.devices, id, { play }) })),
+  setDeviceVolume: (id, volume) => set((s) => ({ devices: mapById(s.devices, id, { volume, muted: volume === 0 }) })),
+  setDeviceMuted: (id, muted) => set((s) => ({ devices: mapById(s.devices, id, { muted }) })),
+
+  // 사이니지 표출 소스 (광고·대기·알림) — 라이브 컨트롤 소스 관리
+  addSignageSource: (src) => set((s) => ({ signageSources: [...s.signageSources, src] })),
+  removeSignageSource: (id) => set((s) => ({ signageSources: s.signageSources.filter((x) => x.id !== id) })),
+  // 카테고리당 1개만 표출 — 같은 cat의 다른 소스는 자동 해제(선택 개념). 선택된 걸 다시 누르면 해제.
+  selectSignageSource: (id) => set((s) => {
+    const t = s.signageSources.find((x) => x.id === id);
+    if (!t) return {};
+    const on = !t.active;
+    return { signageSources: s.signageSources.map((x) => x.cat !== t.cat ? x : { ...x, active: x.id === id ? on : false }) };
+  }),
+  setSignageNotice: (patch) => set((s) => ({ signageNotice: { ...s.signageNotice, ...patch } })),
 
   // 2차 가공 큐
   addSecondJob: (job) => set((s) => ({ secondJobs: [...s.secondJobs, job] })),
   setSecondJobStatus: (id, status) => set((s) => ({ secondJobs: mapById(s.secondJobs, id, { status }) })),
   setSecondJobAssignee: (id, assignee) => set((s) => ({ secondJobs: mapById(s.secondJobs, id, { assignee }) })),
+  updateSecondJob: (id, patch) => set((s) => ({ secondJobs: mapById(s.secondJobs, id, patch) })),
   removeSecondJob: (id) => set((s) => ({ secondJobs: s.secondJobs.filter((j) => j.id !== id) })),
 
   // 스토리지 보존 정책

@@ -4,6 +4,7 @@ import { SURFACE, LINE, LINE2, INK, MUTE, FAINT, GOLD, GOLD_D, RADIUS } from "./
 import { Btn } from "./ui.jsx";
 import * as D from "./data.js";
 import { toast } from "./toast.jsx";
+import { comma as won } from "./lib/format.js";
 
 // 거래명세서 양식 (발행 시 동결 · 메일 발송) — 기획안 정산 §4 in-scope
 export function TradeStatement({ partner, items: itemsProp, period, issuedAt }) {
@@ -14,7 +15,6 @@ export function TradeStatement({ partner, items: itemsProp, period, issuedAt }) 
   const total = items.length * unit;          // 합계(VAT 포함)
   const supply = Math.round(total / 1.1);     // 공급가액
   const vat = total - supply;                 // 부가세
-  const won = (v) => v.toLocaleString();
 
   const bd = "1px solid " + LINE2;
   const hd = { padding: "5px 6px", fontSize: 10.5, color: MUTE, background: "#f6f3ec", borderRight: bd, borderBottom: bd, fontWeight: 700 };

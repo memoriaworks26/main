@@ -4,16 +4,16 @@ import {
   Check, FileText, Plus, Trash2, X,
 } from "lucide-react";
 import { SERIF, SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, STATUS, RADIUS } from "../theme.js";
-import { Tag, Btn, MetricRow, Table, PageHeader, Modal } from "../ui.jsx";
+import { Tag, Btn, MetricRow, Table, PageHeader, Modal, DateField, useTableSort } from "../ui.jsx";
 import { toast } from "../toast.jsx";
+import { confirm } from "../confirm.jsx";
 import { TradeStatement } from "../docs.jsx";
-import { useStore, actions } from "../store.js";
+import { useStore, actions, siKey as itemKey } from "../store.js";
 import * as D from "../data.js";
 import { SaveBar } from "./shared.jsx";
+import { won, parseNum as num } from "../lib/format.js";
 
-const won = (v) => v.toLocaleString() + "원";
 const fmtYmd = (s) => s.replaceAll("-", ".");
-const itemKey = (it) => it.ymd + "·" + it.deceased;
 
 const DEPOSIT_METHODS = ["계좌이체", "카드", "현금", "기타"];
 // 입금 등록 모달 — 파트너사 입금 1건 추가 (미수금 즉시 반영)
@@ -22,7 +22,6 @@ function DepositModal({ open, onClose, partner, unpaid, onAdd }) {
   const [f, setF] = useState(blank);
   useEffect(() => { if (open) setF(blank); /* eslint-disable-next-line */ }, [open]);
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
-  const num = (v) => Number(String(v).replace(/[^\d]/g, "")) || 0;
   const amount = num(f.amount);
   const canSubmit = !!f.date && amount > 0;
   const submit = () => {
@@ -44,10 +43,7 @@ function DepositModal({ open, onClose, partner, unpaid, onAdd }) {
           </button>
         )}
         <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="text-[12px] font-semibold" style={{ color: MUTE }}>입금일 *</span>
-            <input type="date" value={f.date} onChange={set("date")} className="mt-1 w-full px-3 text-[13px] outline-none" style={inputStyle} />
-          </label>
+          <DateField label="입금일" req value={f.date} onChange={(d) => setF((s) => ({ ...s, date: d }))} />
           <label className="block">
             <span className="text-[12px] font-semibold" style={{ color: MUTE }}>금액(원) *</span>
             <input value={f.amount} onChange={set("amount")} inputMode="numeric" placeholder="0" className="mt-1 w-full px-3 text-right text-[13px] tabular-nums outline-none" style={inputStyle} />
@@ -80,7 +76,6 @@ function AddSalesModal({ open, onClose, onAdd }) {
   const blank = { nm: "", ymd: "2026-06-18", amt: "" };
   const [f, setF] = useState(blank);
   useEffect(() => { if (open) setF(blank); /* eslint-disable-next-line */ }, [open]);
-  const num = (v) => Number(String(v).replace(/[^\d]/g, "")) || 0;
   const canSubmit = f.nm.trim() && num(f.amt) > 0;
   const inputStyle = { height: 36, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK };
   return (
@@ -95,10 +90,7 @@ function AddSalesModal({ open, onClose, onAdd }) {
           <input value={f.nm} onChange={(e) => setF((s) => ({ ...s, nm: e.target.value }))} placeholder="예: 추모영상 추가 제작 / 액자 인쇄" className="mt-1 w-full px-3 text-[13px] outline-none" style={inputStyle} />
         </label>
         <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="text-[12px] font-semibold" style={{ color: MUTE }}>날짜 *</span>
-            <input type="date" value={f.ymd} onChange={(e) => setF((s) => ({ ...s, ymd: e.target.value }))} className="mt-1 w-full px-2 text-[13px] outline-none" style={inputStyle} />
-          </label>
+          <DateField label="날짜" req value={f.ymd} onChange={(d) => setF((s) => ({ ...s, ymd: d }))} />
           <label className="block">
             <span className="text-[12px] font-semibold" style={{ color: MUTE }}>금액(원) *</span>
             <input value={f.amt} onChange={(e) => setF((s) => ({ ...s, amt: e.target.value }))} inputMode="numeric" placeholder="0" className="mt-1 w-full px-3 text-right text-[13px] tabular-nums outline-none" style={inputStyle} />
@@ -114,8 +106,8 @@ function AddSalesModal({ open, onClose, onAdd }) {
 }
 
 function PartnerSettleDetail({ partner, onBack, onIssue, onViewStatement }) {
-  const p = D.SETTLEMENT_PARTNERS.find((x) => x.partner === partner);
-  const { settlementItems } = useStore();
+  const { settlementItems, partners } = useStore();
+  const pObj = partners.find((x) => x.name === partner); // 건당 단가 출처
   const storeItems = settlementItems.filter((i) => i.partner === partner);
   const [draft, setDraft] = useState(() => storeItems.map((i) => ({ ...i })));
   const items = draft;
@@ -126,14 +118,14 @@ function PartnerSettleDetail({ partner, onBack, onIssue, onViewStatement }) {
   const [deposits, setDeposits] = useState(() => D.SETTLEMENT_DEPOSITS.filter((d) => d.partner === partner));
   const [depositOpen, setDepositOpen] = useState(false);
   const [addingModal, setAddingModal] = useState(false);
+  const [bulkAmt, setBulkAmt] = useState("");
   const [editDepId, setEditDepId] = useState(null);
   const [editDepForm, setEditDepForm] = useState({});
-  const num = (v) => Number(String(v).replace(/[^\d]/g, "")) || 0;
   const addDeposit = (dp) => setDeposits((prev) => [...prev, dp].sort((a, b) => a.date.localeCompare(b.date)));
   const startEditDep = (dep) => { setEditDepId(dep.id); setEditDepForm({ ...dep }); };
   const cancelEditDep = () => { setEditDepId(null); setEditDepForm({}); };
-  const saveDep = () => { setDeposits((prev) => prev.map((d) => d.id === editDepId ? { ...editDepForm, amount: num(String(editDepForm.amount)) } : d)); cancelEditDep(); };
-  const removeDep = (id) => setDeposits((prev) => prev.filter((d) => d.id !== id));
+  const saveDep = async () => { if (!(await confirm({ title: "입금 내역 저장", message: "수정한 입금 내역을 저장합니다." }))) return; setDeposits((prev) => prev.map((d) => d.id === editDepId ? { ...editDepForm, amount: num(String(editDepForm.amount)) } : d)); cancelEditDep(); };
+  const removeDep = async (id) => { if (await confirm({ title: "입금 내역 삭제", message: "이 입금 내역을 삭제합니다.", danger: true })) setDeposits((prev) => prev.filter((d) => d.id !== id)); };
   const depositTotal = deposits.reduce((s, d) => s + d.amount, 0);
   const billed = items.reduce((s, i) => s + i.amount, 0);
   const [sub, setSub] = useState("main");
@@ -152,10 +144,23 @@ function PartnerSettleDetail({ partner, onBack, onIssue, onViewStatement }) {
     setDraft((d) => [...d, { partner, deceased: nm.trim(), chief: "—", ymd, date: fmtYmd(ymd).slice(5), amount: num(amt), status: "waiting", manual: true }]);
   };
   const setAmount = (key, v) => setDraft((d) => d.map((i) => (itemKey(i) === key ? { ...i, amount: num(v) } : i)));
-  const removeItem = (key) => { setDraft((d) => d.filter((i) => itemKey(i) !== key)); setSel((s) => s.filter((x) => x !== key)); };
+  const applyBulk = async () => {
+    const v = num(bulkAmt);
+    if (!selItems.length || !v) return;
+    if (!(await confirm({ title: "매출 금액 일괄수정", message: `선택한 ${selItems.length}건의 금액을 ${won(v)}(으)로 일괄 변경합니다.`, confirmLabel: "변경" }))) return;
+    setDraft((d) => d.map((i) => (sel.includes(itemKey(i)) ? { ...i, amount: v } : i)));
+    setBulkAmt("");
+  };
+  const removeItem = async (key) => { if (!(await confirm({ title: "매출 삭제", message: "이 매출 항목을 삭제합니다.", danger: true }))) return; setDraft((d) => d.filter((i) => itemKey(i) !== key)); setSel((s) => s.filter((x) => x !== key)); };
 
-  const issue = () => {
+  // 표 정렬본 (선택·합계 계산은 원본 rows 유지 · 금액은 인라인 편집이라 정렬 제외)
+  const salesSort = useTableSort(rows);
+  const depSort = useTableSort(deposits);
+  const stmtSort = useTableSort(statements);
+
+  const issue = async () => {
     if (!selItems.length) return;
+    if (!(await confirm({ title: "거래명세서 발행", message: `선택한 ${selItems.length}건(${won(selAmount)})으로 거래명세서를 발행합니다.\n발행 시 단가가 동결됩니다.`, confirmLabel: "발행" }))) return;
     onIssue({ partner, items: selItems, period: fmtYmd(from) + " ~ " + fmtYmd(to), issuedAt: "2026. 06. 18", amount: selAmount });
   };
 
@@ -168,10 +173,11 @@ function PartnerSettleDetail({ partner, onBack, onIssue, onViewStatement }) {
   return (
     <div>
       <PageHeader title={partner} sub="매출 상세 · 기간별 거래명세서 발행 · 입금/수금 현황"
-        back={{ onClick: onBack, label: "정산" }} right={<Btn size="sm" variant="neutral" onClick={() => toast("엑셀로 내보냈습니다")}>엑셀</Btn>} />
+        back={{ onClick: onBack, label: "뒤로" }} right={<Btn size="sm" variant="neutral" onClick={() => toast("엑셀로 내보냈습니다")}>엑셀</Btn>} />
       <DepositModal open={depositOpen} onClose={() => setDepositOpen(false)} partner={partner} unpaid={Math.max(0, billed - depositTotal)} onAdd={addDeposit} />
       <AddSalesModal open={addingModal} onClose={() => setAddingModal(false)} onAdd={addItem} />
       <div className="mb-4"><MetricRow fit items={[
+        { label: "건당 단가", value: pObj && pObj.unitPrice ? won(pObj.unitPrice) : "—", sub: "정산 목록에서 설정" },
         { label: "청구", value: won(billed) }, { label: "입금", value: won(depositTotal), accent: STATUS.done.c },
         { label: "미수금", value: won(billed - depositTotal), accent: (billed - depositTotal) ? STATUS.waiting.c : FAINT, sub: "청구 − 입금" },
       ]} /></div>
@@ -191,9 +197,9 @@ function PartnerSettleDetail({ partner, onBack, onIssue, onViewStatement }) {
           {/* 기간 필터: 두 컬럼 공통 */}
           <div className="mb-3 flex items-center gap-2 text-[12.5px]" style={{ color: MUTE }}>
             <span className="font-semibold">기간</span>
-            <input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setSel([]); }} className="px-2 py-1.5 text-[12.5px] outline-none" style={{ background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS, color: INK }} />
+            <div style={{ width: 150 }}><DateField value={from} onChange={(d) => { setFrom(d); setSel([]); }} /></div>
             <span>~</span>
-            <input type="date" value={to} onChange={(e) => { setTo(e.target.value); setSel([]); }} className="px-2 py-1.5 text-[12.5px] outline-none" style={{ background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS, color: INK }} />
+            <div style={{ width: 150 }}><DateField value={to} onChange={(d) => { setTo(d); setSel([]); }} /></div>
           </div>
           <div className="grid grid-cols-2 gap-5">
             {/* 왼쪽: 매출 상세 */}
@@ -202,21 +208,28 @@ function PartnerSettleDetail({ partner, onBack, onIssue, onViewStatement }) {
                 <span className="text-[12.5px]" style={{ color: MUTE }}>매출 <b style={{ color: INK }}>{rows.length}</b>건 · <span className="tabular-nums font-semibold" style={{ color: INK }}>{won(rows.reduce((s, r) => s + r.amount, 0))}</span></span>
                 <div className="flex items-center gap-2">
                   <Btn size="sm" variant="neutral" onClick={() => setAddingModal(true)}><Plus className="h-3.5 w-3.5" /> 매출 추가</Btn>
+                  <input value={bulkAmt} onChange={(e) => setBulkAmt(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && selItems.length && num(bulkAmt)) applyBulk(); }}
+                    inputMode="numeric" placeholder={pObj && pObj.unitPrice ? "단가 " + pObj.unitPrice.toLocaleString() : "금액"} title="선택 건 일괄 금액(원)"
+                    className="w-24 px-2 text-left text-[12px] tabular-nums outline-none focus-visible:ring-1"
+                    style={{ height: 30, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} />
+                  <Btn size="sm" variant="neutral" onClick={applyBulk} {...(selItems.length && num(bulkAmt) ? {} : { disabled: true, style: { opacity: 0.5 } })}>일괄수정 ({selItems.length})</Btn>
                   <Btn size="sm" onClick={issue} {...(selItems.length ? {} : { disabled: true, style: { opacity: 0.5 } })}><FileText className="h-3.5 w-3.5" /> 발행 ({selItems.length})</Btn>
                 </div>
               </div>
               <Table
                 cols={[
                   { key: "sel", label: <button onClick={toggleAll}>{ckbox(allSelected)}</button> },
-                  { key: "deceased", label: "항목" }, { key: "date", label: "예약일" },
-                  { key: "amount", label: "금액", align: "right" }, { key: "status", label: "정산" }, { key: "act", label: "", align: "right" },
+                  { key: "deceased", label: "항목", sortable: true }, { key: "date", label: "예약일", sortable: true },
+                  { key: "amount", label: "금액" }, { key: "status", label: "정산", sortable: true }, { key: "act", label: "", align: "right" },
                 ]}
-                rows={rows}
+                rows={salesSort.rows}
+                sort={salesSort.sort}
+                onSortChange={salesSort.onSortChange}
                 renderCell={(r, k) =>
                   k === "sel" ? <button onClick={() => toggle(itemKey(r))}>{ckbox(sel.includes(itemKey(r)))}</button> :
                   k === "deceased" ? <span style={{ fontFamily: SERIF, fontWeight: 700 }}>{r.deceased}{r.manual && <span className="ml-1.5 text-[10px] font-semibold" style={{ color: GOLD_D }}>추가</span>}</span> :
                   k === "status" ? <Tag s={r.status} /> :
-                  k === "amount" ? <input value={r.amount.toLocaleString()} onChange={(e) => setAmount(itemKey(r), e.target.value)} inputMode="numeric" className="w-24 px-2 py-1 text-right text-[12.5px] tabular-nums outline-none focus-visible:ring-1" style={{ background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} /> :
+                  k === "amount" ? <input value={r.amount.toLocaleString()} onChange={(e) => setAmount(itemKey(r), e.target.value)} inputMode="numeric" className="w-24 px-2 py-1 text-left text-[12.5px] tabular-nums outline-none focus-visible:ring-1" style={{ background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} /> :
                   k === "act" ? (r.manual ? <button onClick={() => removeItem(itemKey(r))} className="p-0.5" style={{ color: FAINT }} title="삭제"><Trash2 className="h-3.5 w-3.5" /></button> : null) : r[k]}
               />
               {!rows.length && <p className="mt-3 text-[12px]" style={{ color: FAINT }}>선택한 기간에 정산 건이 없습니다.</p>}
@@ -230,17 +243,19 @@ function PartnerSettleDetail({ partner, onBack, onIssue, onViewStatement }) {
               </div>
               <Table
                 cols={[
-                  { key: "date", label: "입금일" }, { key: "method", label: "수단" }, { key: "memo", label: "메모" },
-                  { key: "amount", label: "금액", align: "right" }, { key: "act", label: "", align: "right" },
+                  { key: "date", label: "입금일", sortable: true }, { key: "method", label: "수단", sortable: true }, { key: "memo", label: "메모", sortable: true },
+                  { key: "amount", label: "금액", sortable: true }, { key: "act", label: "", align: "right" },
                 ]}
-                rows={deposits}
+                rows={depSort.rows}
+                sort={depSort.sort}
+                onSortChange={depSort.onSortChange}
                 renderCell={(r, k) => {
                   const isEditing = editDepId === r.id;
                   if (isEditing) {
-                    if (k === "date") return <input type="date" value={editDepForm.date} onChange={(e) => setEditDepForm((s) => ({ ...s, date: e.target.value }))} className="px-2 py-1 text-[12px] outline-none" style={{ background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK, width: 130 }} />;
+                    if (k === "date") return <div style={{ width: 130 }}><DateField value={editDepForm.date} onChange={(d) => setEditDepForm((s) => ({ ...s, date: d }))} /></div>;
                     if (k === "method") return <select value={editDepForm.method} onChange={(e) => setEditDepForm((s) => ({ ...s, method: e.target.value }))} className="px-2 py-1 text-[12px] outline-none" style={{ background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }}>{DEPOSIT_METHODS.map((m) => <option key={m}>{m}</option>)}</select>;
                     if (k === "memo") return <input value={editDepForm.memo} onChange={(e) => setEditDepForm((s) => ({ ...s, memo: e.target.value }))} className="w-full px-2 py-1 text-[12px] outline-none" style={{ background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} />;
-                    if (k === "amount") return <input value={editDepForm.amount} onChange={(e) => setEditDepForm((s) => ({ ...s, amount: e.target.value }))} inputMode="numeric" className="w-24 px-2 py-1 text-right text-[12px] tabular-nums outline-none" style={{ background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} />;
+                    if (k === "amount") return <input value={editDepForm.amount} onChange={(e) => setEditDepForm((s) => ({ ...s, amount: e.target.value }))} inputMode="numeric" className="w-24 px-2 py-1 text-left text-[12px] tabular-nums outline-none" style={{ background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} />;
                     if (k === "act") return <div className="flex items-center gap-1"><button onClick={saveDep} className="px-2 py-0.5 text-[11px] font-semibold" style={{ color: GOLD_D, background: GOLD_SOFT, borderRadius: RADIUS }}>저장</button><button onClick={cancelEditDep} className="px-2 py-0.5 text-[11px] font-semibold" style={{ color: MUTE, background: "#f0f0f0", borderRadius: RADIUS }}>취소</button></div>;
                   }
                   return k === "date" ? <span className="tabular-nums">{fmtYmd(r.date)}</span> :
@@ -257,11 +272,13 @@ function PartnerSettleDetail({ partner, onBack, onIssue, onViewStatement }) {
       ) : (
         <Table
           cols={[
-            { key: "id", label: "명세서 번호" }, { key: "period", label: "거래기간" }, { key: "issuedAt", label: "발행일" },
-            { key: "count", label: "건수", align: "right" }, { key: "amount", label: "합계", align: "right" },
-            { key: "status", label: "상태" }, { key: "act", label: "", align: "right" },
+            { key: "id", label: "명세서 번호", sortable: true }, { key: "period", label: "거래기간", sortable: true }, { key: "issuedAt", label: "발행일", sortable: true },
+            { key: "count", label: "건수", align: "right", sortable: true }, { key: "amount", label: "합계", align: "right", sortable: true },
+            { key: "status", label: "상태", sortable: true }, { key: "act", label: "", align: "right" },
           ]}
-          rows={statements}
+          rows={stmtSort.rows}
+          sort={stmtSort.sort}
+          onSortChange={stmtSort.onSortChange}
           renderCell={(r, k) =>
             k === "count" ? <span className="tabular-nums">{r.count}건</span> :
             k === "amount" ? <span className="tabular-nums">{won(r.amount)}</span> :
@@ -274,23 +291,55 @@ function PartnerSettleDetail({ partner, onBack, onIssue, onViewStatement }) {
   );
 }
 
+// 건당 단가 셀 — 입력 중엔 로컬, blur/Enter 시 컨펌 후 저장 (변경 없으면 그대로)
+function UnitPriceCell({ row }) {
+  const orig = row.unitPrice || 0;
+  const [val, setVal] = useState(orig ? orig.toLocaleString() : "");
+  useEffect(() => { setVal(orig ? orig.toLocaleString() : ""); }, [orig]);
+  const numPrice = (v) => Number(String(v).replace(/[^\d]/g, "")) || 0;
+  const commit = async () => {
+    const next = numPrice(val);
+    if (next === orig) { setVal(orig ? orig.toLocaleString() : ""); return; }
+    const ok = await confirm({
+      title: "건당 단가 변경",
+      message: `${row.partner}의 건당 단가를 ${orig ? won(orig) : "—"} → ${won(next)}(으)로 변경합니다.\n기존 매출·발행 내역은 그대로 유지되며, 앞으로 등록되는 건부터 적용됩니다.`,
+      confirmLabel: "변경",
+    });
+    if (!ok) { setVal(orig ? orig.toLocaleString() : ""); return; }
+    actions.setPartnerPrice(row.id, next);
+  };
+  return (
+    <input value={val} onChange={(e) => setVal(e.target.value)} onBlur={commit}
+      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { setVal(orig ? orig.toLocaleString() : ""); e.currentTarget.blur(); } }}
+      inputMode="numeric" placeholder="0" title="건당 단가(원) — 입력 후 Enter/포커스 해제 시 확인"
+      className="w-24 px-2 py-1 text-right text-[12.5px] tabular-nums outline-none focus-visible:ring-1"
+      style={{ background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} />
+  );
+}
+
 // ── 정산 (목록 → 파트너사 상세 → 거래명세서) ───────────────────
 export function Settlement() {
   const { partners } = useStore(); // 목 DB — 신규 등록 파트너도 정산 목록에 노출
   const [detail, setDetail] = useState(null);   // 파트너사명
   const [view, setView] = useState(null);       // 발행/조회 중인 거래명세서 { partner, items, period, issuedAt }
   // 전 파트너사 기준으로 정산 데이터 병합(정산 이력 없으면 0원·대기)
-  const settleRows = partners.map((p) =>
-    D.SETTLEMENT_PARTNERS.find((x) => x.partner === p.name)
-    || { partner: p.name, region: p.region, count: 0, billed: 0, paid: 0, unpaid: 0, status: "waiting" });
+  // 건당 단가는 파트너사 DB(p.unitPrice)에서 끌어와 여기서 직접 관리
+  const settleRows = partners.map((p) => ({
+    ...(D.SETTLEMENT_PARTNERS.find((x) => x.partner === p.name)
+      || { partner: p.name, region: p.region, count: 0, billed: 0, paid: 0, unpaid: 0, status: "waiting" }),
+    id: p.id,
+    unitPrice: p.unitPrice || 0,
+  }));
   const total = settleRows.reduce((s, p) => s + p.billed, 0);
   const paid = settleRows.reduce((s, p) => s + p.paid, 0);
   const unpaid = settleRows.reduce((s, p) => s + p.unpaid, 0);
+  // 단가는 인라인 편집이라 정렬 제외 · 나머지 컬럼 정렬
+  const { rows: settleSorted, sort: settleSortState, onSortChange: settleOnSort } = useTableSort(settleRows);
 
   if (view) {
     return (
       <div>
-        <PageHeader title="거래명세서" sub={view.partner + " · " + view.period} back={{ onClick: () => setView(null), label: detail ? "상세" : "정산" }} />
+        <PageHeader title="거래명세서" sub={view.partner + " · " + view.period} back={{ onClick: () => setView(null), label: "뒤로" }} />
         <TradeStatement partner={view.partner} items={view.items} period={view.period} issuedAt={view.issuedAt} />
       </div>
     );
@@ -308,9 +357,10 @@ export function Settlement() {
   }
 
   const pCols = [
-    { key: "partner", label: "파트너사" }, { key: "count", label: "건", align: "right" },
-    { key: "billed", label: "청구", align: "right" }, { key: "paid", label: "입금", align: "right" },
-    { key: "unpaid", label: "미수금", align: "right" }, { key: "status", label: "상태" }, { key: "act", label: "", align: "right" },
+    { key: "partner", label: "파트너사", sortable: true }, { key: "unitPrice", label: "건당 단가", align: "right" },
+    { key: "count", label: "건", align: "right", sortable: true },
+    { key: "billed", label: "청구", align: "right", sortable: true }, { key: "paid", label: "입금", align: "right", sortable: true },
+    { key: "unpaid", label: "미수금", align: "right", sortable: true }, { key: "status", label: "상태", sortable: true }, { key: "act", label: "", align: "right" },
   ];
   return (
     <div>
@@ -322,12 +372,14 @@ export function Settlement() {
           { label: "미수금", value: won(unpaid), accent: STATUS.waiting.c, sub: "확인 필요" },
         ]} />
       </div>
-      <Table cols={pCols} rows={settleRows} renderCell={(r, k) =>
+      <Table cols={pCols} rows={settleSorted} sort={settleSortState} onSortChange={settleOnSort} renderCell={(r, k) =>
         k === "status" ? <Tag s={r.status} /> :
         k === "act" ? <button onClick={() => setDetail(r.partner)} className="text-[12px] font-semibold" style={{ color: GOLD }}>상세 →</button> :
+        k === "unitPrice" ? <UnitPriceCell row={r} /> :
         ["billed", "paid", "unpaid"].includes(k) ? <span className="tabular-nums">{r[k] ? won(r[k]) : "—"}</span> :
         k === "count" ? <span className="tabular-nums">{r.count}건</span> : r[k]
       } />
+      <p className="mt-3 text-[11px]" style={{ color: FAINT }}>※ 건당 단가는 이 표에서 직접 입력 후 Enter(또는 포커스 해제) 시 확인을 거쳐 저장됩니다. (파트너사 1건 제작 기준 · VAT 포함)</p>
     </div>
   );
 }

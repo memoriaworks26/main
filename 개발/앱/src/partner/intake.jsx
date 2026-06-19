@@ -6,13 +6,12 @@ import {
 import { SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS } from "../theme.js";
 import { Btn, Card, PageHeader, DateField, CopyBtn } from "../ui.jsx";
 import { useStore } from "../store.js";
+import { confirm } from "../confirm.jsx";
 import * as D from "../data.js";
-import { usePartner, pad2, parseSlot, overlaps, TIMELINE_START, TIMELINE_END } from "./shared.jsx";
-
-const fmtMin = (m) => pad2(Math.floor(m / 60)) + ":" + pad2(m % 60);
+import { usePartner, pad2, minToStr, parseSlot, overlaps, TIMELINE_START, TIMELINE_END } from "./shared.jsx";
 
 // 드래그 타임라인 — 막대를 클릭·드래그해 시간대 선택. 기존 예약(blocked)은 넘어가지 못하도록 제한.
-function DragTimeline({ startMin, endMin, blocked, onChange }) {
+export function DragTimeline({ startMin, endMin, blocked, onChange }) {
   const ref = React.useRef(null);
   const T0 = TIMELINE_START, T1 = TIMELINE_END, SPAN = T1 - T0, STEP = 10;
   const pct = (m) => ((m - T0) / SPAN) * 100;
@@ -53,7 +52,7 @@ function DragTimeline({ startMin, endMin, blocked, onChange }) {
   };
 
   const ticks = [];
-  for (let h = T0 / 60; h <= T1 / 60; h += 2) ticks.push(h);
+  for (let h = T0 / 60; h <= T1 / 60; h += 3) ticks.push(h);
 
   return (
     <div>
@@ -86,7 +85,7 @@ function DragTimeline({ startMin, endMin, blocked, onChange }) {
           <div className="absolute top-1 bottom-1 flex items-center justify-center"
             style={{ left: pct(startMin) + "%", width: (pct(endMin) - pct(startMin)) + "%", background: GOLD, borderRadius: 3 }}>
             <span className="px-1 text-[10px] font-bold tabular-nums text-white whitespace-nowrap">
-              {fmtMin(startMin)}~{fmtMin(endMin)}
+              {minToStr(startMin)}~{minToStr(endMin)}
             </span>
             <div onPointerDown={beginDrag("left")}
               className="absolute -left-1 top-0 bottom-0 w-2.5 cursor-ew-resize rounded-l"
@@ -151,7 +150,7 @@ function NumCol({ value, suffix, onUp, onDown, onSet, max, label }) {
     </div>
   );
 }
-function TimeStepper({ h, m, onH, onM }) {
+export function TimeStepper({ h, m, onH, onM }) {
   return (
     <div className="inline-flex items-center gap-2 px-3 py-2" style={{ background: SURFACE, border: "1px solid " + LINE2, borderRadius: RADIUS }}>
       <NumCol value={h} suffix="시" label="시" max={23} onSet={onH} onUp={() => onH((h + 1) % 24)} onDown={() => onH((h + 23) % 24)} />
@@ -161,15 +160,15 @@ function TimeStepper({ h, m, onH, onM }) {
   );
 }
 
-export function Intake() {
+export function Intake({ prefill } = {}) {
   const PARTNER = usePartner();
   const { reservations } = useStore();
-  // 기본값은 기존 예약이 있는 날짜로 — 시간대 선택에서 블락(빗금) 영역이 바로 보이도록.
-  const [date, setDate] = useState("2026-06-15");
   const rooms = D.ROOMS.filter((r) => r.type === "case");
-  const [room, setRoom] = useState(rooms[0]?.name || "");
-  const [sH, setSH] = useState(9), [sM, setSM] = useState(0);
-  const [eH, setEH] = useState(12), [eM, setEM] = useState(0);
+  // 호실 카드에서 들어온 경우 해당 호실·현재 시각을 시작값으로 프리필. 아니면 블락(빗금)이 보이는 기존 예약일을 기본으로.
+  const [date, setDate] = useState(prefill?.date || "2026-06-15");
+  const [room, setRoom] = useState(prefill?.room || rooms[0]?.name || "");
+  const [sH, setSH] = useState(prefill?.sH ?? 9), [sM, setSM] = useState(prefill?.sM ?? 0);
+  const [eH, setEH] = useState(prefill?.eH ?? 12), [eM, setEM] = useState(prefill?.eM ?? 0);
   const [result, setResult] = useState(null);
 
   // 현재 입력 중인 슬롯
@@ -200,8 +199,9 @@ export function Intake() {
     </label>
   );
   const summary = date + " · " + room + " · " + pad2(sH) + ":" + pad2(sM) + " ~ " + pad2(eH) + ":" + pad2(eM);
-  const doConfirm = () => {
+  const doConfirm = async () => {
     if (!canConfirm) return;
+    if (!(await confirm({ title: "예약 접수 확정", message: summary + "\n예약을 확정하고 보호자 영상제작 URL을 생성합니다." }))) return;
     setResult({ url: "memoria.works/f/" + Math.random().toString(36).slice(2, 8) });
   };
 

@@ -3,6 +3,7 @@ import { Pencil, Check, X, Play, ChevronRight, Plus } from "lucide-react";
 import { SURFACE, LINE, LINE2, INK, MUTE, FAINT, GOLD, SERIF } from "./theme.js";
 import { Tag, Deceased } from "./ui.jsx";
 import { toast } from "./toast.jsx";
+import { confirm } from "./confirm.jsx";
 
 // 실시간 사이니지 화면 미리보기 — 호실 화면에 지금 표출 중인 내용을 16:9 슬레이트로.
 function ScreenPreview({ room, device }) {
@@ -36,13 +37,14 @@ function ScreenPreview({ room, device }) {
 
 // 호실 카드 — 호실 = 명칭 + 위치, 수정 버튼으로 둘 다 편집 (저장은 onSave로 스토어 전파)
 // 파트너 대시보드용: 예약정보(반려동물·보호자) + 실시간 사이니지 표출 상태. (영상제작 진행상태·안치/화장은 HQ 영역이라 미표시)
-export function RoomCard({ room, device, reserv, onOpen, onOpenReserv, readOnly, onSave, onCheckout, checkedOut, onNew }) {
+export function RoomCard({ room, device, reserv, onOpen, onOpenReserv, readOnly, onSave, onCheckout, onNew }) {
   const isCase = room.type === "case";
   // 표시값은 room(스토어)에서, 편집은 draft로만. 저장 시 onSave(id, {name, floor})
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({ name: room.name, loc: room.floor || "" });
   const open = () => { setDraft({ name: room.name, loc: room.floor || "" }); setEditing(true); };
-  const save = () => {
+  const save = async () => {
+    if (!(await confirm({ title: "호실 저장", message: "변경한 호실 명칭·위치를 저장합니다." }))) return;
     if (onSave) onSave(room.id, { name: draft.name.trim() || room.name, floor: draft.loc.trim() });
     setEditing(false);
   };
@@ -80,7 +82,7 @@ export function RoomCard({ room, device, reserv, onOpen, onOpenReserv, readOnly,
       <div className="flex flex-1 flex-col px-3 py-2.5">
         {isCase ? (
           <>
-            {room.deceased && !checkedOut ? (
+            {room.deceased ? (
               <>
                 <Deceased name={room.deceased} age={room.age} />
                 <div className="mt-1 text-[11px]" style={{ color: MUTE }}>보호자 {room.chief}</div>
@@ -90,13 +92,13 @@ export function RoomCard({ room, device, reserv, onOpen, onOpenReserv, readOnly,
                       <button onClick={() => onOpenReserv(reserv)} className="flex items-center gap-0.5 text-[12px] font-semibold outline-none hover:underline focus-visible:ring-1" style={{ color: GOLD }}>예약 상세 <ChevronRight className="h-3.5 w-3.5" /></button>
                     )}
                     {onCheckout && (
-                      <button onClick={() => onCheckout(room)} className="ml-auto px-3 py-1 text-[12.5px] font-semibold outline-none transition hover:bg-black/[.03] focus-visible:ring-1" style={{ borderRadius: 4, border: "1px solid " + LINE2, color: MUTE }}>퇴실</button>
+                      <button onClick={() => onCheckout(room, reserv)} className="ml-auto px-3 py-1 text-[12.5px] font-semibold outline-none transition hover:bg-black/[.03] focus-visible:ring-1" style={{ borderRadius: 4, border: "1px solid " + LINE2, color: MUTE }}>퇴실</button>
                     )}
                   </div>
                 )}
               </>
             ) : (
-              /* 빈 호실(퇴실 포함) — 신규 예약 버튼 */
+              /* 빈 호실 — 신규 예약 버튼 */
               <div className="flex flex-1 items-center justify-center">
                 {onNew ? (
                   <button onClick={onNew} className="flex items-center gap-1.5 px-3 py-1.5 text-[12.5px] font-semibold outline-none transition hover:opacity-80 focus-visible:ring-1"

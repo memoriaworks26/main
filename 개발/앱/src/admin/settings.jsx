@@ -1,18 +1,123 @@
 // [환경설정] 내 설정·비밀번호 재설정·계정/권한·시스템 설정.
 import React, { useState } from "react";
 import {
-  Check, KeyRound, Lock, Plus, RefreshCw, RotateCcw, Settings, ShieldCheck, Trash2, User, UserPlus, X,
+  Check, Headset, KeyRound, Lock, Plus, RefreshCw, RotateCcw, Settings, ShieldCheck, Trash2, User, UserPlus, X,
 } from "lucide-react";
 import { SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS } from "../theme.js";
-import { Tag, Btn, Card, Table, PageHeader, PwField } from "../ui.jsx";
+import { Tag, Btn, Card, Table, PageHeader, PwField, useTableSort } from "../ui.jsx";
 import { toast } from "../toast.jsx";
+import { confirm as confirmDialog } from "../confirm.jsx";
 import { useStore, actions } from "../store.js";
 import * as D from "../data.js";
 
-export function SettingsView() {
+// ── 고객센터 (유저 문의처) — 마스터가 등록 → 유저링크 하단 문의 안내에 노출 ──
+function CustomerCenterCard({ account }) {
+  const { company } = useStore();
+  const isMaster = account?.role === "master";
+  const [phone, setPhone] = useState(company.csPhone || "");
+  const [hours, setHours] = useState(company.csHours || "");
+
+  const dirty = phone.trim() !== (company.csPhone || "") || hours.trim() !== (company.csHours || "");
+  const save = () => {
+    actions.updateCompany({ csPhone: phone.trim(), csHours: hours.trim() });
+    toast("고객센터 정보가 저장되었습니다 — 유저링크 문의처에 반영됩니다");
+  };
+
+  return (
+    <Card title="고객센터 (유저 문의처)">
+      <div className="flex items-start gap-2.5">
+        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ background: GOLD_SOFT }}>
+          <Headset className="h-4 w-4" style={{ color: GOLD_D }} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[12px]" style={{ color: MUTE }}>
+            보호자가 보는 유저링크 하단에 표시되는 문의 연락처입니다. (내부 운영 알림용 번호와 별개)
+          </div>
+
+          {isMaster ? (
+            <div className="mt-3 max-w-md space-y-3">
+              <label className="block">
+                <div className="mb-1 text-[12px] font-semibold" style={{ color: MUTE }}>전화번호</div>
+                <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="예: 1668-0000"
+                  className="w-full px-3 text-[13px] tabular-nums outline-none" style={{ height: 36, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} />
+              </label>
+              <label className="block">
+                <div className="mb-1 text-[12px] font-semibold" style={{ color: MUTE }}>운영시간 <span style={{ color: FAINT }}>(선택)</span></div>
+                <input value={hours} onChange={(e) => setHours(e.target.value)} placeholder="예: 평일 09:00–18:00"
+                  className="w-full px-3 text-[13px] outline-none" style={{ height: 36, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} />
+              </label>
+              <div className="flex items-center gap-2">
+                <Btn size="sm" onClick={save} disabled={!dirty || !phone.trim()}><Check className="h-4 w-4" /> 저장</Btn>
+                {dirty && <span className="text-[11px]" style={{ color: FAINT }}>저장하지 않은 변경사항</span>}
+              </div>
+            </div>
+          ) : (
+            <div className="mt-3 space-y-2 text-[13px]" style={{ color: INK }}>
+              <div className="flex gap-6"><span className="w-16 shrink-0" style={{ color: MUTE }}>전화번호</span><span className="font-semibold tabular-nums">{company.csPhone || "—"}</span></div>
+              <div className="flex gap-6"><span className="w-16 shrink-0" style={{ color: MUTE }}>운영시간</span><span>{company.csHours || "—"}</span></div>
+              <div className="mt-1 flex items-center gap-1.5 text-[11px]" style={{ color: FAINT }}><Lock className="h-3 w-3" /> 수정은 마스터 관리자 전용</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ── 개인정보처리방침 전문 — 마스터가 편집 → 유저링크 동의란·푸터 '전문 보기'에 반영 ──
+function PrivacyPolicyCard({ account }) {
+  const { company } = useStore();
+  const isMaster = account?.role === "master";
+  const [text, setText] = useState(company.privacyPolicy || "");
+
+  const dirty = text !== (company.privacyPolicy || "");
+  const save = () => {
+    actions.updateCompany({ privacyPolicy: text });
+    toast("개인정보처리방침이 저장되었습니다 — 유저링크 전문 보기에 반영됩니다");
+  };
+  const reset = () => setText(company.privacyPolicy || "");
+
+  return (
+    <Card title="개인정보처리방침 (유저링크 전문)">
+      <div className="flex items-start gap-2.5">
+        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ background: GOLD_SOFT }}>
+          <ShieldCheck className="h-4 w-4" style={{ color: GOLD_D }} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[12px]" style={{ color: MUTE }}>
+            보호자가 보는 유저링크 동의란·하단의 <b style={{ color: INK }}>전문 보기</b>에 노출되는 개인정보처리방침 전문입니다. (개인정보 보호책임자 성명은 이 전문에 표기)
+          </div>
+
+          {isMaster ? (
+            <div className="mt-3 space-y-2">
+              <textarea value={text} onChange={(e) => setText(e.target.value)} rows={14}
+                className="w-full resize-y px-3 py-2.5 text-[12.5px] leading-relaxed outline-none focus-visible:ring-1"
+                style={{ background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} />
+              <div className="flex items-center gap-2">
+                <Btn size="sm" onClick={save} disabled={!dirty}><Check className="h-4 w-4" /> 저장</Btn>
+                {dirty && <Btn size="sm" variant="neutral" onClick={reset}><RotateCcw className="h-3.5 w-3.5" /> 되돌리기</Btn>}
+                {dirty && <span className="text-[11px]" style={{ color: FAINT }}>저장하지 않은 변경사항</span>}
+              </div>
+            </div>
+          ) : (
+            <div className="mt-3 max-h-72 overflow-y-auto px-3 py-2.5 text-[12px] leading-relaxed" style={{ background: "#faf8f3", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE, whiteSpace: "pre-line" }}>
+              {company.privacyPolicy || "—"}
+              <div className="mt-2 flex items-center gap-1.5 text-[11px]" style={{ color: FAINT }}><Lock className="h-3 w-3" /> 수정은 마스터 관리자 전용</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+export function SettingsView({ account }) {
+  const [pwOpen, setPwOpen] = useState(false);
   return (
     <div>
       <PageHeader title="환경설정" sub="관리자 전용 — 회사 정보" />
+      <div className="mb-4"><CustomerCenterCard account={account} /></div>
+      <div className="mb-4"><PrivacyPolicyCard account={account} /></div>
       <div className="grid grid-cols-2 gap-4">
         <Card title="공급자 정보 (거래명세서 자동 삽입)">
           <div className="space-y-2 text-[13px]" style={{ color: INK }}>
@@ -31,6 +136,21 @@ export function SettingsView() {
           </div>
         </Card>
       </div>
+
+      <div className="mt-4 max-w-md">
+        <Card title="보안">
+          <div className="flex items-start gap-2.5">
+            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ background: GOLD_SOFT }}><KeyRound className="h-4 w-4" style={{ color: GOLD_D }} /></span>
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] font-semibold" style={{ color: INK }}>비밀번호</div>
+              <div className="text-[12px]" style={{ color: MUTE }}>주기적으로 변경하면 계정을 더 안전하게 보호할 수 있어요.</div>
+              <div className="mt-3"><Btn size="sm" variant="ghost" onClick={() => setPwOpen(true)}><RotateCcw className="h-3.5 w-3.5" /> 비밀번호 변경</Btn></div>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {pwOpen && <PasswordResetModal account={account} onClose={() => setPwOpen(false)} />}
     </div>
   );
 }
@@ -134,6 +254,7 @@ export function AccountsManage({ account }) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [loginId, setLoginId] = useState("");
+  const [phone, setPhone] = useState("");
   const [pw, setPw] = useState("");
   const [editId, setEditId] = useState(null); // 권한 편집 중인 작업자
 
@@ -152,22 +273,24 @@ export function AccountsManage({ account }) {
 
   const idTaken = accounts.some((a) => a.loginId === loginId.trim());
   const canAdd = name.trim() && loginId.trim() && pw.trim() && !idTaken;
-  const addWorker = () => {
+  const addWorker = async () => {
     if (!canAdd) return;
-    actions.addAccount({ id: "u-" + Date.now(), name: name.trim(), role: "worker", loginId: loginId.trim(), email: "—", status: "invited", lastLogin: "—", perms: [...D.DEFAULT_WORKER_PERMS] });
-    setName(""); setLoginId(""); setPw(""); setAdding(false);
+    if (!(await confirmDialog({ title: "작업자 계정 발급", message: `${name.trim()}(${loginId.trim()}) 작업자 계정을 발급합니다.` }))) return;
+    actions.addAccount({ id: "u-" + Date.now(), name: name.trim(), role: "worker", loginId: loginId.trim(), email: "—", phone: phone.trim() || "—", status: "invited", lastLogin: "—", perms: [...D.DEFAULT_WORKER_PERMS] });
+    setName(""); setLoginId(""); setPhone(""); setPw(""); setAdding(false);
   };
-  const removeAcct = (id) => { actions.removeAccount(id); if (editId === id) setEditId(null); };
+  const removeAcct = async (r) => { if (!(await confirmDialog({ title: "계정 삭제", message: `${r.name}(${r.loginId}) 계정을 삭제합니다.\n삭제 후에는 복구할 수 없습니다.`, danger: true }))) return; actions.removeAccount(r.id); if (editId === r.id) setEditId(null); };
   // 비밀번호 재설정 (목업) — 초기 비밀번호로 초기화 → 첫 로그인 시 변경
-  const resetPw = (r) => window.alert(`${r.name}(${r.loginId}) 계정의 비밀번호가 초기 비밀번호로 초기화되었습니다.\n첫 로그인 시 비밀번호 변경이 필요합니다. (목업)`);
+  const resetPw = async (r) => { if (!(await confirmDialog({ title: "비밀번호 초기화", message: `${r.name}(${r.loginId}) 계정의 비밀번호를 초기 비밀번호로 초기화합니다.\n첫 로그인 시 비밀번호 변경이 필요합니다.`, confirmLabel: "초기화" }))) return; toast("초기 비밀번호로 초기화되었습니다"); };
   const togglePerm = (id, key) => actions.toggleAccountPerm(id, key);
   const setAllPerms = (id, on) => actions.setAccountPerms(id, on ? [...D.GRANTABLE_PERMS] : []);
 
   const editing = editId ? accounts.find((a) => a.id === editId) : null;
+  const { rows: acctRows, sort, onSortChange } = useTableSort(accounts);
 
   const cols = [
-    { key: "name", label: "이름" }, { key: "loginId", label: "아이디" }, { key: "role", label: "역할" }, { key: "perms", label: "권한" },
-    { key: "status", label: "상태" }, { key: "lastLogin", label: "최근 접속" }, { key: "act", label: "", align: "right" },
+    { key: "name", label: "이름", sortable: true }, { key: "loginId", label: "아이디", sortable: true }, { key: "phone", label: "전화번호", sortable: true }, { key: "role", label: "역할", sortable: true }, { key: "perms", label: "권한" },
+    { key: "status", label: "상태", sortable: true }, { key: "lastLogin", label: "최근 접속", sortable: true }, { key: "act", label: "", align: "right" },
   ];
   return (
     <div>
@@ -187,6 +310,8 @@ export function AccountsManage({ account }) {
               <input value={name} onChange={(e) => setName(e.target.value)} placeholder="작업자 이름" className="w-full px-3 text-[13px] outline-none" style={{ height: 36, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} /></label>
             <label className="flex-1"><div className="mb-1 text-[12px] font-semibold" style={{ color: MUTE }}>아이디</div>
               <input value={loginId} onChange={(e) => setLoginId(e.target.value)} placeholder="로그인 아이디" className="w-full px-3 text-[13px] outline-none" style={{ height: 36, background: "#fff", border: "1px solid " + (idTaken ? "#8a4b1c" : LINE2), borderRadius: RADIUS, color: INK }} /></label>
+            <label className="flex-1"><div className="mb-1 text-[12px] font-semibold" style={{ color: MUTE }}>전화번호</div>
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="010-0000-0000" inputMode="tel" className="w-full px-3 text-[13px] tabular-nums outline-none" style={{ height: 36, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} /></label>
             <label className="flex-1"><div className="mb-1 text-[12px] font-semibold" style={{ color: MUTE }}>초기 비밀번호</div>
               <div className="flex items-center gap-1.5">
                 <input value={pw} onChange={(e) => setPw(e.target.value)} placeholder="초기 비밀번호" className="w-full px-3 text-[13px] outline-none" style={{ height: 36, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} />
@@ -203,7 +328,7 @@ export function AccountsManage({ account }) {
         </div>
       )}
 
-      <Table cols={cols} rows={accounts} renderCell={(r, k) =>
+      <Table cols={cols} rows={acctRows} sort={sort} onSortChange={onSortChange} renderCell={(r, k) =>
         k === "name" ? (
           <span className="flex items-center gap-2">
             <span className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ background: r.role === "master" ? GOLD : "#3f5e87" }}>{r.name.slice(0, 1)}</span>
@@ -212,6 +337,10 @@ export function AccountsManage({ account }) {
           </span>
         ) :
         k === "loginId" ? <span className="inline-flex items-center gap-1.5 text-[12.5px] tabular-nums font-semibold" style={{ color: MUTE }}><KeyRound className="h-3.5 w-3.5" style={{ color: FAINT }} /> {r.loginId}</span> :
+        k === "phone" ? (isMaster
+          ? <input value={r.phone && r.phone !== "—" ? r.phone : ""} onChange={(e) => actions.updateAccount(r.id, { phone: e.target.value })} placeholder="010-0000-0000" inputMode="tel"
+              className="w-28 px-2 text-[12.5px] tabular-nums outline-none focus-visible:ring-1" style={{ height: 28, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} />
+          : <span className="tabular-nums" style={{ color: MUTE }}>{r.phone || "—"}</span>) :
         k === "role" ? roleBadge(r.role) :
         k === "perms" ? (r.role === "master"
           ? <span className="text-[12px] font-semibold" style={{ color: GOLD_D }}>전체 (풀 액세스)</span>
@@ -220,8 +349,8 @@ export function AccountsManage({ account }) {
         k === "act" ? (isMaster && r.role !== "master"
           ? <span className="inline-flex items-center gap-3">
               <button onClick={() => setEditId(editId === r.id ? null : r.id)} className="inline-flex items-center gap-1 text-[12px] font-semibold" style={{ color: editId === r.id ? GOLD_D : GOLD }}><Settings className="h-3.5 w-3.5" /> 권한 편집</button>
-              <button onClick={() => resetPw(r)} className="inline-flex items-center gap-1 text-[12px] font-semibold" style={{ color: MUTE }}><RotateCcw className="h-3.5 w-3.5" /> 초기 비번으로 초기화</button>
-              <button onClick={() => removeAcct(r.id)} className="inline-flex items-center gap-1 text-[12px] font-semibold" style={{ color: MUTE }}><Trash2 className="h-3.5 w-3.5" /> 삭제</button>
+              <button onClick={() => resetPw(r)} className="inline-flex items-center gap-1 text-[12px] font-semibold" style={{ color: MUTE }}><RotateCcw className="h-3.5 w-3.5" /> 비번 초기화</button>
+              <button onClick={() => removeAcct(r)} className="inline-flex items-center gap-1 text-[12px] font-semibold" style={{ color: MUTE }}><Trash2 className="h-3.5 w-3.5" /> 삭제</button>
             </span>
           : <span className="text-[11px]" style={{ color: FAINT }}>{r.role === "master" ? "권한 고정" : ""}</span>) : r[k]
       } />

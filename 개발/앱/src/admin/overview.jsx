@@ -3,10 +3,12 @@ import React from "react";
 import {
   Plus,
 } from "lucide-react";
-import { SERIF, SURFACE, LINE, LINE2, GOLD, INK, MUTE, FAINT } from "../theme.js";
-import { Btn, Card, MetricRow, PageHeader } from "../ui.jsx";
+import { SURFACE, LINE2, GOLD, GOLD_D, INK, FAINT } from "../theme.js";
+import { Btn, Card, MetricRow, PageHeader, Table } from "../ui.jsx";
 import { useStore } from "../store.js";
 import * as D from "../data.js";
+import { CUSTOMER_COLS, toCustomerRow, renderCustomerCell } from "./customers.jsx";
+import { man } from "../lib/format.js";
 
 export function Dashboard({ go }) {
   const { reservations, partners } = useStore();
@@ -15,22 +17,10 @@ export function Dashboard({ go }) {
   const resv = partners.reduce((s, p) => s + p.reservThisMonth, 0);
   const billed = D.SETTLEMENT_PARTNERS.reduce((s, p) => s + p.billed, 0);
   const unpaid = D.SETTLEMENT_PARTNERS.reduce((s, p) => s + p.unpaid, 0);
-  const man = (v) => Math.round(v / 10000).toLocaleString() + "만";
-  const recent = reservations.slice(0, 5);
-
-  const pill = (txt, c, bg) => <span className="inline-flex px-2 py-[3px] text-[11px] font-semibold" style={{ borderRadius: 3, color: c, background: bg }}>{txt}</span>;
-  const videoPill = (st) =>
-    st === "published" ? pill("발행 완료", "#3a7468", "#e9f1ee") :
-    st === "review" ? pill("컨펌 대기", "#9a6a1c", "#f4ead7") :
-    pill("작업중", "#3f5e87", "#e9eef5");
-  const statePill = (st) =>
-    st === "published" ? pill("종료", "#5a6470", "#eceef0") :
-    st === "review" ? pill("접수", "#8a857b", "#eeece6") :
-    pill("진행중", "#3f5e87", "#e9eef5");
-
-  const cols = ["반려동물", "보호자", "파트너사", "예약일", "영상", "상태"];
-  const th = { padding: "10px 16px", fontSize: 11, color: MUTE, borderBottom: "1px solid " + LINE, textAlign: "left", textTransform: "uppercase", letterSpacing: ".03em", fontWeight: 700 };
-  const tdc = { padding: "10px 16px", fontSize: 13, color: INK };
+  // 고객관리와 같은 리스트 · 최신순(예약일 내림차순) 상위 5건
+  const recent = reservations.map(toCustomerRow)
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+    .slice(0, 5);
 
   return (
     <div>
@@ -57,23 +47,11 @@ export function Dashboard({ go }) {
         </Card>
       </div>
 
-      <Card title="최근 예약" pad={false}>
-        <table className="w-full" style={{ borderCollapse: "collapse" }}>
-          <thead><tr style={{ background: "#f6f3ec" }}>{cols.map((c) => <th key={c} style={th}>{c}</th>)}</tr></thead>
-          <tbody>
-            {recent.map((r, ri) => (
-              <tr key={r.id} style={{ borderBottom: ri < recent.length - 1 ? "1px solid " + LINE : "none" }}>
-                <td style={{ ...tdc, fontFamily: SERIF, fontWeight: 700 }}>{r.deceased}</td>
-                <td style={tdc}>{r.chief}</td>
-                <td style={tdc}>{r.partner}</td>
-                <td style={{ ...tdc }} className="tabular-nums">{r.date || r.requestedAt}</td>
-                <td style={tdc}>{videoPill(r.status)}</td>
-                <td style={tdc}>{statePill(r.status)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-[14px] font-bold" style={{ color: INK }}>최근 예약</span>
+        <button onClick={() => go && go("customers")} className="text-[12px] font-semibold outline-none hover:underline focus-visible:ring-1" style={{ color: GOLD_D }}>고객관리 전체보기 →</button>
+      </div>
+      <Table cols={CUSTOMER_COLS} rows={recent} onRowClick={(r) => go && go("customers", r.id)} renderCell={renderCustomerCell} />
     </div>
   );
 }

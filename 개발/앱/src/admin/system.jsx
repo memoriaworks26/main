@@ -1,11 +1,12 @@
 // [시스템·총관리자] 사이니지(Signage) + 스토리지/기간 다운로드(Storage).
 import React, { useState } from "react";
 import {
-  AlertTriangle, CheckSquare, Clapperboard, Download, HardDrive, RefreshCw, Square, Trash2,
+  AlertTriangle, CheckSquare, Clapperboard, ChevronDown, ChevronUp, ChevronsUpDown, Download, HardDrive, RefreshCw, Square, Trash2,
 } from "lucide-react";
 import { SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, STATUS, RADIUS } from "../theme.js";
-import { Tag, Btn, Card, Table, PageHeader, DateField } from "../ui.jsx";
+import { Tag, Btn, Card, Table, PageHeader, DateField, useTableSort } from "../ui.jsx";
 import { toast } from "../toast.jsx";
+import { confirm } from "../confirm.jsx";
 import { useStore, actions } from "../store.js";
 import * as D from "../data.js";
 import { SearchSelect } from "./shared.jsx";
@@ -14,12 +15,13 @@ export function Signage() {
   const { devices } = useStore();
   const partners = [...new Set(devices.map((d) => d.partner))];
   const [pf, setPf] = useState("all");
-  const rows = devices.filter((d) => pf === "all" || d.partner === pf);
-  const online = rows.filter((d) => d.status !== "offline").length;
+  const filtered = devices.filter((d) => pf === "all" || d.partner === pf);
+  const { rows, sort, onSortChange } = useTableSort(filtered);
+  const online = filtered.filter((d) => d.status !== "offline").length;
   const cols = [
-    { key: "partner", label: "파트너사" }, { key: "id", label: "디바이스" }, { key: "room", label: "호실" },
-    { key: "status", label: "상태" }, { key: "playing", label: "표출 중" },
-    { key: "ip", label: "IP" }, { key: "act", label: "", align: "right" },
+    { key: "partner", label: "파트너사", sortable: true }, { key: "id", label: "디바이스", sortable: true }, { key: "room", label: "호실", sortable: true },
+    { key: "status", label: "상태", sortable: true }, { key: "playing", label: "표출 중", sortable: true },
+    { key: "ip", label: "IP", sortable: true }, { key: "act", label: "", align: "right" },
   ];
   return (
     <div>
@@ -29,7 +31,7 @@ export function Signage() {
           options={[{ value: "all", label: "전체 파트너사" }, ...partners.map((p) => ({ value: p, label: p }))]} />
         <span className="text-[12px]" style={{ color: MUTE }}>온라인 <b style={{ color: STATUS.online.c }}>{online}</b> / {rows.length}</span>
       </div>
-      <Table cols={cols} rows={rows} renderCell={(r, k) =>
+      <Table cols={cols} rows={rows} sort={sort} onSortChange={onSortChange} renderCell={(r, k) =>
         k === "status" ? <Tag s={r.status} /> :
         k === "act" ? <button onClick={() => toast(r.id + " 디바이스를 제어합니다")} className="text-[12px] font-semibold" style={{ color: GOLD }}>제어</button> :
         k === "partner" ? <span className="font-semibold" style={{ color: INK }}>{r.partner}</span> :
@@ -62,12 +64,12 @@ function PeriodDownload() {
     setDeleted((d) => { const n = new Set(d); delIds.forEach((id) => n.add(id)); return n; });
     setSel((s) => { const n = new Set(s); delIds.forEach((id) => n.delete(id)); return n; });
   };
-  const deleteSel = () => {
+  const deleteSel = async () => {
     const delIds = ids.filter((id) => sel.has(id));
     if (delIds.length === 0) return;
-    if (window.confirm(`선택한 ${delIds.length}개 자산을 삭제하시겠습니까? (영구 삭제 · 복구 불가)`)) removeIds(delIds);
+    if (await confirm({ title: "자산 삭제", message: `선택한 ${delIds.length}개 자산을 삭제합니다.\n영구 삭제되며 복구할 수 없습니다.`, danger: true })) removeIds(delIds);
   };
-  const deleteOne = (v) => { if (window.confirm(`「${D.assetFileName(v, target)}」을(를) 삭제하시겠습니까?`)) removeIds([v.id]); };
+  const deleteOne = async (v) => { if (await confirm({ title: "자산 삭제", message: `「${D.assetFileName(v, target)}」을(를) 삭제합니다.\n영구 삭제되며 복구할 수 없습니다.`, danger: true })) removeIds([v.id]); };
 
   // 현재 필터 결과 중 선택된 것 (필터 밖 선택은 집계 제외)
   const selRows = rows.filter((r) => sel.has(r.id));
@@ -76,6 +78,25 @@ function PeriodDownload() {
   const totalSize = rows.reduce((s, r) => s + sz(r), 0);
   const fmtSize = (mb) => (mb >= 1024 ? (mb / 1024).toFixed(1) + " GB" : mb + " MB");
   const fmtDt = (dt) => `${dt.slice(0, 2)}.${dt.slice(2, 4)}.${dt.slice(4, 6)} ${dt.slice(6, 8)}:${dt.slice(8, 10)}`;
+
+  // 헤더 클릭 정렬 (파일명·반려동물·생성일시·용량)
+  const [sort, setSort] = useState({ key: "datetime", dir: "desc" });
+  const sval = (v, k) => k === "name" ? D.assetFileName(v, target) : k === "size" ? sz(v) : v[k];
+  const displayRows = [...rows].sort((a, b) => {
+    const av = sval(a, sort.key), bv = sval(b, sort.key);
+    const c = (typeof av === "number" && typeof bv === "number") ? av - bv : String(av ?? "").localeCompare(String(bv ?? ""), "ko", { numeric: true });
+    return sort.dir === "asc" ? c : -c;
+  });
+  const onSort = (k) => setSort((s) => s.key === k ? { key: k, dir: s.dir === "asc" ? "desc" : "asc" } : { key: k, dir: (k === "datetime" || k === "size") ? "desc" : "asc" });
+  const SortHead = ({ k, children, className }) => {
+    const on = sort.key === k;
+    const Icon = !on ? ChevronsUpDown : sort.dir === "asc" ? ChevronUp : ChevronDown;
+    return (
+      <button onClick={() => onSort(k)} className={"inline-flex items-center gap-1 outline-none transition hover:opacity-80 " + (className || "")} style={{ color: on ? GOLD_D : MUTE }}>
+        {children}<Icon className="h-3 w-3 shrink-0" style={{ color: on ? GOLD_D : FAINT }} strokeWidth={2.4} />
+      </button>
+    );
+  };
 
   return (
     <Card title="기간별 다운로드" action={<span className="text-[11.5px]" style={{ color: FAINT }}>최종본 · 원본 소스 · 파일명 규칙 자동 적용</span>}>
@@ -110,14 +131,14 @@ function PeriodDownload() {
           <button onClick={toggleAll} className="flex items-center outline-none" style={{ color: allOn ? GOLD : FAINT }} title="전체 선택" disabled={ids.length === 0}>
             {allOn ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
           </button>
-          <span className="flex-1">파일명</span>
-          <span className="w-24">반려동물</span>
-          <span className="w-32 text-right">생성일시</span>
-          <span className="w-20 text-right">용량</span>
+          <span className="flex-1"><SortHead k="name">파일명</SortHead></span>
+          <span className="w-24"><SortHead k="deceased">반려동물</SortHead></span>
+          <span className="w-32 text-right"><SortHead k="datetime" className="justify-end w-full">생성일시</SortHead></span>
+          <span className="w-20 text-right"><SortHead k="size" className="justify-end w-full">용량</SortHead></span>
           <span className="w-14" />
         </div>
-        {rows.length === 0 && <div className="px-3 py-6 text-center text-[12.5px]" style={{ color: FAINT }}>선택한 기간에 해당하는 자산이 없습니다.</div>}
-        {rows.map((v) => {
+        {displayRows.length === 0 && <div className="px-3 py-6 text-center text-[12.5px]" style={{ color: FAINT }}>선택한 기간에 해당하는 자산이 없습니다.</div>}
+        {displayRows.map((v) => {
           const on = sel.has(v.id);
           return (
             <div key={v.id} className="flex items-center gap-3 px-3 py-2.5" style={{ borderTop: "1px solid " + LINE, background: on ? GOLD_SOFT : SURFACE }}>

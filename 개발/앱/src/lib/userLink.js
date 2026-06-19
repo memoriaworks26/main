@@ -65,7 +65,7 @@ export async function uploadAsset(token, file, { kind }) {
 }
 
 // 위저드 입력 일괄 제출.
-// payload: { titleIndex, transDefault, transMap, bgmId, letter, assets:[{kind,role,name,sizeMB,storagePath,sortOrder}] }
+// payload: { titleIndex, transDefault, transMap, bgmId, letter, privacyAgreed, marketingAgreed, assets:[{kind,role,name,sizeMB,storagePath,sortOrder}] }
 // 반환: { ok, status, shareUrl, error? }
 export async function submitLink(token, payload) {
   const shareUrl = shareUrlFor(token);

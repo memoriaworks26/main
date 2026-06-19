@@ -60,7 +60,8 @@ export default function AdminConsole({ onOpenEditor, onLoginAsPartner }) {
   const [accountId, setAccountId] = useState(D.ADMIN_ACCOUNTS[0].id); // 기본: 마스터 관리자
   const account = accounts.find((a) => a.id === accountId) || accounts[0];
   const [page, setPage] = useState("overview");
-  const go = (p) => setPage(p);
+  const [focus, setFocus] = useState(null); // 페이지 이동 시 특정 항목 포커스(예: 대시보드 최근예약 → 고객 상세)
+  const go = (p, f = null) => { setPage(p); setFocus(f); };
   const canFor = (a, k) => k === "mysettings" || a.role === "master" || (a.perms || []).includes(k); // 마스터=풀 액세스 · 내 설정은 모두 접근
   const can = (k) => canFor(account, k);
   const NAV_ORDER = ["overview", "partners", "customers", "forms", "production", "secondedit", "templates", "content", "settlement", "mysettings", "accounts", "settings", "storage", "signage"];
@@ -117,7 +118,7 @@ export default function AdminConsole({ onOpenEditor, onLoginAsPartner }) {
         <main className="flex-1 px-3 py-4" style={{ maxWidth: 1000 }}>
           {activePage === "overview" && <Dashboard go={go} />}
           {activePage === "partners" && <PartnersManage go={go} onLoginAsPartner={onLoginAsPartner} />}
-          {activePage === "customers" && <Customers />}
+          {activePage === "customers" && <Customers initialSel={focus} account={account} />}
           {activePage === "production" && <Production onOpenEditor={onOpenEditor} account={account} />}
           {activePage === "secondedit" && <SecondEdit onOpenEditor={onOpenEditor} account={account} />}
           {activePage === "templates" && <Templates />}
@@ -125,7 +126,7 @@ export default function AdminConsole({ onOpenEditor, onLoginAsPartner }) {
           {activePage === "settlement" && <Settlement />}
           {activePage === "accounts" && <AccountsManage account={account} />}
           {activePage === "forms" && <FormBuilder />}
-          {activePage === "settings" && <SettingsView />}
+          {activePage === "settings" && <SettingsView account={account} />}
           {activePage === "mysettings" && <MySettings account={account} />}
           {activePage === "storage" && <Storage />}
           {activePage === "signage" && <Signage />}
