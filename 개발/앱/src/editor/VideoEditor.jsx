@@ -45,20 +45,23 @@ export default function VideoEditor({ reservation, onClose }) {
   const setEdit = (id, patch) => commit({ ...doc, edits: { ...doc.edits, [id]: { ...doc.edits[id], ...patch } } });
   // 템플릿 블록에 편집값 병합 → 타임라인·미리보기·속성패널이 같은 편집본을 본다
   const editedBlocks = useMemo(() => blocks.map((b) => ({ ...b, ...(edits[b.id] || {}) })), [blocks, edits]);
+  // 자막 트랙 — 편집값(텍스트·위치) 병합. 자막 id로 edits 보관(블록 id와 충돌 없음).
+  const editedSubs = useMemo(() => (D.EDITOR_TIMELINE.subtitles || []).map((s) => ({ ...s, ...(edits[s.id] || {}) })), [edits]);
   const name = (reservation && (reservation.deceased || reservation.name)) || D.EDITOR_RESERVATION.deceased;
 
-  // ── 2차 가공: 블록 순서변경·미노출 ──────────────────────────────
-  // 1차(편집·컨펌)에선 템플릿 순서 고정. 2차 가공으로 연 건만 재구성 허용.
-  const secondMode = !!reservation?.secondJobId;
+  // ── 블록 순서변경·미노출 ───────────────────────────────────────
+  // 편집·컨펌(1차)·2차 가공 편집기 모두 블록 재구성 허용(실제 예약/잡을 연 경우).
+  const secondMode = !!reservation?.secondJobId;             // 헤더 라벨 구분용(2차 가공 표기)
+  const canArrange = !!(reservation?.id || reservation?.secondJobId); // 재구성 가능 여부
   const baseOrder = useMemo(() => blocks.map((b) => b.id), [blocks]);
   // doc.layout에 저장된 순서를 현재 블록과 정합화(템플릿이 바뀌어도 깨지지 않게: 사라진 id 제거 + 새 id는 뒤에 추가)
   const order = useMemo(() => {
-    const stored = secondMode ? doc.layout?.order : null;
+    const stored = canArrange ? doc.layout?.order : null;
     if (!stored) return baseOrder;
     const kept = stored.filter((id) => baseOrder.includes(id));
     return [...kept, ...baseOrder.filter((id) => !kept.includes(id))];
-  }, [secondMode, doc.layout, baseOrder]);
-  const hidden = (secondMode && doc.layout?.hidden) || EMPTY;
+  }, [canArrange, doc.layout, baseOrder]);
+  const hidden = (canArrange && doc.layout?.hidden) || EMPTY;
   const orderedBlocks = useMemo(() => order.map((id) => editedBlocks.find((b) => b.id === id)).filter(Boolean), [order, editedBlocks]);
   const visibleBlocks = useMemo(() => orderedBlocks.filter((b) => !hidden.includes(b.id)), [orderedBlocks, hidden]);
 
@@ -71,9 +74,9 @@ export default function VideoEditor({ reservation, onClose }) {
     setLayout({ order: o });
   };
   const toggleHide = (id) => setLayout({ hidden: hidden.includes(id) ? hidden.filter((x) => x !== id) : [...hidden, id] });
-  // 패널에 넘길 블록: 2차면 재정렬본(전체) / 타임라인은 노출본만
-  const panelBlocks = secondMode ? orderedBlocks : editedBlocks;
-  const timelineBlocks = secondMode ? visibleBlocks : editedBlocks;
+  // 패널에 넘길 블록: 재구성 가능하면 재정렬본(전체) / 타임라인은 노출본만
+  const panelBlocks = canArrange ? orderedBlocks : editedBlocks;
+  const timelineBlocks = canArrange ? visibleBlocks : editedBlocks;
 
   // "만들기" → 새 결과물 추가(최신 선택) · 썸네일은 버튼 하단 히스토리에 누적
   const generate = (blockId) => {
@@ -158,19 +161,19 @@ export default function VideoEditor({ reservation, onClose }) {
 
       <div className="flex items-center gap-2 px-5 py-1.5 text-[12px]" style={{ background: "#faf7f1", borderBottom: "1px solid " + LINE, color: MUTE }}>
         <span className="flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ background: GOLD }}>?</span>
-        왼쪽에서 <b style={{ color: INK }}>블록</b>을 고르거나 아래 <b style={{ color: INK }}>타임라인</b>에서 블록·음악을 눌러 편집하세요.
+        왼쪽에서 <b style={{ color: INK }}>블록</b>을 고르거나 아래 <b style={{ color: INK }}>타임라인</b>에서 블록·자막·음악을 눌러 편집하세요.
       </div>
 
       <div className="flex flex-1 overflow-hidden">
         <aside className="w-64 shrink-0 overflow-y-auto px-3.5 py-4" style={{ background: SURFACE, borderRight: "1px solid " + LINE }}>
-          <BlockList blocks={panelBlocks} sel={sel} onSel={setSel} secondMode={secondMode} hidden={hidden} onMove={moveBlock} onToggleHide={toggleHide} />
+          <BlockList blocks={panelBlocks} sel={sel} onSel={setSel} arrange={canArrange} hidden={hidden} onMove={moveBlock} onToggleHide={toggleHide} />
         </aside>
         <div className="flex flex-1 flex-col overflow-y-auto px-6 py-5">
           <Preview sel={sel} blocks={panelBlocks} gens={gens} name={name} />
-          <Timeline blocks={timelineBlocks} edits={edits} bgmName={bgmName} sel={sel} onSel={setSel} />
+          <Timeline blocks={timelineBlocks} edits={edits} bgmName={bgmName} subtitles={editedSubs} sel={sel} onSel={setSel} />
         </div>
         <aside className="w-80 shrink-0 overflow-y-auto" style={{ background: SURFACE, borderLeft: "1px solid " + LINE }}>
-          <PropPanel key={sel.scope + sel.id} blocks={panelBlocks} edits={edits} onEdit={setEdit} reservation={reservation} bgmName={bgmName} gens={gens} onGenerate={generate} onSelectGen={selectGen} sel={sel} />
+          <PropPanel key={sel.scope + sel.id} blocks={panelBlocks} subtitles={editedSubs} edits={edits} onEdit={setEdit} reservation={reservation} bgmName={bgmName} gens={gens} onGenerate={generate} onSelectGen={selectGen} sel={sel} />
         </aside>
       </div>
 

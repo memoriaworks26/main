@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Shield, Users, Link2 } from "lucide-react";
 import { SANS, MASTER, BG, INK, GOLD } from "./theme.js";
 import AdminConsole from "./admin.jsx";
@@ -55,6 +55,15 @@ export default function App() {
 
   const openEditor = (item) => setEditor(item || {});
   const closeEditor = () => setEditor(null);
+
+  // 편집기(오버레이)가 열려 있는 동안 뒤 배경(메인창) 스크롤 잠금 — 상단 틈으로 비치지 않게 최상단 고정.
+  useEffect(() => {
+    if (!editor) return;
+    window.scrollTo(0, 0);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [editor]);
   const switchView = (v) => { setAsPartner(null); setView(v); };
   const loginAsPartner = (partner) => { setAsPartner(partner); setView("partner"); };
 

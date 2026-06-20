@@ -5,7 +5,7 @@ import { Music, ArrowRightLeft, Check, ArrowUp, ArrowDown, Eye, EyeOff } from "l
 import { INK, MUTE, FAINT, GOLD, GOLD_D, GOLD_SOFT, SURFACE, LINE, STATUS } from "../theme.js";
 import { BLOCK_ICON, BLOCK_COLOR, SCALE, segments, blockTrans } from "./blocks.js";
 
-// 2차 가공 블록 컨트롤(순서·미노출) 아이콘 버튼
+// 블록 컨트롤(순서·미노출) 아이콘 버튼 — 편집·컨펌/2차 가공 편집기 공용
 function CtrlBtn({ icon, onClick, disabled, title, active }) {
   const Ico = icon;
   return (
@@ -18,17 +18,17 @@ function CtrlBtn({ icon, onClick, disabled, title, active }) {
 }
 
 // ── 왼쪽: 편집할 블록 ──────────────────────────────────────────
-// secondMode(2차 가공)면 ↑↓ 순서변경 + 눈 아이콘 미노출 토글을 노출. 1차에선 순서 고정.
-export function BlockList({ blocks, sel, onSel, secondMode = false, hidden = [], onMove, onToggleHide }) {
+// arrange면 ↑↓ 순서변경 + 눈 아이콘 미노출 토글을 노출(편집·컨펌/2차 가공 공용). off면 순서 고정.
+export function BlockList({ blocks, sel, onSel, arrange = false, hidden = [], onMove, onToggleHide }) {
   let visNo = 0; // 노출 블록 번호(최종 영상 순서) — 미노출은 건너뜀
   return (
     <div>
-      <div className="mb-2.5 text-[13px] font-bold" style={{ color: INK }}>편집할 블록 <span className="font-normal" style={{ color: FAINT }}>· {secondMode ? "순서변경·미노출 가능" : "순서 고정"}</span></div>
+      <div className="mb-2.5 text-[13px] font-bold" style={{ color: INK }}>편집할 블록 <span className="font-normal" style={{ color: FAINT }}>· {arrange ? "순서변경·미노출 가능" : "순서 고정"}</span></div>
       <div className="space-y-2">
         {blocks.map((b, i) => {
           const Icon = BLOCK_ICON[b.type];
           const on = sel.scope === "block" && sel.id === b.id;
-          const hid = secondMode && hidden.includes(b.id);
+          const hid = arrange && hidden.includes(b.id);
           const no = hid ? "–" : ++visNo;
           return (
             <div key={b.id} className="flex items-stretch gap-1.5">
@@ -41,11 +41,11 @@ export function BlockList({ blocks, sel, onSel, secondMode = false, hidden = [],
                   <div className="truncate text-[13.5px] font-bold" style={{ color: INK }}>{b.label}</div>
                   <div className="truncate text-[11.5px]" style={{ color: FAINT }}>{hid ? "미노출 — 최종 영상에서 제외" : b.source}</div>
                 </div>
-                {!secondMode && (b.status === "rendering"
+                {!arrange && (b.status === "rendering"
                   ? <span className="shrink-0 text-[11px] font-semibold" style={{ color: STATUS.rendering.c }}>제작중</span>
                   : <Check className="h-4 w-4 shrink-0" style={{ color: STATUS.done.c }} strokeWidth={2.6} />)}
               </button>
-              {secondMode && (
+              {arrange && (
                 <div className="flex shrink-0 items-center gap-1">
                   <CtrlBtn icon={ArrowUp} onClick={() => onMove(b.id, -1)} disabled={i === 0} title="위로" />
                   <CtrlBtn icon={ArrowDown} onClick={() => onMove(b.id, 1)} disabled={i === blocks.length - 1} title="아래로" />
@@ -56,7 +56,7 @@ export function BlockList({ blocks, sel, onSel, secondMode = false, hidden = [],
           );
         })}
       </div>
-      {secondMode && <p className="mt-2.5 text-[11px] leading-relaxed" style={{ color: FAINT }}>↑↓로 순서를 바꾸고 눈 아이콘으로 블록을 미노출(최종 영상에서 제외)할 수 있어요. 되돌리기·저장이 적용됩니다.</p>}
+      {arrange && <p className="mt-2.5 text-[11px] leading-relaxed" style={{ color: FAINT }}>↑↓로 순서를 바꾸고 눈 아이콘으로 블록을 미노출(최종 영상에서 제외)할 수 있어요. 되돌리기·저장이 적용됩니다.</p>}
     </div>
   );
 }
@@ -71,19 +71,22 @@ function RowLabel({ name, color }) {
   );
 }
 
-export function Timeline({ blocks, edits = {}, bgmName, sel, onSel }) {
+export function Timeline({ blocks, edits = {}, bgmName, subtitles = [], sel, onSel }) {
   const { segs, total, width } = segments(blocks);
   const on = (scope, id) => sel.scope === scope && sel.id === id;
   const transOf = (id) => edits["trans-" + id]?.effect || blockTrans(id);
-  const ticks = []; for (let s = 0; s <= total; s += 10) ticks.push(s);
+  // 자막이 블록 총길이보다 길게 깔릴 수 있어 트랙 폭을 둘 중 큰 값으로 확장
+  const subEnd = subtitles.reduce((m, s) => Math.max(m, s.end || 0), 0);
+  const innerW = Math.max(width, subEnd * SCALE);
+  const ticks = []; for (let s = 0; s <= Math.max(total, subEnd); s += 10) ticks.push(s);
 
   return (
     <div className="mt-5">
       <div className="mb-2 flex items-center justify-between">
-        <div className="text-[13px] font-bold" style={{ color: INK }}>타임라인 <span className="font-normal" style={{ color: FAINT }}>· 블록·음악을 눌러 편집</span></div>
+        <div className="text-[13px] font-bold" style={{ color: INK }}>타임라인 <span className="font-normal" style={{ color: FAINT }}>· 블록·자막·음악을 눌러 편집</span></div>
       </div>
       <div className="overflow-x-auto pb-1">
-        <div style={{ minWidth: width + 72 }}>
+        <div style={{ minWidth: innerW + 72 }}>
           {/* 눈금자 */}
           <div className="mb-1 flex gap-2">
             <div className="w-16 shrink-0" />
@@ -122,6 +125,23 @@ export function Timeline({ blocks, edits = {}, bgmName, sel, onSel }) {
                   <ArrowRightLeft className="h-3 w-3" style={{ color: on("trans", b.id) ? "#fff" : GOLD_D }} />
                 </button>
               ) : null)}
+            </div>
+          </div>
+
+          {/* 자막 트랙 — 구간별 자막 칸(누르면 글자·위치 편집) */}
+          <div className="mb-1.5 flex items-stretch gap-2">
+            <RowLabel name="자막" color="#9a6a1c" />
+            <div className="relative flex-1" style={{ height: 26 }}>
+              {subtitles.length === 0
+                ? <span className="absolute left-0 top-1/2 -translate-y-1/2 text-[10.5px]" style={{ color: FAINT }}>자막 없음</span>
+                : subtitles.map((s) => (
+                  <button key={s.id} onClick={() => onSel({ scope: "subtitle", kind: "subtitle", id: s.id })}
+                    className="absolute top-0 flex h-full items-center overflow-hidden px-2 text-left outline-none"
+                    style={{ left: (s.start || 0) * SCALE, width: Math.max(8, ((s.end || 0) - (s.start || 0)) * SCALE - 3), background: "#f4ead7", borderRadius: 4, border: on("subtitle", s.id) ? "2.5px solid " + GOLD : "1px solid rgba(154,106,28,.3)" }}
+                    title={s.text}>
+                    <span className="truncate text-[10.5px] font-semibold" style={{ color: "#7a5a1c" }}>{s.text}</span>
+                  </button>
+                ))}
             </div>
           </div>
 

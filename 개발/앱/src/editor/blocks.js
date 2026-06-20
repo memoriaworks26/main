@@ -7,7 +7,7 @@ import * as D from "../data.js";
 
 export const SCALE = 12; // px/초
 export const BLOCK_ICON = { title: Type, clip: Clapperboard, slide: ImageIcon, ai: Sparkles, letter: Mail };
-export const KIND_LABEL = { title: "타이틀", clip: "클립", slide: "추억 슬라이드", ai: "추억 영상", letter: "편지", audio: "음악", transition: "장면 전환" };
+export const KIND_LABEL = { title: "타이틀", clip: "클립", slide: "추억 슬라이드", ai: "추억 영상", letter: "편지", audio: "음악", transition: "장면 전환", subtitle: "자막" };
 export const BLOCK_COLOR = { title: GOLD, clip: "#3f5e87", slide: "#2f4763", ai: "#51607a", letter: "#5a6470" };
 
 // 장면전환은 블록 경계에 매핑. 모든 블록 사이(경계)에 장면 전환. 명시되지 않은 경계는 기본값(페이드).

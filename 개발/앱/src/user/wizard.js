@@ -30,6 +30,7 @@ export function useUserWizard() {
   const [metDate, setMetDate] = useState("");   // 우리 처음 만난 날
   const [partDate, setPartDate] = useState(""); // 무지개다리 건넌 날
   const [titleSel, setTitleSel] = useState(0);
+  const [petName, setPetName] = useState(""); // 반려동물 이름(타이틀 자막) — AI 변환 단계에서 입력
   const [transMap, setTransMap] = useState({});
   const [link, setLink] = useState({ mode: liveMode ? "live" : "demo", ok: true, token, petName: "", partnerName: "", status: "draft" });
   const [submitting, setSubmitting] = useState(false);
@@ -68,6 +69,7 @@ export function useUserWizard() {
     resolveLink(token).then((r) => {
       if (!alive) return;
       setLink(r);
+      if (r.petName) setPetName(r.petName); // 토큰에 반려동물명이 있으면 입력란 프리필
       if (r.ok && r.status && r.status !== "draft") {
         setVideoStatus(r.status);
         setStep(STEPS.length - 1);
@@ -148,7 +150,7 @@ export function useUserWizard() {
       ...uploads.map((u, i) => ({ kind: u.kind, role: "source", name: u.name, sizeMB: parseMB(u.size), storagePath: u.storagePath, sortOrder: i })),
     ];
     const res = await submitLink(link.token || token, {
-      titleIndex: titleSel, transDefault: trans, transMap, bgmId: D.BGM[bgm]?.id, letter, metDate, partDate, assets,
+      petName: petName.trim(), titleIndex: titleSel, transDefault: trans, transMap, bgmId: D.BGM[bgm]?.id, letter, metDate, partDate, assets,
       privacyAgreed: agreed, marketingAgreed,
     });
     setSubmitting(false);
@@ -158,12 +160,12 @@ export function useUserWizard() {
   };
 
   // StepBody에 넘기는 화면 상태·핸들러 묶음
-  const st = { agreed, setAgreed, marketingAgreed, setMarketingAgreed, uploads, removeUpload, addUpload, onFiles, fileRef, aiPhotos, addAiPhoto, onAiFiles, removeAiPhoto, aiFileRef, trans, setTrans, bgm, setBgm, letter, setLetter, metDate, setMetDate, partDate, setPartDate, titleSel, setTitleSel, transMap, setItemTrans, randomizeTrans, reorderUploads, totalMB, overLimit, link, shareUrl, videoStatus, company, openPolicy: () => setPolicyOpen(true) };
+  const st = { agreed, setAgreed, marketingAgreed, setMarketingAgreed, uploads, removeUpload, addUpload, onFiles, fileRef, aiPhotos, addAiPhoto, onAiFiles, removeAiPhoto, aiFileRef, petName, setPetName, trans, setTrans, bgm, setBgm, letter, setLetter, metDate, setMetDate, partDate, setPartDate, titleSel, setTitleSel, transMap, setItemTrans, randomizeTrans, reorderUploads, totalMB, overLimit, link, shareUrl, videoStatus, company, openPolicy: () => setPolicyOpen(true) };
 
   const last = STEPS.length - 1;
   const previewStep = last - 1;
-  // AI 변환: 독사진 3장 모두 업로드(+업로드 완료)해야 다음 단계로 진행 가능
-  const blocked = (step === 0 && !agreed) || (step === 1 && (aiPhotos.length < 3 || aiUploadingNow)) || (step === 2 && (overLimit || uploadingNow)) || (step === previewStep && (submitting || uploadingNow));
+  // AI 변환: 반려동물명 입력 + 독사진 3장 모두 업로드(+업로드 완료)해야 다음 단계로 진행 가능
+  const blocked = (step === 0 && !agreed) || (step === 1 && (!petName.trim() || aiPhotos.length < 3 || aiUploadingNow)) || (step === 2 && (overLimit || uploadingNow)) || (step === previewStep && (submitting || uploadingNow));
 
   return { st, step, setStep, last, previewStep, blocked, submitting, liveMode, link, company, partners, doSubmit, policyOpen, setPolicyOpen };
 }

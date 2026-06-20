@@ -1,8 +1,9 @@
 // 편집기 — 오른쪽 속성 패널(PropPanel) + 보조(PromptManager·GenHistory).
 // 선택(sel)에 따라 블록/전환/음악의 편집 컨트롤을 보여준다. 편집값은 상위(VideoEditor)의 edits로 컨트롤드.
 import React from "react";
-import { Image as ImageIcon, Music, Upload, Plus, RefreshCw, Trash2, ArrowRightLeft, Check } from "lucide-react";
+import { Image as ImageIcon, Music, Upload, Plus, RefreshCw, Trash2, ArrowRightLeft, Check, Type } from "lucide-react";
 import { SERIF, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS } from "../theme.js";
+import { DateField } from "../ui.jsx";
 import { toast } from "../toast.jsx";
 import { genFrame } from "../lib/media.js";
 import * as D from "../data.js";
@@ -67,11 +68,12 @@ function GenHistory({ kind, name, gen, onSelect }) {
   );
 }
 
-export function PropPanel({ blocks, edits, onEdit, reservation, bgmName, gens, onGenerate, onSelectGen, sel }) {
+export function PropPanel({ blocks, subtitles = [], edits, onEdit, reservation, bgmName, gens, onGenerate, onSelectGen, sel }) {
   let item;
   if (sel.scope === "block") item = blocks.find((b) => b.id === sel.id);
   else if (sel.scope === "audio") item = D.EDITOR_TIMELINE.audio[0];
   else if (sel.scope === "trans") item = { effect: blockTrans(sel.id) };
+  else if (sel.scope === "subtitle") item = subtitles.find((s) => s.id === sel.id);
   const k = sel.kind;
   if (!item) return null;
   const gen = sel.scope === "block" ? (gens[item.id] || genDefault(item.id)) : null; // 타이틀·슬라이드·AI 결과물 히스토리
@@ -84,7 +86,7 @@ export function PropPanel({ blocks, edits, onEdit, reservation, bgmName, gens, o
   // 추억 슬라이드 — 사진 조합 + 사진 사이 전환(기본 페이드). 편집값에 보관.
   const slideTrans = item.slideTrans || SLIDE_PHOTOS.slice(1).map(() => "페이드");
   const setSlideTrans = (i, v) => { const n = slideTrans.slice(); n[i] = v; onEdit(item.id, { slideTrans: n }); };
-  const Icon = BLOCK_ICON[k] || (k === "audio" ? Music : k === "transition" ? ArrowRightLeft : ImageIcon);
+  const Icon = BLOCK_ICON[k] || (k === "audio" ? Music : k === "transition" ? ArrowRightLeft : k === "subtitle" ? Type : ImageIcon);
 
   return (
     <div className="flex h-full flex-col">
@@ -159,7 +161,22 @@ export function PropPanel({ blocks, edits, onEdit, reservation, bgmName, gens, o
         )}
 
         {k === "letter" && (
-          <Field label="편지 내용"><textarea rows={7} value={item.text ?? exampleLetter(name)} onChange={(e) => onEdit(item.id, { text: e.target.value })} className="w-full resize-none p-3 text-[13.5px] leading-relaxed outline-none" style={{ ...inputStyle, height: "auto", fontFamily: SERIF }} /></Field>
+          <>
+            {/* 보호자(유저) 입력과 동일 — 날짜 2개 + 편지 본문 */}
+            <Field label="우리 처음 만난 날"><DateField value={item.metDate ?? reservation?.metDate ?? ""} onChange={(d) => onEdit(item.id, { metDate: d })} /></Field>
+            <Field label="무지개다리 건넌 날"><DateField value={item.partDate ?? reservation?.partDate ?? ""} onChange={(d) => onEdit(item.id, { partDate: d })} /></Field>
+            <Field label="편지 내용"><textarea rows={7} value={item.text ?? exampleLetter(name)} onChange={(e) => onEdit(item.id, { text: e.target.value })} className="w-full resize-none p-3 text-[13.5px] leading-relaxed outline-none" style={{ ...inputStyle, height: "auto", fontFamily: SERIF }} /></Field>
+            <p className="text-[11.5px] leading-relaxed" style={{ color: FAINT }}>※ 보호자가 입력한 편지·날짜입니다. 두 날짜는 편지 마지막에 크게 표시됩니다.</p>
+          </>
+        )}
+
+        {k === "subtitle" && (
+          <>
+            <Field label="자막 글자"><textarea rows={3} value={item.text ?? ""} onChange={(e) => onEdit(item.id, { text: e.target.value })} className="w-full resize-none p-3 text-[13.5px] leading-relaxed outline-none" style={{ ...inputStyle, height: "auto", fontFamily: SERIF }} /></Field>
+            <Field label="위치"><select className={inputCls} style={inputStyle} value={item.pos || "하단"} onChange={(e) => onEdit(item.id, { pos: e.target.value })}>{D.SUBTITLE_POS.map((p) => <option key={p}>{p}</option>)}</select></Field>
+            <Field label="보이는 구간"><div className="px-3 py-2.5 text-[12.5px] tabular-nums" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: INK }}>{item.start}초 ~ {item.end}초</div></Field>
+            <p className="text-[11.5px] leading-relaxed" style={{ color: FAINT }}>※ 자막은 영상 위에 표시됩니다. 글자·위치를 바꿀 수 있어요.</p>
+          </>
         )}
 
         {k === "transition" && (

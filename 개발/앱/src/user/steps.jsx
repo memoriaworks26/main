@@ -63,9 +63,7 @@ export function StepBody({ step, st }) {
                 개인정보 수집·이용 동의 <span className="px-1.5 py-[1px] text-[10px] font-bold" style={{ background: GOLD_D, color: "#fff", borderRadius: 3 }}>필수</span>
                 <button onClick={st.openPolicy} className="ml-auto text-[11.5px] font-semibold underline outline-none" style={{ color: GOLD_D }}>전문 보기</button>
               </div>
-              <p><b style={{ color: INK }}>수집 항목</b> 반려동물·보호자 성함, 사진/영상, 연락처, 편지 내용</p>
-              <p><b style={{ color: INK }}>수집 목적</b> 추모영상 제작 및 전달</p>
-              <p><b style={{ color: INK }}>보유 기간</b> 보호자 삭제 요청 시까지 보관 (요청 시 즉시 파기)</p>
+              <div style={{ whiteSpace: "pre-line" }}>{st.company?.consentPrivacy}</div>
               {/* 처리·위탁 주체(정보 관리 주체) 고지 — 장례식장 수집 → 메모리아웍스 제작 위탁 */}
               <div className="mt-2 pt-2" style={{ borderTop: "1px dashed " + LINE2 }}>
                 <p><b style={{ color: INK }}>처리·위탁</b> {st.link?.partnerName || "장례식장"}이(가) 수집하며, 추모영상 제작을 위해 <b style={{ color: INK }}>메모리아웍스</b>에 처리 위탁됩니다</p>
@@ -93,14 +91,8 @@ export function StepBody({ step, st }) {
               <div className="mb-1.5 flex items-center gap-1.5 font-bold" style={{ color: INK }}>
                 마케팅·홍보 활용 동의 <span className="px-1.5 py-[1px] text-[10px] font-bold" style={{ background: "#eceef0", color: "#5a6470", borderRadius: 3 }}>선택</span>
               </div>
-              <p>활용 항목: 완성된 추모영상, 보호자 후기·문구</p>
-              <p>활용 목적</p>
-              <ul className="mt-0.5 list-disc space-y-0.5 pl-4">
-                <li>서비스 홍보 콘텐츠(공식 SNS·웹사이트·광고)에 영상·후기 게시</li>
-                <li>신규 서비스·이벤트·할인 혜택 안내 (문자·알림톡 발송)</li>
-              </ul>
-              <p className="mt-1">활용 기간: 동의 철회 시까지 · 언제든 고객센터로 철회 가능</p>
-              <p style={{ color: FAINT }}>※ 선택 항목으로, 동의하지 않아도 추모영상 제작·이용에는 영향이 없습니다.</p>
+              <div style={{ whiteSpace: "pre-line" }}>{st.company?.consentMarketing}</div>
+              <p className="mt-2" style={{ color: FAINT }}>※ 선택 항목으로, 동의하지 않아도 추모영상 제작·이용에는 영향이 없습니다.</p>
             </div>
             <button onClick={() => st.setMarketingAgreed((v) => !v)} className="mt-2 flex w-full items-center gap-2 text-left text-[13px] font-semibold outline-none" style={{ color: INK }}>
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm" style={{ background: st.marketingAgreed ? GOLD : "#fff", border: "1.5px solid " + (st.marketingAgreed ? GOLD : LINE2) }}>
@@ -191,6 +183,17 @@ export function StepBody({ step, st }) {
       <div>
         <Title sub="추모영상에 쓸 독사진 3장을 올려주세요. 한 장은 타이틀, 나머지 2장은 AI 추억 영상이 됩니다.">AI 변환 · 독사진 3장</Title>
 
+        {/* 반려동물 이름 — 타이틀(영정) 자막에 그대로 들어감 */}
+        <div className="mb-4">
+          <label className="block">
+            <span className="mb-1 block text-[12.5px] font-bold" style={{ color: INK }}>반려동물 이름 <span style={{ color: GOLD_D }}>*</span></span>
+            <input value={st.petName} onChange={(e) => st.setPetName(e.target.value)} placeholder="예: 콩이" maxLength={20}
+              className="w-full px-3 text-[15px] outline-none"
+              style={{ height: 44, background: SURFACE, border: "1.5px solid " + (st.petName.trim() ? LINE : GOLD), borderRadius: RADIUS, color: INK, fontFamily: SERIF, fontWeight: 700 }} />
+          </label>
+          <p className="mt-1 text-[11px]" style={{ color: FAINT }}>타이틀(영정) 자막에 그대로 표시됩니다.</p>
+        </div>
+
         {/* 가이드 — 상단(3장 전체에 적용) */}
         <PhotoExampleGuide />
         <div className="mb-3 px-3 py-2 text-[11px] leading-relaxed" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
@@ -226,9 +229,8 @@ export function StepBody({ step, st }) {
                   {on && <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full" style={{ background: GOLD }}><Check className="h-2.5 w-2.5 text-white" strokeWidth={3} /></span>}
                 </button>
                 <button onClick={() => st.removeAiPhoto(photo.id)} className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full outline-none transition hover:opacity-80" style={{ background: "rgba(0,0,0,.5)", color: "#fff" }} aria-label="삭제"><X className="h-3 w-3" /></button>
-                <div className="px-1 py-1 text-center">
-                  <div className="text-[9.5px] font-bold" style={{ color: on ? GOLD_D : MUTE }}>{on ? "타이틀" : "AI 영상"}</div>
-                  <div className="text-[8.5px]" style={{ color: FAINT }}>{on ? "GPT i2i" : "Kling i2v"}</div>
+                <div className="px-1 py-1.5 text-center">
+                  <div className="text-[10px] font-bold" style={{ color: on ? GOLD_D : MUTE }}>{on ? "이미지" : "영상"}</div>
                 </div>
               </div>
             );
@@ -306,7 +308,7 @@ export function StepBody({ step, st }) {
           <Play className="h-10 w-10 text-white" style={{ opacity: 0.85 }} fill="#fff" />
           <span className="absolute bottom-2 left-2 px-1.5 py-[2px] text-[9px] font-bold tracking-wider text-white" style={{ background: "rgba(0,0,0,.4)", borderRadius: 2 }}>16:9 · 1080p</span>
         </div>
-        <div className="mt-3 text-center" style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: INK }}>{st.link.petName || "콩이"}</div>
+        <div className="mt-3 text-center" style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: INK }}>{st.petName || st.link.petName || "콩이"}</div>
         <p className="mt-1 text-center text-[12px]" style={{ color: MUTE }}>타이틀 · 오프닝 · 추억 슬라이드 · AI 영상 · 편지</p>
         {/* 유저가 고른 설정 요약 */}
         <div className="mt-3 space-y-1 px-3 py-2.5 text-[11.5px]" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>

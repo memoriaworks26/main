@@ -1,7 +1,7 @@
 // [환경설정] 내 설정·비밀번호 재설정·계정/권한·시스템 설정.
 import React, { useState } from "react";
 import {
-  Check, Download, Headset, KeyRound, Lock, Plus, RefreshCw, RotateCcw, Settings, ShieldCheck, Trash2, User, UserPlus, X,
+  Check, Download, FileText, Headset, KeyRound, Lock, Plus, RefreshCw, RotateCcw, Settings, ShieldCheck, Trash2, User, UserPlus, X,
 } from "lucide-react";
 import { SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS } from "../theme.js";
 import { Tag, Btn, Card, Table, PageHeader, PwField, useTableSort } from "../ui.jsx";
@@ -111,6 +111,60 @@ function PrivacyPolicyCard({ account }) {
   );
 }
 
+// ── 유저폼 동의 문구 — 마스터가 편집 → 유저폼 1단계 개인정보/마케팅 동의 안내에 반영 ──
+function ConsentCard({ account }) {
+  const { company } = useStore();
+  const isMaster = account?.role === "master";
+  const [priv, setPriv] = useState(company.consentPrivacy || "");
+  const [mkt, setMkt] = useState(company.consentMarketing || "");
+  const privDirty = priv !== (company.consentPrivacy || "");
+  const mktDirty = mkt !== (company.consentMarketing || "");
+  const savePriv = () => { actions.updateCompany({ consentPrivacy: priv }); toast("개인정보 동의 문구가 저장되었습니다 — 유저폼에 반영됩니다"); };
+  const saveMkt = () => { actions.updateCompany({ consentMarketing: mkt }); toast("마케팅 동의 문구가 저장되었습니다 — 유저폼에 반영됩니다"); };
+
+  // 함수로 인라인 렌더(컴포넌트로 만들면 입력 중 포커스가 풀리므로 호출형으로 유지)
+  const editor = (label, badge, badgeBg, badgeColor, value, setValue, dirty, onSave, original) => (
+    <div>
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <span className="text-[12.5px] font-bold" style={{ color: INK }}>{label}</span>
+        <span className="px-1.5 py-[1px] text-[10px] font-bold" style={{ background: badgeBg, color: badgeColor, borderRadius: 3 }}>{badge}</span>
+      </div>
+      {isMaster ? (
+        <>
+          <textarea value={value} onChange={(e) => setValue(e.target.value)} rows={4}
+            className="w-full resize-y px-3 py-2.5 text-[12.5px] leading-relaxed outline-none focus-visible:ring-1"
+            style={{ background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} />
+          <div className="mt-1.5 flex items-center gap-2">
+            <Btn size="sm" onClick={onSave} disabled={!dirty}><Check className="h-4 w-4" /> 저장</Btn>
+            {dirty && <Btn size="sm" variant="neutral" onClick={() => setValue(original)}><RotateCcw className="h-3.5 w-3.5" /> 되돌리기</Btn>}
+            {dirty && <span className="text-[11px]" style={{ color: FAINT }}>저장하지 않은 변경사항</span>}
+          </div>
+        </>
+      ) : (
+        <div className="px-3 py-2.5 text-[12px] leading-relaxed" style={{ background: "#faf8f3", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE, whiteSpace: "pre-line" }}>{value || "—"}</div>
+      )}
+    </div>
+  );
+
+  return (
+    <Card title="유저폼 동의 문구 (개인정보 · 마케팅)">
+      <div className="flex items-start gap-2.5">
+        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ background: GOLD_SOFT }}><FileText className="h-4 w-4" style={{ color: GOLD_D }} /></span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[12px]" style={{ color: MUTE }}>
+            보호자가 보는 유저폼 1단계의 <b style={{ color: INK }}>개인정보 수집·이용 동의(필수)</b>와 <b style={{ color: INK }}>마케팅·홍보 활용 동의(선택)</b> 안내 문구입니다. (처리·위탁·보호책임자 라인은 파트너사·고객센터 기준으로 자동 표기)
+          </div>
+          <div className="mt-3 space-y-4">
+            {editor("개인정보 수집·이용 동의", "필수", GOLD_D, "#fff", priv, setPriv, privDirty, savePriv, company.consentPrivacy || "")}
+            {editor("마케팅·홍보 활용 동의", "선택", "#eceef0", "#5a6470", mkt, setMkt, mktDirty, saveMkt, company.consentMarketing || "")}
+          </div>
+          {!isMaster && <div className="mt-2 flex items-center gap-1.5 text-[11px]" style={{ color: FAINT }}><Lock className="h-3 w-3" /> 수정은 마스터 관리자 전용</div>}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 export function SettingsView({ account }) {
   const [pwOpen, setPwOpen] = useState(false);
   return (
@@ -118,6 +172,7 @@ export function SettingsView({ account }) {
       <PageHeader title="환경설정" sub="관리자 전용 — 회사 정보" />
       <div className="mb-4"><CustomerCenterCard account={account} /></div>
       <div className="mb-4"><PrivacyPolicyCard account={account} /></div>
+      <div className="mb-4"><ConsentCard account={account} /></div>
       <div className="grid grid-cols-2 gap-4">
         <Card title="공급자 정보 (거래명세서 자동 삽입)">
           <div className="space-y-2 text-[13px]" style={{ color: INK }}>
