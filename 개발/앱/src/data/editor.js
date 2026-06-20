@@ -82,3 +82,9 @@ export const USER_TRANSITIONS = [
   { ko: "줌인", x: "zoomin" },
 ];
 export const SUBTITLE_POS = ["상단", "중앙", "하단"];
+// 자막 폰트 — 표시명 + CSS family(미리보기·렌더 매핑). 저장값은 css.
+export const SUBTITLE_FONTS = [
+  { name: "나눔명조", css: "'Nanum Myeongjo', serif" },
+  { name: "프리텐다드", css: "'Pretendard', sans-serif" },
+  { name: "본고딕", css: "system-ui, sans-serif" },
+];

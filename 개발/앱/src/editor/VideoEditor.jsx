@@ -77,6 +77,8 @@ export default function VideoEditor({ reservation, onClose }) {
   // 패널에 넘길 블록: 재구성 가능하면 재정렬본(전체) / 타임라인은 노출본만
   const panelBlocks = canArrange ? orderedBlocks : editedBlocks;
   const timelineBlocks = canArrange ? visibleBlocks : editedBlocks;
+  // 타임라인 음악 트랙 클릭 → 추억 슬라이드 블록 선택(거기서 BGM 편집)
+  const selectSlide = () => { const s = editedBlocks.find((b) => b.type === "slide"); if (s) setSel({ scope: "block", kind: "slide", id: s.id }); };
 
   // "만들기" → 새 결과물 추가(최신 선택) · 썸네일은 버튼 하단 히스토리에 누적
   const generate = (blockId) => {
@@ -86,6 +88,15 @@ export default function VideoEditor({ reservation, onClose }) {
     toast("새 결과물을 만들었습니다");
   };
   const selectGen = (blockId, vid) => commit({ ...doc, gens: { ...gens, [blockId]: { ...(gens[blockId] || genDefault(blockId)), sel: vid } } });
+  // 만든 결과물 삭제 — 자동본은 제외. 선택본을 지우면 마지막 남은 버전으로 선택 이동.
+  const deleteGen = (blockId, vid) => {
+    const cur = gens[blockId] || genDefault(blockId);
+    const list = cur.list.filter((v) => v.id !== vid);
+    if (!list.length) return;
+    const selId = cur.sel === vid ? list[list.length - 1].id : cur.sel;
+    commit({ ...doc, gens: { ...gens, [blockId]: { list, sel: selId } } });
+    toast("결과물을 삭제했습니다");
+  };
   // 자동본으로 — 편집값 비우고 모든 결과물 선택을 자동본(v0)으로
   const resetAuto = async () => {
     if (!(await confirm({ title: "자동본으로 되돌리기", message: "편집한 내용을 모두 비우고 자동 생성본으로 되돌립니다.", danger: true, confirmLabel: "되돌리기" }))) return;
@@ -161,7 +172,7 @@ export default function VideoEditor({ reservation, onClose }) {
 
       <div className="flex items-center gap-2 px-5 py-1.5 text-[12px]" style={{ background: "#faf7f1", borderBottom: "1px solid " + LINE, color: MUTE }}>
         <span className="flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ background: GOLD }}>?</span>
-        왼쪽에서 <b style={{ color: INK }}>블록</b>을 고르거나 아래 <b style={{ color: INK }}>타임라인</b>에서 블록·자막·음악을 눌러 편집하세요.
+        왼쪽에서 <b style={{ color: INK }}>블록</b>을 고르거나 아래 <b style={{ color: INK }}>타임라인</b>에서 블록·자막을 눌러 편집하세요. 배경 음악은 <b style={{ color: INK }}>추억 슬라이드</b> 블록에서 설정합니다.
       </div>
 
       <div className="flex flex-1 overflow-hidden">
@@ -170,10 +181,10 @@ export default function VideoEditor({ reservation, onClose }) {
         </aside>
         <div className="flex flex-1 flex-col overflow-y-auto px-6 py-5">
           <Preview sel={sel} blocks={panelBlocks} gens={gens} name={name} />
-          <Timeline blocks={timelineBlocks} edits={edits} bgmName={bgmName} subtitles={editedSubs} sel={sel} onSel={setSel} />
+          <Timeline blocks={timelineBlocks} edits={edits} bgmName={bgmName} subtitles={editedSubs} onSubChange={setEdit} onPickBgm={selectSlide} sel={sel} onSel={setSel} />
         </div>
         <aside className="w-80 shrink-0 overflow-y-auto" style={{ background: SURFACE, borderLeft: "1px solid " + LINE }}>
-          <PropPanel key={sel.scope + sel.id} blocks={panelBlocks} subtitles={editedSubs} edits={edits} onEdit={setEdit} reservation={reservation} bgmName={bgmName} gens={gens} onGenerate={generate} onSelectGen={selectGen} sel={sel} />
+          <PropPanel key={sel.scope + sel.id} blocks={panelBlocks} subtitles={editedSubs} edits={edits} onEdit={setEdit} reservation={reservation} bgmName={bgmName} gens={gens} onGenerate={generate} onSelectGen={selectGen} onDeleteGen={deleteGen} sel={sel} />
         </aside>
       </div>
 

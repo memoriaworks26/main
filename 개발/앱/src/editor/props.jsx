@@ -1,9 +1,9 @@
-// 편집기 — 오른쪽 속성 패널(PropPanel) + 보조(PromptManager·GenHistory).
+// 편집기 — 오른쪽 속성 패널(PropPanel) + 보조(PromptPicker·PromptModal·GenHistory).
 // 선택(sel)에 따라 블록/전환/음악의 편집 컨트롤을 보여준다. 편집값은 상위(VideoEditor)의 edits로 컨트롤드.
-import React from "react";
-import { Image as ImageIcon, Music, Upload, Plus, RefreshCw, Trash2, ArrowRightLeft, Check, Type } from "lucide-react";
+import React, { useState } from "react";
+import { Image as ImageIcon, Music, Upload, Plus, RefreshCw, Trash2, ArrowRightLeft, Check, Type, SlidersHorizontal, X } from "lucide-react";
 import { SERIF, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS } from "../theme.js";
-import { DateField } from "../ui.jsx";
+import { DateField, Modal } from "../ui.jsx";
 import { toast } from "../toast.jsx";
 import { genFrame } from "../lib/media.js";
 import * as D from "../data.js";
@@ -14,38 +14,70 @@ function L({ children }) { return <div className="mb-1.5 text-[12.5px] font-semi
 const inputCls = "w-full px-3 text-[13.5px] outline-none";
 const inputStyle = { height: 38, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK };
 function Field({ label, children }) { return <div className="mb-4"><L>{label}</L>{children}</div>; }
+// 소리 크기 슬라이더(0~100%) — 클립·추억영상 공용
+function SoundField({ label, value, onChange }) {
+  const v = value != null ? value : 100;
+  return <Field label={`${label} (${v}%)`}><input type="range" min="0" max="100" value={v} onChange={(e) => onChange(+e.target.value)} className="w-full" style={{ accentColor: GOLD }} /></Field>;
+}
 
-function PromptManager() {
+// 프롬프트 카드 목록 — 관리 모달 본문
+function PromptCards() {
   return (
-    <div className="mt-5 border-t pt-4" style={{ borderColor: LINE }}>
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-[12.5px] font-bold" style={{ color: INK }}>AI 문구(프롬프트) 관리</span>
+    <div className="space-y-2">
+      {D.PROMPTS.map((p) => (
+        <div key={p.id} className="px-3 py-2.5" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS }}>
+          <div className="flex items-center gap-2">
+            <span className="px-1.5 py-[1px] text-[10.5px] font-bold" style={{ background: "#e9eef5", color: "#3f5e87", borderRadius: 3 }}>{p.target}</span>
+            <span className="text-[12.5px] font-semibold" style={{ color: INK }}>{p.name}</span>
+            <button onClick={() => toast(p.name + " 프롬프트를 편집합니다")} className="ml-auto text-[11.5px] font-semibold" style={{ color: GOLD }}>편집</button>
+          </div>
+          <div className="mt-1 text-[11.5px] leading-relaxed" style={{ color: MUTE }}>{p.body}</div>
+          <div className="mt-2 flex items-center gap-2 border-t pt-2" style={{ borderColor: LINE }}>
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center" style={{ background: "#fff", border: "1px dashed " + LINE2, borderRadius: RADIUS }}><ImageIcon className="h-4 w-4" style={{ color: FAINT }} /></span>
+            <button onClick={() => toast("사진 선택 창을 엽니다")} className="flex items-center gap-1 text-[11.5px] font-semibold" style={{ color: GOLD }}><Upload className="h-3.5 w-3.5" /> 사진 추가</button>
+            <span className="text-[10.5px]" style={{ color: FAINT }}>사진 + 문구를 함께 전송</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// AI 문구(프롬프트) 관리 모달 — 타이틀·추억영상 블록의 "관리" 버튼에서 호출
+function PromptModal({ open, onClose }) {
+  return (
+    <Modal open={open} onClose={onClose} width={460}>
+      <div className="flex items-center justify-between px-4" style={{ height: 48, borderBottom: "1px solid " + LINE }}>
+        <span className="text-[14px] font-bold" style={{ color: INK }}>프롬프트 관리</span>
         <button onClick={() => toast("새 프롬프트를 추가합니다")} className="flex items-center gap-1 text-[12px] font-semibold" style={{ color: GOLD }}><Plus className="h-3.5 w-3.5" /> 새로 추가</button>
       </div>
-      <div className="space-y-2">
-        {D.PROMPTS.map((p) => (
-          <div key={p.id} className="px-3 py-2.5" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS }}>
-            <div className="flex items-center gap-2">
-              <span className="px-1.5 py-[1px] text-[10.5px] font-bold" style={{ background: "#e9eef5", color: "#3f5e87", borderRadius: 3 }}>{p.target}</span>
-              <span className="text-[12.5px] font-semibold" style={{ color: INK }}>{p.name}</span>
-              <button onClick={() => toast(p.name + " 프롬프트를 편집합니다")} className="ml-auto text-[11.5px] font-semibold" style={{ color: GOLD }}>편집</button>
-            </div>
-            <div className="mt-1 text-[11.5px] leading-relaxed" style={{ color: MUTE }}>{p.body}</div>
-            <div className="mt-2 flex items-center gap-2 border-t pt-2" style={{ borderColor: LINE }}>
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center" style={{ background: "#fff", border: "1px dashed " + LINE2, borderRadius: RADIUS }}><ImageIcon className="h-4 w-4" style={{ color: FAINT }} /></span>
-              <button onClick={() => toast("사진 선택 창을 엽니다")} className="flex items-center gap-1 text-[11.5px] font-semibold" style={{ color: GOLD }}><Upload className="h-3.5 w-3.5" /> 사진 추가</button>
-              <span className="text-[10.5px]" style={{ color: FAINT }}>사진 + 문구를 함께 전송</span>
-            </div>
-          </div>
-        ))}
+      <div className="max-h-[58vh] overflow-y-auto px-4 py-3">
+        <PromptCards />
+        <p className="mt-2 text-[11.5px] leading-relaxed" style={{ color: FAINT }}>프롬프트에 참고 사진을 함께 넣어 더 정확하게 생성합니다(사진·문구 둘 다 지원).</p>
       </div>
-      <p className="mt-2 text-[11.5px] leading-relaxed" style={{ color: FAINT }}>프롬프트에 참고 사진을 함께 넣어 더 정확하게 생성합니다(사진·문구 둘 다 지원).</p>
+      <div className="px-4 py-2.5" style={{ borderTop: "1px solid " + LINE }}>
+        <button onClick={onClose} className="w-full py-2 text-[13px] font-bold" style={{ background: GOLD, color: "#fff", borderRadius: RADIUS }}>닫기</button>
+      </div>
+    </Modal>
+  );
+}
+
+// 프롬프트 드롭다운 + 위에 작은 "관리" 버튼(모달 열기) — 타이틀·추억영상 공용
+function PromptPicker({ target, onManage }) {
+  return (
+    <div className="mb-4">
+      <div className="mb-1.5 flex items-center justify-between">
+        <span className="text-[12.5px] font-semibold" style={{ color: INK }}>프롬프트</span>
+        <button onClick={onManage} className="flex items-center gap-1 text-[11.5px] font-semibold outline-none" style={{ color: GOLD_D }}><SlidersHorizontal className="h-3.5 w-3.5" /> 관리</button>
+      </div>
+      <select className={inputCls} style={inputStyle}>{D.PROMPTS.filter((p) => p.target === target).map((p) => <option key={p.id}>{p.name}</option>)}</select>
     </div>
   );
 }
 
 // 만든 결과물 누적 — 선택한 버전이 영상에 들어간다. "만들기"를 누를 때마다 아래에 쌓임.
-function GenHistory({ kind, name, gen, onSelect }) {
+// 자동본(v0)은 기준이라 유지, 만든 버전은 X로 삭제 가능.
+function GenHistory({ kind, name, gen, onSelect, onDelete }) {
   return (
     <div className="mt-3">
       <div className="mb-1.5 text-[11.5px] font-semibold" style={{ color: MUTE }}>
@@ -55,12 +87,20 @@ function GenHistory({ kind, name, gen, onSelect }) {
         {gen.list.map((v, i) => {
           const on = v.id === gen.sel;
           return (
-            <button key={v.id} onClick={() => onSelect(v.id)} className="relative overflow-hidden text-left outline-none transition focus-visible:ring-1"
-              style={{ borderRadius: 6, border: "2px solid " + (on ? GOLD : LINE2) }} title={on ? "영상에 적용됨" : "이 버전을 적용"}>
-              <img src={genFrame(kind, i, name)} alt="" className="block w-full" style={{ aspectRatio: "16/9", objectFit: "cover" }} />
-              <div className="px-1.5 py-1 text-[10.5px] font-semibold" style={{ color: on ? GOLD_D : MUTE, background: on ? GOLD_SOFT : "#faf8f3" }}>{v.auto ? "자동본" : "버전 " + i}</div>
-              {on && <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full" style={{ background: GOLD }}><Check className="h-2.5 w-2.5 text-white" strokeWidth={3} /></span>}
-            </button>
+            <div key={v.id} className="relative overflow-hidden" style={{ borderRadius: 6, border: "2px solid " + (on ? GOLD : LINE2) }}>
+              <button onClick={() => onSelect(v.id)} className="block w-full text-left outline-none transition focus-visible:ring-1" title={on ? "영상에 적용됨" : "이 버전을 적용"}>
+                <img src={genFrame(kind, i, name)} alt="" className="block w-full" style={{ aspectRatio: "16/9", objectFit: "cover" }} />
+                <div className="px-1.5 py-1 text-[10.5px] font-semibold" style={{ color: on ? GOLD_D : MUTE, background: on ? GOLD_SOFT : "#faf8f3" }}>{v.auto ? "자동본" : "버전 " + i}</div>
+              </button>
+              {on && <span className="pointer-events-none absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full" style={{ background: GOLD }}><Check className="h-2.5 w-2.5 text-white" strokeWidth={3} /></span>}
+              {!v.auto && onDelete && (
+                <button onClick={() => onDelete(v.id)} title="이 결과물 삭제" aria-label="이 결과물 삭제"
+                  className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full outline-none transition hover:opacity-85"
+                  style={{ background: "rgba(0,0,0,.5)", color: "#fff" }}>
+                  <X className="h-3 w-3" strokeWidth={2.5} />
+                </button>
+              )}
+            </div>
           );
         })}
       </div>
@@ -68,10 +108,10 @@ function GenHistory({ kind, name, gen, onSelect }) {
   );
 }
 
-export function PropPanel({ blocks, subtitles = [], edits, onEdit, reservation, bgmName, gens, onGenerate, onSelectGen, sel }) {
+export function PropPanel({ blocks, subtitles = [], edits, onEdit, reservation, bgmName, gens, onGenerate, onSelectGen, onDeleteGen, sel }) {
+  const [promptModal, setPromptModal] = useState(false); // AI 문구 관리 모달
   let item;
   if (sel.scope === "block") item = blocks.find((b) => b.id === sel.id);
-  else if (sel.scope === "audio") item = D.EDITOR_TIMELINE.audio[0];
   else if (sel.scope === "trans") item = { effect: blockTrans(sel.id) };
   else if (sel.scope === "subtitle") item = subtitles.find((s) => s.id === sel.id);
   const k = sel.kind;
@@ -81,41 +121,44 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, reservation, 
   // 편집값(컨트롤드) — 전환은 "trans-"+id, 음악은 "audio" 키로 보관
   const transKey = "trans-" + sel.id;
   const effect = (edits[transKey] && edits[transKey].effect) || blockTrans(sel.id);
-  const au = edits.audio || {};
-  const vol = au.volume != null ? au.volume : (item.volume != null ? item.volume : 100);
+  const au = edits.audio || {};                 // 배경 음악 편집값("audio" 키) — 추억 슬라이드에서 설정
+  const audioItem = D.EDITOR_TIMELINE.audio[0];
   // 추억 슬라이드 — 사진 조합 + 사진 사이 전환(기본 페이드). 편집값에 보관.
   const slideTrans = item.slideTrans || SLIDE_PHOTOS.slice(1).map(() => "페이드");
   const setSlideTrans = (i, v) => { const n = slideTrans.slice(); n[i] = v; onEdit(item.id, { slideTrans: n }); };
-  const Icon = BLOCK_ICON[k] || (k === "audio" ? Music : k === "transition" ? ArrowRightLeft : k === "subtitle" ? Type : ImageIcon);
+  const Icon = BLOCK_ICON[k] || (k === "transition" ? ArrowRightLeft : k === "subtitle" ? Type : ImageIcon);
 
   return (
     <div className="flex h-full flex-col">
+      <PromptModal open={promptModal} onClose={() => setPromptModal(false)} />
       <div className="flex items-center gap-2 px-4 py-4" style={{ borderBottom: "1px solid " + LINE }}>
         <Icon className="h-5 w-5" style={{ color: GOLD_D }} />
         <span className="text-[14px] font-bold" style={{ color: INK }}>{KIND_LABEL[k]} 편집</span>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        {/* 소스 파일 (영상/클립/슬라이드/AI/음악) */}
-        {(k === "video" || k === "audio" || k === "clip" || k === "slide" || k === "ai") && (
-          <Field label={k === "audio" ? "지금 음악" : "지금 들어간 파일"}>
-            <div className="px-3 py-2.5 text-[12.5px]" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: INK, wordBreak: "break-all" }}>{k === "audio" ? bgmName : (item.file || item.source || "").split("/").pop()}</div>
-            <button onClick={() => toast(k === "audio" ? "음악 파일 선택 창을 엽니다" : "파일 선택 창을 엽니다")} className="mt-2 flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><Upload className="h-4 w-4" /> {k === "audio" ? "다른 음악으로 바꾸기" : "다른 파일로 바꾸기"}</button>
-          </Field>
-        )}
+        {/* 소스 파일 — 타이틀·추억영상은 독사진(이미지)·클립/영상은 파일·슬라이드는 보호자 사진 자동 구성이라 미노출 */}
+        {(k === "video" || k === "clip" || k === "ai" || k === "title") && (() => {
+          const isPhoto = k === "title" || k === "ai"; // 독사진(이미지) 입력
+          return (
+            <Field label="지금 들어간 파일">
+              <div className="px-3 py-2.5 text-[12.5px]" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: INK, wordBreak: "break-all" }}>{(item.file || item.source || "").split("/").pop()}</div>
+              <button onClick={() => toast(isPhoto ? "사진 선택 창을 엽니다" : "파일 선택 창을 엽니다")} className="mt-2 flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><Upload className="h-4 w-4" /> {isPhoto ? "사진 업로드" : "다른 파일로 바꾸기"}</button>
+            </Field>
+          );
+        })()}
 
         {k === "title" && (
           <>
             <Field label="화면에 보일 글자"><input className={inputCls} style={{ ...inputStyle, fontFamily: SERIF }} value={item.text ?? name} onChange={(e) => onEdit(item.id, { text: e.target.value })} /></Field>
-            <Field label="보이는 시간 (초)"><input type="number" min="1" className={inputCls} style={inputStyle} value={item.dur} onChange={(e) => onEdit(item.id, { dur: Math.max(1, +e.target.value || 0) })} /></Field>
-            <Field label="AI 문구 (타이틀)"><select className={inputCls} style={inputStyle}>{D.PROMPTS.filter((p) => p.target === "타이틀").map((p) => <option key={p.id}>{p.name}</option>)}</select></Field>
+            <PromptPicker target="타이틀" onManage={() => setPromptModal(true)} />
             <button onClick={() => onGenerate(item.id)} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> AI로 만들기</button>
-            <GenHistory kind="title" name={name} gen={gen} onSelect={(vid) => onSelectGen(item.id, vid)} />
-            <PromptManager />
+            <GenHistory kind="title" name={name} gen={gen} onSelect={(vid) => onSelectGen(item.id, vid)} onDelete={(vid) => onDeleteGen(item.id, vid)} />
           </>
         )}
 
-        {(k === "clip" || k === "slide") && <Field label="보이는 시간 (초)"><input type="number" min="1" className={inputCls} style={inputStyle} value={item.dur} onChange={(e) => onEdit(item.id, { dur: Math.max(1, +e.target.value || 0) })} /></Field>}
+        {/* 클립: 보이는 시간 대신 소리 크기 조절 (슬라이드·추억영상은 보이는 시간 없음 · 타이틀만 유지) */}
+        {k === "clip" && <SoundField label="클립 소리 크기" value={item.volume} onChange={(val) => onEdit(item.id, { volume: val })} />}
         {k === "slide" && (
           <>
             <Field label={`사진 조합 · 사이 전환 (${SLIDE_PHOTOS.length}장)`}>
@@ -146,17 +189,30 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, reservation, 
               <button onClick={() => toast("사진 추가/순서 변경은 유저 업로드 기준으로 구성됩니다")} className="mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-[12.5px] font-semibold" style={{ border: "1px dashed " + LINE2, borderRadius: RADIUS, color: GOLD_D }}><Plus className="h-3.5 w-3.5" /> 사진 추가 · 순서 변경</button>
             </Field>
             <button onClick={() => onGenerate(item.id)} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> 사진으로 만들기</button>
-            <GenHistory kind="slide" name={name} gen={gen} onSelect={(vid) => onSelectGen(item.id, vid)} />
+            <GenHistory kind="slide" name={name} gen={gen} onSelect={(vid) => onSelectGen(item.id, vid)} onDelete={(vid) => onDeleteGen(item.id, vid)} />
+
+            {/* 배경 음악 — 영상 전체 1트랙(추억 슬라이드에서만 설정) */}
+            <div className="mt-5 border-t pt-4" style={{ borderColor: LINE }}>
+              <div className="mb-2 flex items-center gap-1.5 text-[12.5px] font-bold" style={{ color: INK }}><Music className="h-4 w-4" style={{ color: GOLD_D }} /> 배경 음악 <span className="font-normal" style={{ color: FAINT }}>· 영상 전체</span></div>
+              <Field label="지금 음악">
+                <div className="px-3 py-2.5 text-[12.5px]" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: INK }}>{bgmName}</div>
+                <button onClick={() => toast("음악 파일 선택 창을 엽니다")} className="mt-2 flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><Upload className="h-4 w-4" /> 다른 음악으로 바꾸기</button>
+              </Field>
+              <SoundField label="소리 크기" value={au.volume != null ? au.volume : audioItem.volume} onChange={(val) => onEdit("audio", { volume: val })} />
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="서서히 커지기 (초)"><input type="number" min="0" step="0.5" className={inputCls} style={inputStyle} value={au.fadeIn != null ? au.fadeIn : audioItem.fadeIn} onChange={(e) => onEdit("audio", { fadeIn: +e.target.value })} /></Field>
+                <Field label="서서히 작아지기 (초)"><input type="number" min="0" step="0.5" className={inputCls} style={inputStyle} value={au.fadeOut != null ? au.fadeOut : audioItem.fadeOut} onChange={(e) => onEdit("audio", { fadeOut: +e.target.value })} /></Field>
+              </div>
+            </div>
           </>
         )}
 
         {k === "ai" && (
           <>
-            <Field label="보이는 시간 (초)"><input type="number" min="1" className={inputCls} style={inputStyle} value={item.dur} onChange={(e) => onEdit(item.id, { dur: Math.max(1, +e.target.value || 0) })} /></Field>
-            <Field label="AI 문구 (영상)"><select className={inputCls} style={inputStyle}>{D.PROMPTS.filter((p) => p.target === "AI영상").map((p) => <option key={p.id}>{p.name}</option>)}</select></Field>
+            <PromptPicker target="AI영상" onManage={() => setPromptModal(true)} />
             <button onClick={() => onGenerate(item.id)} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> AI로 만들기</button>
-            <GenHistory kind="ai" name={name} gen={gen} onSelect={(vid) => onSelectGen(item.id, vid)} />
-            <PromptManager />
+            <GenHistory kind="ai" name={name} gen={gen} onSelect={(vid) => onSelectGen(item.id, vid)} onDelete={(vid) => onDeleteGen(item.id, vid)} />
+            <div className="mt-4"><SoundField label="추억영상 소리 크기" value={item.volume} onChange={(val) => onEdit(item.id, { volume: val })} /></div>
           </>
         )}
 
@@ -170,14 +226,32 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, reservation, 
           </>
         )}
 
-        {k === "subtitle" && (
+        {k === "subtitle" && (() => {
+          const fontVal = D.SUBTITLE_FONTS.find((f) => f.css === item.font)?.css || D.SUBTITLE_FONTS[0].css;
+          const size = item.size ?? 48;
+          return (
           <>
-            <Field label="자막 글자"><textarea rows={3} value={item.text ?? ""} onChange={(e) => onEdit(item.id, { text: e.target.value })} className="w-full resize-none p-3 text-[13.5px] leading-relaxed outline-none" style={{ ...inputStyle, height: "auto", fontFamily: SERIF }} /></Field>
-            <Field label="위치"><select className={inputCls} style={inputStyle} value={item.pos || "하단"} onChange={(e) => onEdit(item.id, { pos: e.target.value })}>{D.SUBTITLE_POS.map((p) => <option key={p}>{p}</option>)}</select></Field>
-            <Field label="보이는 구간"><div className="px-3 py-2.5 text-[12.5px] tabular-nums" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: INK }}>{item.start}초 ~ {item.end}초</div></Field>
-            <p className="text-[11.5px] leading-relaxed" style={{ color: FAINT }}>※ 자막은 영상 위에 표시됩니다. 글자·위치를 바꿀 수 있어요.</p>
+            <Field label="자막 글자"><textarea rows={3} value={item.text ?? ""} onChange={(e) => onEdit(item.id, { text: e.target.value })} className="w-full resize-none p-3 text-[13.5px] leading-relaxed outline-none" style={{ ...inputStyle, height: "auto", fontFamily: fontVal }} /></Field>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="폰트"><select className={inputCls} style={inputStyle} value={fontVal} onChange={(e) => onEdit(item.id, { font: e.target.value })}>{D.SUBTITLE_FONTS.map((f) => <option key={f.name} value={f.css}>{f.name}</option>)}</select></Field>
+              <Field label="위치"><select className={inputCls} style={inputStyle} value={item.pos || "하단"} onChange={(e) => onEdit(item.id, { pos: e.target.value })}>{D.SUBTITLE_POS.map((p) => <option key={p}>{p}</option>)}</select></Field>
+            </div>
+            <Field label={`글자 크기 (${size}px)`}>
+              <div className="flex items-center gap-2">
+                <input type="range" min="20" max="80" step="1" value={size} onChange={(e) => onEdit(item.id, { size: +e.target.value })} className="flex-1" style={{ accentColor: GOLD }} />
+                <input type="number" min="20" max="80" value={size} onChange={(e) => onEdit(item.id, { size: Math.max(20, Math.min(80, +e.target.value || 0)) })} className="w-16 px-2 text-[13px] outline-none" style={{ height: 34, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} />
+              </div>
+            </Field>
+            <Field label="미리보기">
+              <div className="flex items-center justify-center px-3 py-4" style={{ background: "#1c232c", borderRadius: RADIUS, overflow: "hidden" }}>
+                <span className="text-center leading-snug" style={{ fontFamily: fontVal, fontSize: Math.min(size, 34), color: item.color || "#f3e9c8", textShadow: "0 2px 8px rgba(0,0,0,.6)" }}>{item.text || "자막 미리보기"}</span>
+              </div>
+            </Field>
+            <Field label="보이는 구간"><div className="px-3 py-2.5 text-[12.5px] tabular-nums" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: INK }}>{item.start}초 ~ {item.end}초 <span style={{ color: FAINT }}>· 타임라인에서 끌어 옮기거나 양끝으로 길이 조절</span></div></Field>
+            <p className="text-[11.5px] leading-relaxed" style={{ color: FAINT }}>※ 자막은 영상 위에 표시됩니다. 글자·폰트·크기·위치를 바꿀 수 있어요.</p>
           </>
-        )}
+          );
+        })()}
 
         {k === "transition" && (
           <>
@@ -195,16 +269,6 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, reservation, 
           </>
         )}
 
-        {k === "audio" && (
-          <>
-            <Field label={`소리 크기 (${vol}%)`}><input type="range" min="0" max="100" value={vol} onChange={(e) => onEdit("audio", { volume: +e.target.value })} className="w-full" style={{ accentColor: GOLD }} /></Field>
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="서서히 커지기 (초)"><input type="number" min="0" step="0.5" className={inputCls} style={inputStyle} value={au.fadeIn != null ? au.fadeIn : item.fadeIn} onChange={(e) => onEdit("audio", { fadeIn: +e.target.value })} /></Field>
-              <Field label="서서히 작아지기 (초)"><input type="number" min="0" step="0.5" className={inputCls} style={inputStyle} value={au.fadeOut != null ? au.fadeOut : item.fadeOut} onChange={(e) => onEdit("audio", { fadeOut: +e.target.value })} /></Field>
-            </div>
-            <p className="text-[11.5px]" style={{ color: FAINT }}>배경 음악은 영상 전체에 1트랙으로 깔립니다.</p>
-          </>
-        )}
       </div>
     </div>
   );

@@ -3,9 +3,9 @@
 
 // 기본 요소(각 1개만): 타이틀·추억 슬라이드·추억 영상·편지 / 추가 요소(n개): 클립
 export const TEMPLATE_ELEMENTS = [
-  { type: "title", label: "타이틀", source: "AI 생성 이미지 + 영정틀", dur: 6, repeatable: false },
+  { type: "title", label: "타이틀", source: "독사진_타이틀.jpg", dur: 6, repeatable: false },
   { type: "slide", label: "추억 슬라이드", source: "보호자 사진 자동 구성", dur: 24, repeatable: false },
-  { type: "ai", label: "추억 영상", source: "Kling 이미지→영상", dur: 8, repeatable: false },
+  { type: "ai", label: "추억 영상", source: "독사진1.jpg · 독사진2.jpg", dur: 8, repeatable: false },
   { type: "letter", label: "편지", source: "보호자 작성 편지", dur: 18, repeatable: false },
   { type: "clip", label: "클립", source: "콘텐츠 허브 (영상/이미지)", dur: 10, repeatable: true, pickAsset: true },
 ];
