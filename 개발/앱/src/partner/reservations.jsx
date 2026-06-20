@@ -95,7 +95,7 @@ export function ReservDetail({ reserv, onBack }) {
   const videoFile = fv ? D.videoFileName(fv) : `${r.deceased}_추모영상.mp4`;
   const [sent, setSent] = useState(false);
   const [editing, setEditing] = useState(false);
-  const seed = () => ({ deceased: r.deceased || "", chief: r.chief || "", phone: r.phone || "", room: r.room || "", date: r.date || "", slot: r.slot || "" });
+  const seed = () => ({ deceased: r.deceased || "", chief: r.chief || "", phone: r.phone || "", room: r.room || "", date: r.date || "", slot: r.slot || "", assignee: r.assignee || "" });
   const [f, setF] = useState(seed);
   const startEdit = () => { setF(seed()); setEditing(true); };
   const cancelEdit = () => setEditing(false);
@@ -117,7 +117,7 @@ export function ReservDetail({ reserv, onBack }) {
   const save = async () => {
     if (!canSave) return;
     if (!(await confirm({ title: "예약 정보 저장", message: "변경한 예약 정보를 저장합니다." }))) return;
-    actions.updateReservation(r.id, { deceased: f.deceased.trim(), chief: f.chief.trim(), phone: f.phone.trim(), room: f.room, date: f.date, slot: f.slot.trim() });
+    actions.updateReservation(r.id, { deceased: f.deceased.trim(), chief: f.chief.trim(), phone: f.phone.trim(), room: f.room, date: f.date, slot: f.slot.trim(), assignee: f.assignee.trim() });
     setEditing(false);
   };
   const resend = () => { setSent(true); setTimeout(() => setSent(false), 1500); };
@@ -140,7 +140,7 @@ export function ReservDetail({ reserv, onBack }) {
             : <Btn size="sm" variant="neutral" onClick={startEdit}><Pencil className="h-3.5 w-3.5" /> 수정</Btn>}
         </div>} />
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className={editing ? "max-w-2xl" : "grid grid-cols-2 gap-4"}>
         <Card title="예약 정보">
           {editing ? (
             <div className="space-y-2.5">
@@ -180,6 +180,7 @@ export function ReservDetail({ reserv, onBack }) {
                   {timeInvalid ? "시작이 종료보다 늦습니다" : "해당 호실·일시에 이미 예약이 있습니다"}
                 </div>
               )}
+              {inField("담당자", "assignee")}
               <div className="flex items-center justify-between text-[13px]"><span style={{ color: MUTE }}>영상</span><Tag s={r.status} /></div>
             </div>
           ) : (
@@ -193,6 +194,7 @@ export function ReservDetail({ reserv, onBack }) {
             </div>
           )}
         </Card>
+        {!editing && (
         <Card title="추모영상">
           <div className="relative flex items-center justify-center" style={{ aspectRatio: "16/9", background: "#2a323d", borderRadius: RADIUS }}>
             <span className="text-[12px]" style={{ color: "#aab2bf" }}>{r.status === "published" ? "발행 완료" : r.status === "review" ? "접수 대기" : "제작 중"}</span>
@@ -210,6 +212,7 @@ export function ReservDetail({ reserv, onBack }) {
           )}
           <p className="mt-2 text-[11px]" style={{ color: FAINT }}>※ 영상 편집·컨펌은 관리자(HQ)에서 진행됩니다.</p>
         </Card>
+        )}
       </div>
 
       <div className="mt-4">

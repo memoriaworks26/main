@@ -199,6 +199,7 @@ export function StepBody({ step, st }) {
 
         <div className="mb-1.5 flex items-center gap-1.5 text-[12.5px] font-bold" style={{ color: INK }}>
           <Sparkles className="h-3.5 w-3.5" style={{ color: GOLD_D }} /> 독사진 3장 <span className="font-normal" style={{ color: FAINT }}>· 한 장을 타이틀로 선택</span>
+          <span className="ml-auto text-[11.5px] font-bold tabular-nums" style={{ color: st.aiPhotos.length === 3 ? "#3a7468" : GOLD_D }}>{st.aiPhotos.length}/3</span>
         </div>
         <input ref={st.aiFileRef} type="file" accept="image/*" multiple className="hidden" onChange={st.onAiFiles} />
         <div className="grid grid-cols-3 gap-2">
@@ -233,6 +234,11 @@ export function StepBody({ step, st }) {
             );
           })}
         </div>
+        {st.aiPhotos.length < 3 && (
+          <p className="mt-2 text-[11px] font-semibold leading-relaxed" style={{ color: GOLD_D }}>
+            ※ 독사진 3장을 모두 올려야 다음 단계로 넘어갈 수 있어요. (현재 {st.aiPhotos.length}/3)
+          </p>
+        )}
         <p className="mt-2 text-[10.5px] leading-relaxed" style={{ color: FAINT }}>
           타이틀 1장 → 영정 타이틀 · 나머지 2장 → AI 추억 영상.
         </p>

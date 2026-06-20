@@ -162,7 +162,8 @@ export function useUserWizard() {
 
   const last = STEPS.length - 1;
   const previewStep = last - 1;
-  const blocked = (step === 0 && !agreed) || (step === 1 && (aiPhotos.length === 0 || aiUploadingNow)) || (step === 2 && (overLimit || uploadingNow)) || (step === previewStep && (submitting || uploadingNow));
+  // AI 변환: 독사진 3장 모두 업로드(+업로드 완료)해야 다음 단계로 진행 가능
+  const blocked = (step === 0 && !agreed) || (step === 1 && (aiPhotos.length < 3 || aiUploadingNow)) || (step === 2 && (overLimit || uploadingNow)) || (step === previewStep && (submitting || uploadingNow));
 
   return { st, step, setStep, last, previewStep, blocked, submitting, liveMode, link, company, partners, doSubmit, policyOpen, setPolicyOpen };
 }
