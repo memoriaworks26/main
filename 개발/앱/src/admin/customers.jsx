@@ -1,7 +1,7 @@
 // [총괄] 고객관리 — 예약/영상 상태 목록과 1건 드릴다운 상세.
 import React, { useState, useEffect, useMemo } from "react";
 import {
-  Search, Trash2,
+  Search, Trash2, Download,
 } from "lucide-react";
 import { SERIF, SURFACE, LINE, GOLD_D, INK, MUTE, FAINT, RADIUS } from "../theme.js";
 import { Tag, Card, Table, PageHeader, CopyBtn, useTableSort } from "../ui.jsx";
@@ -52,6 +52,10 @@ function CustomerDetail({ rid, onBack }) {
   if (!r) return null;
   const link = D.LINKS.find((l) => l.deceased === r.deceased);
   const vlabel = r.status === "published" ? "발행 완료" : r.status === "confirm" ? "컨펌 대기" : r.status === "review" ? "접수 대기" : "제작 중";
+  // 최종 렌더본 — 발행 완료 건만 다운로드 가능(파일명 규칙 자동 적용)
+  const fv = D.FINAL_VIDEOS.find((v) => v.deceased === r.deceased && v.partner === r.partner);
+  const file = fv ? D.videoFileName(fv) : `${r.deceased}_추모영상.mp4`;
+  const canDownload = r.status === "published";
   return (
     <div>
       <PageHeader title={r.deceased} sub={r.partner + " · " + r.room + " · 보호자 " + r.chief} back={{ onClick: onBack, label: "뒤로" }}
@@ -78,6 +82,18 @@ function CustomerDetail({ rid, onBack }) {
           <div className="relative flex items-center justify-center" style={{ aspectRatio: "16/9", background: "#2a323d", borderRadius: RADIUS }}>
             <span className="text-[12px]" style={{ color: "#aab2bf" }}>{vlabel}</span>
           </div>
+          {canDownload ? (
+            <>
+              <button onClick={() => toast(file + " 다운로드를 시작합니다")}
+                className="mt-2.5 flex w-full items-center justify-center gap-1.5 py-2 text-[12.5px] font-semibold outline-none transition hover:bg-[#f6f3ec] focus-visible:ring-1"
+                style={{ borderRadius: RADIUS, border: "1px solid " + LINE, color: GOLD_D }}>
+                <Download className="h-3.5 w-3.5" /> 영상 다운로드
+              </button>
+              <p className="mt-1.5 truncate text-[10.5px] tabular-nums" style={{ color: FAINT, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{file}</p>
+            </>
+          ) : (
+            <p className="mt-2.5 text-[11.5px]" style={{ color: FAINT }}>발행 완료 후 영상을 다운로드할 수 있습니다.</p>
+          )}
           <p className="mt-2 text-[11px]" style={{ color: FAINT }}>※ 영상 편집·컨펌은 관리자(HQ)에서 진행됩니다. 컨펌 요청 {r.requestedAt || "—"}</p>
         </Card>
       </div>

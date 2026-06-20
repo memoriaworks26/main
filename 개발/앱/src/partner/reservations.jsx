@@ -188,6 +188,7 @@ export function ReservDetail({ reserv, onBack }) {
               <div className="flex justify-between"><span style={{ color: MUTE }}>보호자</span><span>{r.chief}</span></div>
               <div className="flex justify-between"><span style={{ color: MUTE }}>연락처</span><span className="tabular-nums">{r.phone}</span></div>
               <div className="flex justify-between"><span style={{ color: MUTE }}>호실·일정</span><span>{r.room} · {r.date} {r.slot}</span></div>
+              <div className="flex justify-between"><span style={{ color: MUTE }}>담당자</span><span>{r.assignee || "미배정"}</span></div>
               <div className="flex items-center justify-between"><span style={{ color: MUTE }}>영상</span><Tag s={r.status} /></div>
             </div>
           )}
