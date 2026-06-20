@@ -2,7 +2,7 @@
 // 각 화면 컴포넌트는 admin/ 하위 도메인 파일에서 import. (분리 전 admin.jsx 단일 파일)
 import React, { useState } from "react";
 import {
-  ChevronDown, Clapperboard, ClipboardList, FolderOpen, HardDrive, KeyRound, LayoutGrid, LayoutTemplate, LogOut, MonitorPlay, Scissors, Settings, ShieldCheck, UserCircle, Users2, Wallet,
+  ChevronDown, Clapperboard, ClipboardList, Download, FolderOpen, HardDrive, KeyRound, LayoutGrid, LayoutTemplate, LogOut, MonitorPlay, Scissors, Settings, ShieldCheck, UserCircle, Users2, Wallet,
 } from "lucide-react";
 import { NAVY, BG, SURFACE, LINE, GOLD, GOLD_SOFT, INK, MUTE, FAINT, NAV_LINE } from "../theme.js";
 import { Logo, NavItem, NavSection } from "../ui.jsx";
@@ -17,7 +17,7 @@ import { ContentHub } from "./content.jsx";
 import { Templates } from "./templates.jsx";
 import { Settlement } from "./settlement.jsx";
 import { SettingsView, MySettings, AccountsManage } from "./settings.jsx";
-import { Storage, Signage } from "./system.jsx";
+import { Storage, Signage, Downloads } from "./system.jsx";
 import { FormBuilder } from "./forms.jsx";
 
 const ICON = { size: "h-4 w-4", sw: 1.9 };
@@ -62,9 +62,14 @@ export default function AdminConsole({ onOpenEditor, onLoginAsPartner }) {
   const [page, setPage] = useState("overview");
   const [focus, setFocus] = useState(null); // 페이지 이동 시 특정 항목 포커스(예: 대시보드 최근예약 → 고객 상세)
   const go = (p, f = null) => { setPage(p); setFocus(f); };
-  const canFor = (a, k) => k === "mysettings" || a.role === "master" || (a.perms || []).includes(k); // 마스터=풀 액세스 · 내 설정은 모두 접근
+  // 협력파트너(collab) = 영상 다운로드 전용 · 다운로드 페이지는 협력파트너 고유 · 내 설정은 모두 접근 · 마스터=풀 액세스
+  const canFor = (a, k) => {
+    if (a.role === "collab") return k === "downloads" || k === "mysettings";
+    if (k === "downloads") return false;
+    return k === "mysettings" || a.role === "master" || (a.perms || []).includes(k);
+  };
   const can = (k) => canFor(account, k);
-  const NAV_ORDER = ["overview", "partners", "customers", "forms", "production", "secondedit", "templates", "content", "settlement", "mysettings", "accounts", "settings", "storage", "signage"];
+  const NAV_ORDER = ["downloads", "overview", "partners", "customers", "forms", "production", "secondedit", "templates", "content", "settlement", "mysettings", "accounts", "settings", "storage", "signage"];
   const switchAccount = (a) => { setAccountId(a.id); if (!canFor(a, page)) setPage(NAV_ORDER.find((k) => canFor(a, k)) || "mysettings"); };
   const activePage = can(page) ? page : (NAV_ORDER.find(can) || "mysettings"); // 권한 없는 페이지는 접근 가능한 첫 페이지로
 
@@ -78,6 +83,11 @@ export default function AdminConsole({ onOpenEditor, onLoginAsPartner }) {
         </div>
         <UserChip account={account} accounts={accounts} onSwitch={switchAccount} />
         <nav className="flex-1 overflow-y-auto px-2.5 pb-4">
+          {can("downloads") && <>
+            <NavSection>협력파트너</NavSection>
+            <NavItem icon={<Download className={ICON.size} strokeWidth={ICON.sw} />} label="영상 다운로드" active={activePage === "downloads"} onClick={() => go("downloads")} />
+          </>}
+
           {(can("overview") || can("partners") || can("customers") || can("forms")) && <NavSection>총괄</NavSection>}
           {can("overview") && <NavItem icon={<LayoutGrid className={ICON.size} strokeWidth={ICON.sw} />} label="대시보드" active={activePage === "overview"} onClick={() => go("overview")} />}
           {can("partners") && <NavItem icon={<Users2 className={ICON.size} strokeWidth={ICON.sw} />} label="파트너사 관리" active={activePage === "partners"} onClick={() => go("partners")} />}
@@ -116,6 +126,7 @@ export default function AdminConsole({ onOpenEditor, onLoginAsPartner }) {
 
       <div className="flex flex-1 flex-col" style={{ background: BG }}>
         <main className="flex-1 px-3 py-4" style={{ maxWidth: 1000 }}>
+          {activePage === "downloads" && <Downloads />}
           {activePage === "overview" && <Dashboard go={go} />}
           {activePage === "partners" && <PartnersManage go={go} onLoginAsPartner={onLoginAsPartner} />}
           {activePage === "customers" && <Customers initialSel={focus} account={account} />}

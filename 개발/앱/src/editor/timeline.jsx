@@ -1,36 +1,62 @@
 // 편집기 — 왼쪽 블록 목록(BlockList) + 가운데 블록 기준 타임라인(Timeline).
 // 블록이 곧 타임라인의 칸. 전환은 블록 경계에, 음악은 전체 1트랙.
 import React from "react";
-import { Music, ArrowRightLeft, Check } from "lucide-react";
+import { Music, ArrowRightLeft, Check, ArrowUp, ArrowDown, Eye, EyeOff } from "lucide-react";
 import { INK, MUTE, FAINT, GOLD, GOLD_D, GOLD_SOFT, SURFACE, LINE, STATUS } from "../theme.js";
 import { BLOCK_ICON, BLOCK_COLOR, SCALE, segments, blockTrans } from "./blocks.js";
 
+// 2차 가공 블록 컨트롤(순서·미노출) 아이콘 버튼
+function CtrlBtn({ icon, onClick, disabled, title, active }) {
+  const Ico = icon;
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} title={title} aria-label={title}
+      className="flex h-6 w-6 items-center justify-center outline-none transition disabled:opacity-30 focus-visible:ring-1"
+      style={{ background: active ? GOLD_SOFT : SURFACE, border: "1px solid " + (active ? GOLD : LINE), borderRadius: 5, color: active ? GOLD_D : MUTE }}>
+      <Ico className="h-3.5 w-3.5" strokeWidth={2} />
+    </button>
+  );
+}
+
 // ── 왼쪽: 편집할 블록 ──────────────────────────────────────────
-export function BlockList({ blocks, sel, onSel }) {
+// secondMode(2차 가공)면 ↑↓ 순서변경 + 눈 아이콘 미노출 토글을 노출. 1차에선 순서 고정.
+export function BlockList({ blocks, sel, onSel, secondMode = false, hidden = [], onMove, onToggleHide }) {
+  let visNo = 0; // 노출 블록 번호(최종 영상 순서) — 미노출은 건너뜀
   return (
     <div>
-      <div className="mb-2.5 text-[13px] font-bold" style={{ color: INK }}>편집할 블록 <span className="font-normal" style={{ color: FAINT }}>· 순서 고정</span></div>
+      <div className="mb-2.5 text-[13px] font-bold" style={{ color: INK }}>편집할 블록 <span className="font-normal" style={{ color: FAINT }}>· {secondMode ? "순서변경·미노출 가능" : "순서 고정"}</span></div>
       <div className="space-y-2">
         {blocks.map((b, i) => {
           const Icon = BLOCK_ICON[b.type];
           const on = sel.scope === "block" && sel.id === b.id;
+          const hid = secondMode && hidden.includes(b.id);
+          const no = hid ? "–" : ++visNo;
           return (
-            <button key={b.id} onClick={() => onSel({ scope: "block", kind: b.type, id: b.id })}
-              className="flex w-full items-center gap-3 px-3 py-2.5 text-left outline-none transition focus-visible:ring-1"
-              style={{ background: on ? GOLD_SOFT : SURFACE, border: "1.5px solid " + (on ? GOLD : LINE), borderRadius: 6 }}>
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[12px] font-bold" style={{ background: on ? GOLD : "#e7e2d8", color: on ? "#fff" : MUTE }}>{i + 1}</span>
-              <Icon className="h-4 w-4 shrink-0" style={{ color: on ? GOLD_D : MUTE }} strokeWidth={1.9} />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13.5px] font-bold" style={{ color: INK }}>{b.label}</div>
-                <div className="truncate text-[11.5px]" style={{ color: FAINT }}>{b.source}</div>
-              </div>
-              {b.status === "rendering"
-                ? <span className="shrink-0 text-[11px] font-semibold" style={{ color: STATUS.rendering.c }}>제작중</span>
-                : <Check className="h-4 w-4 shrink-0" style={{ color: STATUS.done.c }} strokeWidth={2.6} />}
-            </button>
+            <div key={b.id} className="flex items-stretch gap-1.5">
+              <button onClick={() => onSel({ scope: "block", kind: b.type, id: b.id })}
+                className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2.5 text-left outline-none transition focus-visible:ring-1"
+                style={{ background: on ? GOLD_SOFT : SURFACE, border: "1.5px solid " + (on ? GOLD : LINE), borderRadius: 6, opacity: hid ? 0.5 : 1 }}>
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[12px] font-bold" style={{ background: on ? GOLD : "#e7e2d8", color: on ? "#fff" : MUTE }}>{no}</span>
+                <Icon className="h-4 w-4 shrink-0" style={{ color: on ? GOLD_D : MUTE }} strokeWidth={1.9} />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[13.5px] font-bold" style={{ color: INK }}>{b.label}</div>
+                  <div className="truncate text-[11.5px]" style={{ color: FAINT }}>{hid ? "미노출 — 최종 영상에서 제외" : b.source}</div>
+                </div>
+                {!secondMode && (b.status === "rendering"
+                  ? <span className="shrink-0 text-[11px] font-semibold" style={{ color: STATUS.rendering.c }}>제작중</span>
+                  : <Check className="h-4 w-4 shrink-0" style={{ color: STATUS.done.c }} strokeWidth={2.6} />)}
+              </button>
+              {secondMode && (
+                <div className="flex shrink-0 items-center gap-1">
+                  <CtrlBtn icon={ArrowUp} onClick={() => onMove(b.id, -1)} disabled={i === 0} title="위로" />
+                  <CtrlBtn icon={ArrowDown} onClick={() => onMove(b.id, 1)} disabled={i === blocks.length - 1} title="아래로" />
+                  <CtrlBtn icon={hid ? EyeOff : Eye} onClick={() => onToggleHide(b.id)} active={hid} title={hid ? "다시 노출" : "미노출(최종 영상 제외)"} />
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
+      {secondMode && <p className="mt-2.5 text-[11px] leading-relaxed" style={{ color: FAINT }}>↑↓로 순서를 바꾸고 눈 아이콘으로 블록을 미노출(최종 영상에서 제외)할 수 있어요. 되돌리기·저장이 적용됩니다.</p>}
     </div>
   );
 }

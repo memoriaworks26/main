@@ -1,7 +1,7 @@
 // [환경설정] 내 설정·비밀번호 재설정·계정/권한·시스템 설정.
 import React, { useState } from "react";
 import {
-  Check, Headset, KeyRound, Lock, Plus, RefreshCw, RotateCcw, Settings, ShieldCheck, Trash2, User, UserPlus, X,
+  Check, Download, Headset, KeyRound, Lock, Plus, RefreshCw, RotateCcw, Settings, ShieldCheck, Trash2, User, UserPlus, X,
 } from "lucide-react";
 import { SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS } from "../theme.js";
 import { Tag, Btn, Card, Table, PageHeader, PwField, useTableSort } from "../ui.jsx";
@@ -256,6 +256,7 @@ export function AccountsManage({ account }) {
   const [loginId, setLoginId] = useState("");
   const [phone, setPhone] = useState("");
   const [pw, setPw] = useState("");
+  const [role, setRole] = useState("worker"); // 신규 계정 역할: worker | collab(협력파트너)
   const [editId, setEditId] = useState(null); // 권한 편집 중인 작업자
 
   // 초기 비밀번호 자동생성 (목업 — 영문+숫자 8자리)
@@ -265,19 +266,29 @@ export function AccountsManage({ account }) {
   };
 
   const stTag = { active: { s: "online", label: "활성" }, invited: { s: "waiting", label: "초대됨" }, disabled: { s: "offline", label: "비활성" } };
-  const roleBadge = (role) => (
-    <span className="inline-flex items-center gap-1 px-2 py-[3px] text-[11px] font-semibold" style={{ borderRadius: 3, background: role === "master" ? GOLD_SOFT : "#eceef0", color: role === "master" ? GOLD_D : "#5a6470" }}>
-      {role === "master" ? <ShieldCheck className="h-3 w-3" /> : <User className="h-3 w-3" />} {D.ADMIN_ROLES[role].label}
-    </span>
-  );
+  const roleBadge = (rl) => {
+    const RB = {
+      master: { bg: GOLD_SOFT, c: GOLD_D, Icon: ShieldCheck },
+      collab: { bg: "#e9eef5", c: "#3f5e87", Icon: Download },
+      worker: { bg: "#eceef0", c: "#5a6470", Icon: User },
+    };
+    const m = RB[rl] || RB.worker;
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-[3px] text-[11px] font-semibold" style={{ borderRadius: 3, background: m.bg, color: m.c }}>
+        <m.Icon className="h-3 w-3" /> {D.ADMIN_ROLES[rl].label}
+      </span>
+    );
+  };
 
   const idTaken = accounts.some((a) => a.loginId === loginId.trim());
   const canAdd = name.trim() && loginId.trim() && pw.trim() && !idTaken;
   const addWorker = async () => {
     if (!canAdd) return;
-    if (!(await confirmDialog({ title: "작업자 계정 발급", message: `${name.trim()}(${loginId.trim()}) 작업자 계정을 발급합니다.` }))) return;
-    actions.addAccount({ id: "u-" + Date.now(), name: name.trim(), role: "worker", loginId: loginId.trim(), email: "—", phone: phone.trim() || "—", status: "invited", lastLogin: "—", perms: [...D.DEFAULT_WORKER_PERMS] });
-    setName(""); setLoginId(""); setPhone(""); setPw(""); setAdding(false);
+    const roleLabel = D.ADMIN_ROLES[role].label;
+    if (!(await confirmDialog({ title: "계정 발급", message: `${name.trim()}(${loginId.trim()}) ${roleLabel} 계정을 발급합니다.` }))) return;
+    // 협력파트너는 권한체계 무관(다운로드 전용) → perms 빈 배열. 작업자는 기본 권한으로 시작.
+    actions.addAccount({ id: "u-" + Date.now(), name: name.trim(), role, loginId: loginId.trim(), email: "—", phone: phone.trim() || "—", status: "invited", lastLogin: "—", perms: role === "worker" ? [...D.DEFAULT_WORKER_PERMS] : [] });
+    setName(""); setLoginId(""); setPhone(""); setPw(""); setRole("worker"); setAdding(false);
   };
   const removeAcct = async (r) => { if (!(await confirmDialog({ title: "계정 삭제", message: `${r.name}(${r.loginId}) 계정을 삭제합니다.\n삭제 후에는 복구할 수 없습니다.`, danger: true }))) return; actions.removeAccount(r.id); if (editId === r.id) setEditId(null); };
   // 비밀번호 재설정 (목업) — 초기 비밀번호로 초기화 → 첫 로그인 시 변경
@@ -294,8 +305,8 @@ export function AccountsManage({ account }) {
   ];
   return (
     <div>
-      <PageHeader title="계정·권한" sub="마스터 = 풀 액세스 · 작업자 = 마스터가 선택한 권한만"
-        right={isMaster ? <Btn size="sm" onClick={() => setAdding((v) => !v)}><UserPlus className="h-4 w-4" /> 작업자 추가</Btn> : null} />
+      <PageHeader title="계정·권한" sub="마스터 = 풀 액세스 · 작업자 = 선택 권한 · 협력파트너 = 영상 다운로드 전용"
+        right={isMaster ? <Btn size="sm" onClick={() => setAdding((v) => !v)}><UserPlus className="h-4 w-4" /> 계정 추가</Btn> : null} />
 
       {!isMaster && (
         <div className="mb-3 flex items-center gap-2 px-3 py-2.5 text-[12.5px]" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
@@ -317,13 +328,21 @@ export function AccountsManage({ account }) {
                 <input value={pw} onChange={(e) => setPw(e.target.value)} placeholder="초기 비밀번호" className="w-full px-3 text-[13px] outline-none" style={{ height: 36, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} />
                 <button type="button" onClick={genPw} title="자동생성" className="flex shrink-0 items-center justify-center" style={{ height: 36, width: 36, background: "#f6f3ec", border: "1px solid " + LINE2, borderRadius: RADIUS, color: GOLD_D }}><RefreshCw className="h-4 w-4" /></button>
               </div></label>
-            <label className="w-32"><div className="mb-1 text-[12px] font-semibold" style={{ color: MUTE }}>역할</div>
-              <div className="flex items-center px-3 text-[13px]" style={{ height: 36, background: "#f6f3ec", border: "1px solid " + LINE2, borderRadius: RADIUS, color: MUTE }}>작업자 (고정)</div></label>
+            <label className="w-44"><div className="mb-1 text-[12px] font-semibold" style={{ color: MUTE }}>역할</div>
+              <div className="flex items-center gap-1">
+                {["worker", "collab"].map((rk) => {
+                  const on = role === rk;
+                  return (
+                    <button key={rk} type="button" onClick={() => setRole(rk)} className="flex-1 px-2 text-[12px] font-semibold outline-none transition focus-visible:ring-1"
+                      style={{ height: 36, borderRadius: RADIUS, background: on ? GOLD_SOFT : "#fff", color: on ? GOLD_D : MUTE, border: "1px solid " + (on ? GOLD : LINE2) }}>{D.ADMIN_ROLES[rk].label}</button>
+                  );
+                })}
+              </div></label>
             <Btn size="sm" onClick={addWorker} disabled={!canAdd}><Check className="h-4 w-4" /> 계정 발급</Btn>
             <Btn size="sm" variant="neutral" onClick={() => setAdding(false)}>취소</Btn>
           </div>
           <p className="mt-2 text-[11px]" style={{ color: idTaken ? "#8a4b1c" : FAINT }}>
-            {idTaken ? "※ 이미 사용 중인 아이디입니다." : "※ 아이디·초기 비밀번호 발급 후 작업자에게 전달 — 첫 로그인 시 비밀번호 변경. 권한은 발급 후 아래에서 지정."}
+            {idTaken ? "※ 이미 사용 중인 아이디입니다." : "※ 아이디·초기 비밀번호 발급 후 전달 — 첫 로그인 시 비밀번호 변경. 작업자 권한은 발급 후 아래에서 지정(협력파트너는 영상 다운로드 전용으로 고정)."}
           </p>
         </div>
       )}
@@ -344,11 +363,13 @@ export function AccountsManage({ account }) {
         k === "role" ? roleBadge(r.role) :
         k === "perms" ? (r.role === "master"
           ? <span className="text-[12px] font-semibold" style={{ color: GOLD_D }}>전체 (풀 액세스)</span>
+          : r.role === "collab"
+          ? <span className="text-[12px] font-semibold" style={{ color: "#3f5e87" }}>영상 다운로드 전용</span>
           : <span className="text-[12px] tabular-nums" style={{ color: MUTE }}>{(r.perms || []).length} / {D.GRANTABLE_PERMS.length}개</span>) :
         k === "status" ? <Tag s={stTag[r.status].s} label={stTag[r.status].label} /> :
         k === "act" ? (isMaster && r.role !== "master"
           ? <span className="inline-flex items-center gap-3">
-              <button onClick={() => setEditId(editId === r.id ? null : r.id)} className="inline-flex items-center gap-1 text-[12px] font-semibold" style={{ color: editId === r.id ? GOLD_D : GOLD }}><Settings className="h-3.5 w-3.5" /> 권한 편집</button>
+              {r.role === "worker" && <button onClick={() => setEditId(editId === r.id ? null : r.id)} className="inline-flex items-center gap-1 text-[12px] font-semibold" style={{ color: editId === r.id ? GOLD_D : GOLD }}><Settings className="h-3.5 w-3.5" /> 권한 편집</button>}
               <button onClick={() => resetPw(r)} className="inline-flex items-center gap-1 text-[12px] font-semibold" style={{ color: MUTE }}><RotateCcw className="h-3.5 w-3.5" /> 비번 초기화</button>
               <button onClick={() => removeAcct(r)} className="inline-flex items-center gap-1 text-[12px] font-semibold" style={{ color: MUTE }}><Trash2 className="h-3.5 w-3.5" /> 삭제</button>
             </span>

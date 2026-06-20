@@ -28,19 +28,21 @@ export const reservTag = (st) =>
 export const CUSTOMER_COLS = [
   { key: "date", label: "예약일", sortable: true }, { key: "slot", label: "시간", sortable: true }, { key: "partner", label: "파트너사", sortable: true },
   { key: "room", label: "호실", sortable: true }, { key: "deceased", label: "반려동물", sortable: true }, { key: "chief", label: "보호자", sortable: true },
-  { key: "phone", label: "연락처", sortable: true }, { key: "video", label: "영상", sortable: true }, { key: "progress", label: "상태", sortable: true },
+  { key: "phone", label: "연락처", sortable: true }, { key: "assignee", label: "담당자", sortable: true },
+  { key: "video", label: "영상", sortable: true }, { key: "progress", label: "상태", sortable: true },
 ];
 
 // 정렬 비교값 — 영상/상태 컬럼은 제작 단계 순서로(접수→진행→발행)
 const STAGE_RANK = { review: 0, rendering: 1, confirm: 2, published: 3 };
 export const customerSortValue = (r, k) => (k === "video" || k === "progress") ? (STAGE_RANK[r.status] ?? 99) : (r[k] ?? "");
 // 예약 1건 → 고객관리 행 형태 (대시보드 최근예약과 공유)
-export const toCustomerRow = (r) => ({ id: r.id, deceased: r.deceased, chief: r.chief, phone: r.phone, partner: r.partner, date: r.date || (r.requestedAt || "").split(" ")[0], room: r.room, slot: r.slot, status: r.status });
+export const toCustomerRow = (r) => ({ id: r.id, deceased: r.deceased, chief: r.chief, phone: r.phone, partner: r.partner, date: r.date || (r.requestedAt || "").split(" ")[0], room: r.room, slot: r.slot, status: r.status, assignee: r.assignee });
 // 고객관리 행 셀 렌더 (대시보드 최근예약과 동일 표현)
 export const renderCustomerCell = (r, k) =>
   k === "deceased" ? <span style={{ fontFamily: SERIF, fontWeight: 700, color: INK }}>{r.deceased}</span> :
   k === "video" ? videoTag(r.status) :
   k === "progress" ? reservTag(r.status) :
+  k === "assignee" ? (r.assignee || <span style={{ color: FAINT }}>미배정</span>) :
   r[k];
 
 // ── 고객관리 상세 (예약 1건 드릴다운) — 파트너 예약상세와 동일한 레이아웃 ──

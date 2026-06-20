@@ -169,6 +169,7 @@ export function Intake({ prefill } = {}) {
   const [room, setRoom] = useState(prefill?.room || rooms[0]?.name || "");
   const [sH, setSH] = useState(prefill?.sH ?? 9), [sM, setSM] = useState(prefill?.sM ?? 0);
   const [eH, setEH] = useState(prefill?.eH ?? 12), [eM, setEM] = useState(prefill?.eM ?? 0);
+  const [manager, setManager] = useState(prefill?.manager || ""); // 예약 담당자명(필수)
   const [result, setResult] = useState(null);
 
   // 현재 입력 중인 슬롯
@@ -182,7 +183,8 @@ export function Intake({ prefill } = {}) {
     (x) => x.room === roomName && overlaps({ id: "__new__", slot: newSlot }, x)
   );
   const currentConflict = slotConflict(room);
-  const canConfirm = !timeInvalid && !currentConflict;
+  const managerMissing = manager.trim().length === 0; // 담당자명 미입력
+  const canConfirm = !timeInvalid && !currentConflict && !managerMissing;
 
   // 드래그 타임라인용 — 분 단위 범위 ↔ 시/분 상태 동기화 + 현재 호실의 기존 예약
   const startMin = sH * 60 + sM, endMin = eH * 60 + eM;
@@ -201,7 +203,7 @@ export function Intake({ prefill } = {}) {
   const summary = date + " · " + room + " · " + pad2(sH) + ":" + pad2(sM) + " ~ " + pad2(eH) + ":" + pad2(eM);
   const doConfirm = async () => {
     if (!canConfirm) return;
-    if (!(await confirm({ title: "예약 접수 확정", message: summary + "\n예약을 확정하고 보호자 영상제작 URL을 생성합니다." }))) return;
+    if (!(await confirm({ title: "예약 접수 확정", message: summary + "\n담당자 " + manager.trim() + "\n예약을 확정하고 보호자 영상제작 URL을 생성합니다." }))) return;
     setResult({ url: "memoria.works/f/" + Math.random().toString(36).slice(2, 8) });
   };
 
@@ -269,6 +271,10 @@ export function Intake({ prefill } = {}) {
               <div className="mt-4 flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold" style={{ background: "#ede9e1", borderRadius: RADIUS, color: MUTE }}>
                 {room} — 해당 시간대에 이미 예약이 있습니다. 호실 또는 시간을 변경해주세요.
               </div>
+            ) : managerMissing ? (
+              <div className="mt-4 flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold" style={{ background: "#ede9e1", borderRadius: RADIUS, color: MUTE }}>
+                담당자명을 입력해주세요.
+              </div>
             ) : (
               <div className="mt-4 flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold tabular-nums" style={{ background: GOLD_SOFT, borderRadius: RADIUS, color: GOLD_D }}>
                 <Check className="h-3.5 w-3.5" /> {summary}
@@ -277,8 +283,16 @@ export function Intake({ prefill } = {}) {
           </Card>
         </div>
 
-        {/* 오른쪽: 보호자 + 반려동물 */}
+        {/* 오른쪽: 담당자 + 보호자 + 반려동물 */}
         <div className="flex w-56 shrink-0 flex-col gap-3">
+          <Card title="담당자">
+            <label className="block">
+              <span className="text-[12px] font-semibold" style={{ color: MUTE }}>담당자명<span style={{ color: GOLD }}> *</span></span>
+              <input value={manager} onChange={(e) => setManager(e.target.value)} placeholder="예약 담당 직원명"
+                className="mt-1 w-full bg-transparent px-3 text-[13px] outline-none"
+                style={{ height: 36, background: SURFACE, border: "1px solid " + (managerMissing ? GOLD : LINE), borderRadius: RADIUS, color: INK }} />
+            </label>
+          </Card>
           <Card title="보호자 정보">
             <div className="space-y-3">
               {field("성함", "홍길동", true)}

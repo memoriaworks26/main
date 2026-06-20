@@ -42,7 +42,8 @@ export function Signage() {
   );
 }
 
-function PeriodDownload() {
+// canDelete=false: 삭제 비노출(읽기전용) · finalOnly=true: 최종본만(원본/혼합 대상 토글 숨김) — 협력파트너 다운로드 전용.
+function PeriodDownload({ canDelete = true, finalOnly = false }) {
   const { partners } = useStore();
   const [from, setFrom] = useState("2026-04-01");
   const [to, setTo] = useState("2026-06-18");
@@ -108,18 +109,20 @@ function PeriodDownload() {
           <span className="text-[12px] font-semibold" style={{ color: MUTE }}>파트너사</span>
           <div className="mt-1"><SearchSelect value={partner} onChange={(v) => setPartner(v)} width={240} options={partnerOpts} /></div>
         </div>
-        <div>
-          <span className="text-[12px] font-semibold" style={{ color: MUTE }}>다운로드 대상</span>
-          <div className="mt-1 flex items-center gap-1">
-            {D.DOWNLOAD_TARGETS.map((t) => {
-              const on = target === t.key;
-              return (
-                <button key={t.key} onClick={() => setTarget(t.key)} className="px-2.5 text-[12px] font-semibold outline-none transition focus-visible:ring-1"
-                  style={{ height: 36, borderRadius: RADIUS, background: on ? GOLD_SOFT : SURFACE, color: on ? GOLD_D : MUTE, border: "1px solid " + (on ? GOLD_SOFT : LINE2) }}>{t.label}</button>
-              );
-            })}
+        {!finalOnly && (
+          <div>
+            <span className="text-[12px] font-semibold" style={{ color: MUTE }}>다운로드 대상</span>
+            <div className="mt-1 flex items-center gap-1">
+              {D.DOWNLOAD_TARGETS.map((t) => {
+                const on = target === t.key;
+                return (
+                  <button key={t.key} onClick={() => setTarget(t.key)} className="px-2.5 text-[12px] font-semibold outline-none transition focus-visible:ring-1"
+                    style={{ height: 36, borderRadius: RADIUS, background: on ? GOLD_SOFT : SURFACE, color: on ? GOLD_D : MUTE, border: "1px solid " + (on ? GOLD_SOFT : LINE2) }}>{t.label}</button>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
         <span className="ml-auto pb-2 text-[12px] tabular-nums" style={{ color: MUTE }}>
           {rows.length}개 · {fmtSize(totalSize)}
         </span>
@@ -155,7 +158,7 @@ function PeriodDownload() {
               <span className="w-20 text-right text-[12px] tabular-nums" style={{ color: MUTE }}>{fmtSize(sz(v))}</span>
               <span className="flex w-14 items-center justify-end gap-1">
                 <button onClick={() => toast(D.assetFileName(v, target) + " 다운로드를 시작합니다")} className="flex items-center justify-center p-1 outline-none" style={{ color: GOLD_D }} title="개별 다운로드"><Download className="h-3.5 w-3.5" /></button>
-                <button onClick={() => deleteOne(v)} className="flex items-center justify-center p-1 outline-none transition hover:opacity-70" style={{ color: "#c0392b" }} title="삭제"><Trash2 className="h-3.5 w-3.5" /></button>
+                {canDelete && <button onClick={() => deleteOne(v)} className="flex items-center justify-center p-1 outline-none transition hover:opacity-70" style={{ color: "#c0392b" }} title="삭제"><Trash2 className="h-3.5 w-3.5" /></button>}
               </span>
             </div>
           );
@@ -168,7 +171,7 @@ function PeriodDownload() {
           선택 <b style={{ color: selRows.length ? GOLD_D : FAINT }}>{selRows.length}</b>개 · {fmtSize(selSize)}
         </span>
         <div className="ml-auto flex items-center gap-2">
-          <Btn size="sm" variant="ghost" disabled={selRows.length === 0} onClick={deleteSel}><span className="inline-flex items-center gap-1.5" style={{ color: "#c0392b" }}><Trash2 className="h-3.5 w-3.5" /> 선택 삭제</span></Btn>
+          {canDelete && <Btn size="sm" variant="ghost" disabled={selRows.length === 0} onClick={deleteSel}><span className="inline-flex items-center gap-1.5" style={{ color: "#c0392b" }}><Trash2 className="h-3.5 w-3.5" /> 선택 삭제</span></Btn>}
           <Btn size="sm" variant="ghost" disabled={selRows.length === 0} onClick={() => toast(selRows.length + "개 다운로드를 시작합니다")}><Download className="h-3.5 w-3.5" /> 선택 다운로드</Btn>
           <Btn size="sm" disabled={rows.length === 0} onClick={() => toast("전체 ZIP 다운로드를 시작합니다")}><Download className="h-3.5 w-3.5" /> 전체 ZIP ({fmtSize(totalSize)})</Btn>
         </div>
@@ -234,6 +237,16 @@ export function Storage() {
       {/* 기간별 다운로드 — 발행 최종본 선택 */}
       <div className="mb-2 mt-6 text-[13px] font-bold" style={{ color: INK }}>기간별 다운로드 <span className="font-normal" style={{ color: FAINT }}>· 기간·파트너사로 골라 선택 다운로드 (최종본 · 원본 소스)</span></div>
       <PeriodDownload />
+    </div>
+  );
+}
+
+// [협력파트너 전용] 영상 다운로드 — 쌓인 발행 최종본만 골라 선택 다운로드(삭제·원본·내부 데이터 접근 불가).
+export function Downloads() {
+  return (
+    <div>
+      <PageHeader title="영상 다운로드" sub="쌓인 추모영상(발행 최종본)을 기간·파트너사로 골라 선택 다운로드 — 협력파트너 전용" />
+      <PeriodDownload canDelete={false} finalOnly />
     </div>
   );
 }

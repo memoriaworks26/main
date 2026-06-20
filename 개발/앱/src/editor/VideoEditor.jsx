@@ -13,6 +13,8 @@ import { BlockList, Timeline } from "./timeline.jsx";
 import { Preview } from "./preview.jsx";
 import { PropPanel } from "./props.jsx";
 
+const EMPTY = []; // 안정 참조(미노출 없음 기본값) — useMemo 의존성 흔들림 방지
+
 // ── 메인 ───────────────────────────────────────────────────────
 export default function VideoEditor({ reservation, onClose }) {
   const store = useStore(); // 템플릿·콘텐츠·파트너 구독 → 템플릿 변경이 제작에 즉시 반영
@@ -44,6 +46,34 @@ export default function VideoEditor({ reservation, onClose }) {
   // 템플릿 블록에 편집값 병합 → 타임라인·미리보기·속성패널이 같은 편집본을 본다
   const editedBlocks = useMemo(() => blocks.map((b) => ({ ...b, ...(edits[b.id] || {}) })), [blocks, edits]);
   const name = (reservation && (reservation.deceased || reservation.name)) || D.EDITOR_RESERVATION.deceased;
+
+  // ── 2차 가공: 블록 순서변경·미노출 ──────────────────────────────
+  // 1차(편집·컨펌)에선 템플릿 순서 고정. 2차 가공으로 연 건만 재구성 허용.
+  const secondMode = !!reservation?.secondJobId;
+  const baseOrder = useMemo(() => blocks.map((b) => b.id), [blocks]);
+  // doc.layout에 저장된 순서를 현재 블록과 정합화(템플릿이 바뀌어도 깨지지 않게: 사라진 id 제거 + 새 id는 뒤에 추가)
+  const order = useMemo(() => {
+    const stored = secondMode ? doc.layout?.order : null;
+    if (!stored) return baseOrder;
+    const kept = stored.filter((id) => baseOrder.includes(id));
+    return [...kept, ...baseOrder.filter((id) => !kept.includes(id))];
+  }, [secondMode, doc.layout, baseOrder]);
+  const hidden = (secondMode && doc.layout?.hidden) || EMPTY;
+  const orderedBlocks = useMemo(() => order.map((id) => editedBlocks.find((b) => b.id === id)).filter(Boolean), [order, editedBlocks]);
+  const visibleBlocks = useMemo(() => orderedBlocks.filter((b) => !hidden.includes(b.id)), [orderedBlocks, hidden]);
+
+  // 순서/미노출 변경 → 편집 문서에 커밋(undo/redo·저장과 연동)
+  const setLayout = (patch) => commit({ ...doc, layout: { order, hidden, ...patch } });
+  const moveBlock = (id, dir) => {
+    const o = [...order]; const i = o.indexOf(id); const j = i + dir;
+    if (i < 0 || j < 0 || j >= o.length) return;
+    [o[i], o[j]] = [o[j], o[i]];
+    setLayout({ order: o });
+  };
+  const toggleHide = (id) => setLayout({ hidden: hidden.includes(id) ? hidden.filter((x) => x !== id) : [...hidden, id] });
+  // 패널에 넘길 블록: 2차면 재정렬본(전체) / 타임라인은 노출본만
+  const panelBlocks = secondMode ? orderedBlocks : editedBlocks;
+  const timelineBlocks = secondMode ? visibleBlocks : editedBlocks;
 
   // "만들기" → 새 결과물 추가(최신 선택) · 썸네일은 버튼 하단 히스토리에 누적
   const generate = (blockId) => {
@@ -108,7 +138,7 @@ export default function VideoEditor({ reservation, onClose }) {
           <button onClick={onClose} className="flex items-center gap-1 text-[13px] font-semibold" style={{ color: "#aab2bf" }}><ChevronLeft className="h-4 w-4" /> 뒤로</button>
           <span className="h-4 w-px" style={{ background: "#2c3744" }} />
           <span className="text-[14px] font-bold" style={{ color: "#eef0f3", fontFamily: SERIF }}>{name}</span>
-          <span className="text-[12px]" style={{ color: "#5a6472" }}>추모영상 편집</span>
+          <span className="text-[12px]" style={{ color: "#5a6472" }}>{secondMode ? "추모영상 편집 · 2차 가공" : "추모영상 편집"}</span>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={undo} disabled={!hist.past.length} className="flex items-center gap-1 px-2 py-1.5 text-[12px] disabled:opacity-35" style={{ color: "#aab2bf" }}><Undo2 className="h-3.5 w-3.5" /> 되돌리기</button>
@@ -133,14 +163,14 @@ export default function VideoEditor({ reservation, onClose }) {
 
       <div className="flex flex-1 overflow-hidden">
         <aside className="w-64 shrink-0 overflow-y-auto px-3.5 py-4" style={{ background: SURFACE, borderRight: "1px solid " + LINE }}>
-          <BlockList blocks={editedBlocks} sel={sel} onSel={setSel} />
+          <BlockList blocks={panelBlocks} sel={sel} onSel={setSel} secondMode={secondMode} hidden={hidden} onMove={moveBlock} onToggleHide={toggleHide} />
         </aside>
         <div className="flex flex-1 flex-col overflow-y-auto px-6 py-5">
-          <Preview sel={sel} blocks={editedBlocks} gens={gens} name={name} />
-          <Timeline blocks={editedBlocks} edits={edits} bgmName={bgmName} sel={sel} onSel={setSel} />
+          <Preview sel={sel} blocks={panelBlocks} gens={gens} name={name} />
+          <Timeline blocks={timelineBlocks} edits={edits} bgmName={bgmName} sel={sel} onSel={setSel} />
         </div>
         <aside className="w-80 shrink-0 overflow-y-auto" style={{ background: SURFACE, borderLeft: "1px solid " + LINE }}>
-          <PropPanel key={sel.scope + sel.id} blocks={editedBlocks} edits={edits} onEdit={setEdit} reservation={reservation} bgmName={bgmName} gens={gens} onGenerate={generate} onSelectGen={selectGen} sel={sel} />
+          <PropPanel key={sel.scope + sel.id} blocks={panelBlocks} edits={edits} onEdit={setEdit} reservation={reservation} bgmName={bgmName} gens={gens} onGenerate={generate} onSelectGen={selectGen} sel={sel} />
         </aside>
       </div>
 

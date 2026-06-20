@@ -5,6 +5,8 @@
 export const ADMIN_ROLES = {
   master: { label: "마스터 관리자", desc: "전체 권한 · 계정/권한 관리 (풀 액세스)" },
   worker: { label: "작업자", desc: "마스터가 선택한 권한만 접근" },
+  // 협력파트너 — 외부 협력사 계정. 쌓인 발행 최종본을 골라 다운로드만 가능(편집·삭제·내부 데이터 접근 불가).
+  collab: { label: "협력파트너", desc: "쌓인 추모영상(최종본) 선택 다운로드만 가능" },
 };
 
 // 관리자 페이지 키 → 라벨 (사이드바·권한 토글 공용). accounts(계정·권한)는 마스터 고유라 위임 불가.
@@ -41,4 +43,6 @@ export const ADMIN_ACCOUNTS = [
   { id: "u-w1", name: "정다은", role: "worker", loginId: "daeun", email: "daeun@memoriaworks.kr", phone: "010-3372-1185", status: "active", lastLogin: "오늘 09:12", perms: ["overview", "customers", "production", "secondedit", "templates", "content"] },
   { id: "u-w2", name: "김도현", role: "worker", loginId: "dohyun", email: "dohyun@memoriaworks.kr", phone: "010-8810-4426", status: "active", lastLogin: "어제 18:40", perms: ["overview", "production", "secondedit", "templates", "content"] },
   { id: "u-w3", name: "이수아", role: "worker", loginId: "sua", email: "sua@memoriaworks.kr", phone: "—", status: "invited", lastLogin: "—", perms: ["production"] },
+  // 협력파트너 — 영상 다운로드 전용 계정(권한체계 무관, perms 미사용)
+  { id: "u-collab", name: "영상협력사", role: "collab", loginId: "collab", email: "vendor@partner.kr", phone: "—", status: "active", lastLogin: "—", perms: [] },
 ];
