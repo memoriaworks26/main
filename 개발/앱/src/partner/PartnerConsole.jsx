@@ -117,7 +117,10 @@ export default function PartnerConsole({ asPartner, onBackToAdmin }) {
       <aside className="flex w-60 flex-col" style={{ background: NAVY }}>
         <div className="flex items-center justify-center px-5" style={{ height: 76, background: NAVY, borderBottom: "1px solid " + NAV_LINE }}>
           <div className="flex items-center justify-center rounded-full bg-white px-5 py-2.5" style={{ cursor: "pointer" }} onClick={() => onBackToAdmin ? onBackToAdmin() : go("dashboard")}>
-            <Logo height={30} />
+            {/* 파트너사 로고가 있으면 그것을, 없으면 메모리아웍스 로고 */}
+            {partner.logo
+              ? <img src={partner.logo} alt={partner.name} style={{ height: 30, maxWidth: 150, width: "auto", objectFit: "contain", display: "block" }} />
+              : <Logo height={30} />}
           </div>
         </div>
         <div className="px-4 pb-3 pt-3.5">

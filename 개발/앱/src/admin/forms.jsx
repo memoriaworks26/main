@@ -1,180 +1,177 @@
-// [총괄] 유저 입력 폼 빌더 — 보호자 입력 폼 항목 구성.
-import React, { useState } from "react";
-import {
-  Check, Eye, EyeOff, Lock, Upload,
-} from "lucide-react";
-import { SURFACE, LINE, LINE2, GOLD, GOLD_D, INK, MUTE, FAINT, RADIUS } from "../theme.js";
-import { Btn, PageHeader } from "../ui.jsx";
-import { toast } from "../toast.jsx";
-import { confirm } from "../confirm.jsx";
-import { useStore, actions } from "../store.js";
+// [총괄] 사업부별 세팅 — 사업부별로 텍스트/용어를 커스텀. 구조는 그대로, 표시 텍스트만 변경.
+//  · 유저 링크 탭: 실제 UserMobile 미리보기(좌) + 그 단계의 도메인 텍스트 실시간 편집(우)
+//  · 파트너사 용어 탭: 파트너 콘솔 표기 용어 편집(개념별)
+// (펫↔사람 등 도메인이 바뀌면 달라질 표현만 노출 · 공통/버튼/단계명은 제외)
+import React, { useState, useRef } from "react";
+import { RotateCcw, Smartphone, Building2, Upload } from "lucide-react";
+import { SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS } from "../theme.js";
+import { PageHeader } from "../ui.jsx";
+import { useStore, actions, userTextOf } from "../store.js";
 import * as D from "../data.js";
-import { SearchSelect } from "./shared.jsx";
+import UserMobile from "../user/UserMobile.jsx";
+import dogGood from "../assets/dog-good.jpg";
+import dogBad from "../assets/dog-bad.jpg";
 
-const SECTION_COLOR = {
-  "영상 기본":   { bg: "#e9f1ee", c: "#3a7468" },
-  "운영":        { bg: "#e9eef5", c: "#3f5e87" },
-  "영상 상세":   { bg: "#f4ead7", c: "#9a6a1c" },
-  "추모 콘텐츠": { bg: "#eceef0", c: "#5a6470" },
-};
-
-function SectionTag({ section }) {
-  const s = SECTION_COLOR[section] || { bg: "#eee", c: "#666" };
-  return <span className="shrink-0 px-1.5 py-[1px] text-[10.5px] font-semibold" style={{ borderRadius: 3, background: s.bg, color: s.c }}>{section}</span>;
-}
-
-function FormPreviewField({ label, type, required }) {
-  const isLong   = type === "장문";
-  const isUpload = type === "사진" || type === "동영상";
+// 예시 사진 슬롯 — 사업부별 good/bad 예시 사진 파일 교체(미리보기에 즉시 반영)
+function PhotoSlot({ bizUnit, which, label, def }) {
+  const s = useStore();
+  const cur = s.userPhotos[bizUnit]?.[which];
+  const ref = useRef(null);
+  const onFile = (e) => {
+    const f = e.target.files?.[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = () => actions.setUserPhoto(bizUnit, which, r.result);
+    r.readAsDataURL(f);
+    e.target.value = "";
+  };
   return (
-    <div>
-      <div className="mb-1 text-[11px] font-semibold" style={{ color: MUTE }}>{label}{required && <span style={{ color: GOLD }}> *</span>}</div>
-      {isLong ? (
-        <div className="h-12 w-full" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: 6 }} />
-      ) : isUpload ? (
-        <div className="flex h-8 w-full items-center justify-center gap-1.5 text-[11px]" style={{ background: "#f6f3ec", border: "1px dashed " + LINE, borderRadius: 6, color: FAINT }}>
-          <Upload className="h-3 w-3" /> {type === "사진" ? "사진 선택" : "영상 선택"}
-        </div>
-      ) : (
-        <div className="flex h-8 w-full items-center px-2 text-[11px]" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: 6, color: FAINT }}>
-          {type === "숫자" ? "0" : type === "전화번호" ? "010-0000-0000" : ""}
-        </div>
-      )}
+    <div className="overflow-hidden" style={{ border: "1px solid " + LINE, borderRadius: RADIUS, background: SURFACE }}>
+      <div className="relative" style={{ aspectRatio: "1", background: "#e8e1d1" }}>
+        <img src={cur || def} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <span className="absolute left-1.5 top-1.5 rounded-full px-1.5 py-0.5 text-[9.5px] font-bold text-white" style={{ background: "rgba(0,0,0,.55)" }}>{label}</span>
+        {cur && <button onClick={() => actions.setUserPhoto(bizUnit, which, null)} title="기본 사진으로" className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full" style={{ background: "rgba(0,0,0,.55)", color: "#fff" }}><RotateCcw className="h-3 w-3" /></button>}
+      </div>
+      <input ref={ref} type="file" accept="image/*" className="hidden" onChange={onFile} />
+      <button onClick={() => ref.current && ref.current.click()} className="flex w-full items-center justify-center gap-1 py-1.5 text-[11.5px] font-semibold outline-none transition hover:bg-[#f6f3ec]" style={{ color: GOLD_D }}><Upload className="h-3.5 w-3.5" /> 사진 변경</button>
     </div>
   );
 }
 
-export function FormBuilder() {
-  const { formConfigs, partners } = useStore();
-  const [pid, setPid] = useState(partners.find((p) => p.active)?.id || partners[0].id);
-  const partner = partners.find((p) => p.id === pid) || partners[0];
-  const cfg = formConfigs[pid] || {};
+const isLong = (k) => k === "letterPlaceholder" || k.startsWith("sub") || k === "aiGuide";
 
-  const [editingKey, setEditingKey] = useState(null);
-  const [editLabel, setEditLabel] = useState("");
-
-  const lockedFields   = D.FORM_FIELDS.filter((f) => f.locked);
-  const optionalFields = D.FORM_FIELDS.filter((f) => !f.locked);
-
-  const fieldCfg      = (key) => cfg[key] || { hidden: false };
-  const effectiveLabel = (f) => fieldCfg(f.key).label || f.label;
-  const toggle        = (key) => actions.setFormConfig(pid, key, { hidden: !fieldCfg(key).hidden });
-
-  const startEdit = (f) => { setEditingKey(f.key); setEditLabel(effectiveLabel(f)); };
-  const saveLabel = () => {
-    if (editingKey) {
-      const base = D.FORM_FIELDS.find((x) => x.key === editingKey);
-      const val  = editLabel.trim();
-      actions.setFormConfig(pid, editingKey, { label: val && val !== base?.label ? val : undefined });
-    }
-    setEditingKey(null);
-  };
-
-  const previewFields = D.FORM_FIELDS.filter((f) => f.locked || !fieldCfg(f.key).hidden);
+// ── 유저 링크 탭 ──────────────────────────────────────────────
+function UserLinkTab({ bizUnit }) {
+  const s = useStore();
+  const T = userTextOf(s);
+  const ov = s.userText[bizUnit] || {};
+  const [step, setStep] = useState(1); // 미리보기·편집 동기화(첫 도메인 단계=AI 변환)
+  const stepFields = D.USER_TEXT_FIELDS.find((g) => g.step === step);
 
   return (
     <div>
-      <PageHeader title="유저 입력 폼" sub="파트너사별 폼 — 필수 항목 고정 · 선택 항목 표시/숨김 · 라벨 변경" right={
-        <Btn size="sm" onClick={async () => { if (await confirm({ title: "폼 저장", message: partner.name + " 유저 입력 폼 설정을 저장합니다." })) toast(partner.name + " 폼이 저장되었습니다"); }}><Check className="h-3.5 w-3.5" /> 저장</Btn>
-      } />
-      <div className="flex gap-4">
-        {/* 파트너사 선택 */}
-        <div className="flex w-52 shrink-0 flex-col gap-2">
-          <div className="px-1 text-[12px] font-bold" style={{ color: INK }}>파트너사</div>
-          <SearchSelect value={pid} onChange={(v) => { setPid(v); setEditingKey(null); }} placeholder="파트너사" width="100%"
-            options={partners.filter((p) => p.active).map((p) => ({ value: p.id, label: p.name }))} />
-          <p className="px-1 text-[11px] leading-relaxed" style={{ color: FAINT }}>선택 항목은 파트너사별로 독립 설정됩니다.</p>
+      {/* 단계 탭 — 미리보기·편집 동기화. 도메인 항목 있는 단계엔 골드 점 */}
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {D.USER_STEPS.map((label, i) => {
+          const on = step === i;
+          const hasFields = D.USER_TEXT_FIELDS.some((g) => g.step === i);
+          return (
+            <button key={i} onClick={() => setStep(i)} className="flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] font-semibold outline-none transition focus-visible:ring-1"
+              style={{ borderRadius: RADIUS, background: on ? GOLD_SOFT : SURFACE, color: on ? GOLD_D : MUTE, border: "1px solid " + (on ? GOLD : LINE) }}>
+              <span className="tabular-nums">{i + 1}</span> {label}
+              {hasFields && <span className="h-1.5 w-1.5 rounded-full" style={{ background: on ? GOLD_D : GOLD }} />}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="grid gap-4" style={{ gridTemplateColumns: "minmax(340px, 410px) 1fr" }}>
+        {/* 좌: 실제 유저 링크 미리보기(구조 동일) */}
+        <div className="self-start overflow-hidden" style={{ border: "1px solid " + LINE, borderRadius: RADIUS }}>
+          <div className="flex items-center gap-1.5 px-3 py-2 text-[12px] font-bold" style={{ background: SURFACE, borderBottom: "1px solid " + LINE, color: INK }}>
+            <Smartphone className="h-3.5 w-3.5" style={{ color: GOLD_D }} /> 미리보기 <span className="font-normal" style={{ color: FAINT }}>· 실시간 반영</span>
+          </div>
+          <UserMobile previewBizId={bizUnit} step={step} onStep={setStep} />
         </div>
 
-        {/* 필드 목록 */}
-        <div className="min-w-0 flex-1 space-y-3">
-          {/* 필수 항목 (잠금) */}
-          <div>
-            <div className="mb-1.5 flex items-center gap-1.5 px-0.5 text-[12px] font-bold" style={{ color: INK }}>
-              <Lock className="h-3.5 w-3.5" style={{ color: MUTE }} /> 필수 항목 (고정)
-              <span className="text-[11px] font-normal" style={{ color: FAINT }}>— 파트너사 수정 불가</span>
-            </div>
-            <div className="overflow-hidden" style={{ background: "#faf8f3", border: "1px solid " + LINE, borderRadius: RADIUS }}>
-              {lockedFields.map((f, i) => (
-                <div key={f.key} className="flex items-center gap-3 px-4 py-2.5" style={{ borderTop: i ? "1px solid " + LINE : "none" }}>
-                  <Lock className="h-3.5 w-3.5 shrink-0" style={{ color: LINE2 }} />
-                  <span className="flex-1 text-[13px] font-semibold" style={{ color: INK }}>{f.label}</span>
-                  <span className="px-1.5 py-[1px] text-[11px] font-semibold" style={{ background: "#e9eef5", color: "#3f5e87", borderRadius: 3 }}>{f.type}</span>
-                  <SectionTag section={f.section} />
-                  <span className="w-44 text-right text-[11px]" style={{ color: FAINT }}>{f.hint}</span>
-                  <span className="w-8 text-right text-[11px] font-bold" style={{ color: GOLD_D }}>필수</span>
-                </div>
-              ))}
-            </div>
+        {/* 우: 현재 단계의 도메인 텍스트만 편집 */}
+        <div className="min-w-0">
+          <div className="mb-1.5 flex items-center gap-1.5 text-[12.5px] font-bold" style={{ color: INK }}>
+            {step + 1}. {D.USER_STEPS[step]} <span className="font-normal" style={{ color: FAINT }}>· 이 단계의 도메인 텍스트</span>
           </div>
-
-          {/* 선택 항목 */}
-          <div>
-            <div className="mb-1.5 flex items-center gap-1.5 px-0.5 text-[12px] font-bold" style={{ color: INK }}>
-              <Eye className="h-3.5 w-3.5" style={{ color: GOLD_D }} /> 선택 항목
-              <span className="text-[11px] font-normal" style={{ color: FAINT }}>— 아이콘으로 표시/숨김 · 라벨명 클릭하여 변경</span>
-            </div>
-            <div className="overflow-hidden" style={{ border: "1px solid " + LINE, borderRadius: RADIUS }}>
-              {optionalFields.map((f, i) => {
-                const { hidden, label: overrideLabel } = fieldCfg(f.key);
-                const isEditing = editingKey === f.key;
+          {stepFields ? (
+            <div className="overflow-hidden" style={{ background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS }}>
+              {stepFields.items.map(([key, label, hint], i) => {
+                const changed = ov[key] != null;
                 return (
-                  <div key={f.key} className="flex items-center gap-3 px-4 py-2.5 transition-opacity"
-                    style={{ borderTop: i ? "1px solid " + LINE : "none", background: SURFACE, opacity: hidden ? 0.45 : 1 }}>
-                    {/* 표시/숨김 토글 */}
-                    <button onClick={() => toggle(f.key)} className="shrink-0 outline-none transition"
-                      title={hidden ? "숨김 — 클릭하여 표시" : "표시 중 — 클릭하여 숨김"}
-                      style={{ color: hidden ? LINE2 : GOLD_D }}>
-                      {hidden ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  <div key={key} className="flex items-start gap-2 px-3 py-2.5" style={{ borderTop: i ? "1px solid " + LINE : "none" }}>
+                    <div className="w-32 shrink-0 pt-1.5">
+                      <div className="text-[12px] font-semibold" style={{ color: MUTE }}>{label}</div>
+                      {hint && <div className="text-[10.5px] leading-tight" style={{ color: FAINT }}>{hint}</div>}
+                    </div>
+                    {isLong(key)
+                      ? <textarea rows={2} value={T[key]} onChange={(e) => actions.setUserText(bizUnit, key, e.target.value)} className="min-w-0 flex-1 resize-none px-2.5 py-1.5 text-[13px] leading-relaxed outline-none focus-visible:ring-1" style={{ border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} />
+                      : <input value={T[key]} onChange={(e) => actions.setUserText(bizUnit, key, e.target.value)} className="min-w-0 flex-1 px-2.5 text-[13px] outline-none focus-visible:ring-1" style={{ height: 36, border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} />}
+                    <button onClick={() => actions.setUserText(bizUnit, key, D.USER_TEXT[key])} disabled={!changed} title="기본값으로" className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center outline-none transition disabled:opacity-20" style={{ color: changed ? GOLD_D : FAINT }}>
+                      <RotateCcw className="h-3.5 w-3.5" />
                     </button>
-                    {/* 라벨 — 클릭하여 인라인 편집 */}
-                    {isEditing ? (
-                      <input autoFocus value={editLabel}
-                        onChange={(e) => setEditLabel(e.target.value)}
-                        onBlur={saveLabel}
-                        onKeyDown={(e) => { if (e.key === "Enter") saveLabel(); if (e.key === "Escape") setEditingKey(null); }}
-                        className="flex-1 px-2 text-[13px] font-semibold outline-none"
-                        style={{ height: 28, background: "#fff", border: "1px solid " + GOLD, borderRadius: RADIUS, color: INK }} />
-                    ) : (
-                      <button onClick={() => !hidden && startEdit(f)} disabled={hidden}
-                        className="flex flex-1 items-center gap-1.5 text-left text-[13px] font-semibold outline-none"
-                        style={{ color: INK, cursor: hidden ? "default" : "text" }}
-                        title={hidden ? undefined : "클릭하여 라벨 변경"}>
-                        {overrideLabel || f.label}
-                        {overrideLabel && overrideLabel !== f.label && (
-                          <span className="text-[10.5px] font-normal" style={{ color: FAINT }}>기본: {f.label}</span>
-                        )}
-                      </button>
-                    )}
-                    <span className="px-1.5 py-[1px] text-[11px] font-semibold" style={{ background: "#e9eef5", color: "#3f5e87", borderRadius: 3 }}>{f.type}</span>
-                    <SectionTag section={f.section} />
-                    <span className="w-44 text-right text-[11px]" style={{ color: FAINT }}>{f.hint}</span>
                   </div>
                 );
               })}
             </div>
-          </div>
-        </div>
+          ) : (
+            <div className="px-3 py-4 text-[12.5px]" style={{ background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS, color: FAINT }}>
+              이 단계는 사업부 공통입니다 — 도메인에 따라 바꿀 텍스트가 없습니다.
+            </div>
+          )}
 
-        {/* 미리보기 */}
-        <div className="w-60 shrink-0">
-          <div className="px-1 pb-2 text-[12px] font-semibold" style={{ color: MUTE }}>보호자 화면 미리보기</div>
-          <div className="overflow-hidden" style={{ background: SURFACE, border: "1px solid " + LINE, borderRadius: 14 }}>
-            <div className="px-4 py-3 text-center" style={{ background: "#faf7f1", borderBottom: "1px solid " + LINE }}>
-              <div className="text-[12.5px] font-bold" style={{ color: INK }}>{partner.name}</div>
-              <div className="mt-0.5 text-[11px]" style={{ color: FAINT }}>추모영상 정보 입력</div>
+          {/* AI 변환 단계 — 예시 사진(좋은 예/피해주세요) 파일 교체 */}
+          {step === 1 && (
+            <div className="mt-3">
+              <div className="mb-1.5 text-[12.5px] font-bold" style={{ color: INK }}>예시 사진 <span className="font-normal" style={{ color: FAINT }}>· 좋은 예 / 피해주세요 (사진 가이드)</span></div>
+              <div className="grid grid-cols-2 gap-2" style={{ maxWidth: 320 }}>
+                <PhotoSlot bizUnit={bizUnit} which="good" label="좋은 예" def={dogGood} />
+                <PhotoSlot bizUnit={bizUnit} which="bad" label="피해주세요" def={dogBad} />
+              </div>
             </div>
-            <div className="space-y-3 px-4 py-4">
-              {previewFields.map((f) => (
-                <FormPreviewField key={f.key} label={effectiveLabel(f)} type={f.type} required={f.locked} />
-              ))}
-              <button onClick={() => toast("미리보기 폼입니다 — 실제 제출은 유저 화면에서 동작합니다")} className="mt-1 w-full py-2 text-[12.5px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}>제출</button>
-            </div>
-          </div>
-          <p className="mt-2 px-1 text-[11px] leading-relaxed" style={{ color: FAINT }}>숨김 처리한 선택 항목은 제외됩니다.</p>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
+// ── 파트너사 용어 탭 ──────────────────────────────────────────
+function PartnerTermTab({ bizUnit }) {
+  const s = useStore();
+  const cfg = s.termConfigs[bizUnit] || {};
+  return (
+    <div style={{ maxWidth: 640 }}>
+      <div className="overflow-hidden" style={{ background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS }}>
+        <div className="grid items-center gap-3 px-4 py-2.5 text-[11.5px] font-bold" style={{ gridTemplateColumns: "150px 1fr 40px", background: "#faf8f3", borderBottom: "1px solid " + LINE, color: MUTE }}>
+          <span>개념</span><span>파트너 콘솔 표기</span><span />
+        </div>
+        {D.TERMS.map((t, i) => {
+          const pv = cfg[t.key]?.partner ?? t.partner;
+          const changed = cfg[t.key]?.partner != null && cfg[t.key].partner !== t.partner;
+          return (
+            <div key={t.key} className="grid items-center gap-3 px-4 py-2.5" style={{ gridTemplateColumns: "150px 1fr 40px", borderTop: i ? "1px solid " + LINE : "none" }}>
+              <span className="text-[12.5px] font-semibold" style={{ color: INK }}>{t.concept}</span>
+              <input value={pv} onChange={(e) => actions.setTermConfig(bizUnit, t.key, { partner: e.target.value })} className="w-full px-2.5 text-[13px] outline-none focus-visible:ring-1" style={{ height: 36, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} />
+              <button onClick={() => actions.setTermConfig(bizUnit, t.key, { partner: t.partner })} disabled={!changed} title="기본값으로" className="flex h-7 w-7 items-center justify-center outline-none transition disabled:opacity-20" style={{ color: changed ? GOLD_D : FAINT }}>
+                <RotateCcw className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-2 text-[11.5px] leading-relaxed" style={{ color: FAINT }}>※ 파트너 콘솔(예약·고객·대시보드 등)에 표시되는 용어입니다. 사업부별로 표현만 바뀝니다.</p>
+    </div>
+  );
+}
+
+export function BizUnitSettings() {
+  const { bizUnits, bizUnit } = useStore();
+  const biz = bizUnits.find((b) => b.id === bizUnit) || bizUnits[0];
+  const [tab, setTab] = useState("user");
+  const tabs = [["user", "유저 링크", Smartphone], ["partner", "파트너사 용어", Building2]];
+
+  return (
+    <div>
+      <PageHeader title="사업부별 세팅" sub={`${biz?.name || ""} · 사업부별 텍스트·용어 커스텀 — 구조는 그대로, 표시되는 단어만 변경`} />
+
+      <div className="mb-4 flex gap-1.5">
+        {tabs.map(([k, label, Icon]) => {
+          const on = tab === k;
+          return (
+            <button key={k} onClick={() => setTab(k)} className="flex items-center gap-1.5 px-3.5 py-2 text-[13px] font-bold outline-none transition focus-visible:ring-1"
+              style={{ borderRadius: RADIUS, background: on ? GOLD_SOFT : SURFACE, color: on ? GOLD_D : MUTE, border: "1px solid " + (on ? GOLD : LINE) }}>
+              <Icon className="h-4 w-4" /> {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === "user" ? <UserLinkTab bizUnit={bizUnit} /> : <PartnerTermTab bizUnit={bizUnit} />}
+    </div>
+  );
+}

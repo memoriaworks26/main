@@ -7,11 +7,10 @@ import { SERIF, SURFACE, LINE, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS
 import { Tag, Btn, Card, Table, PageHeader, CopyBtn, DateField, useTableSort } from "../ui.jsx";
 import { useStore, actions } from "../store.js";
 import { confirm } from "../confirm.jsx";
-import { toast } from "../toast.jsx";
 import * as D from "../data.js";
-import { CUSTOMER_COLS, customerSortValue, toCustomerRow, renderCustomerCell } from "../admin/customers.jsx";
+import { CUSTOMER_COLS, customerSortValue, toCustomerRow, renderCustomerCell, MemorialVideoCard } from "../admin/customers.jsx";
 import { matchQuery } from "../lib/util.js";
-import { usePartner, pad2, CASE_ROOMS, parseSlot, overlaps } from "./shared.jsx";
+import { usePartner, usePartnerTerm, pad2, CASE_ROOMS, parseSlot, overlaps, endDateFor, isOvernight, SlotText } from "./shared.jsx";
 import { TimeStepper, DragTimeline } from "./intake.jsx";
 
 export function PList({ onDetail, onNew }) {
@@ -88,6 +87,7 @@ export function PList({ onDetail, onNew }) {
 // 예약 상세 — 수정은 모달 없이 이 페이지 인라인으로 진행
 export function ReservDetail({ reserv, onBack }) {
   const { reservations } = useStore();
+  const tp = usePartnerTerm(); // 사업부별 파트너 용어
   const r = reservations.find((x) => x.id === (reserv && reserv.id)) || reserv || reservations[1];
   const d = D.RESERV_DETAIL;
   // 발행 최종본 파일명 — 발행 데이터와 매칭, 없으면 파일명 규칙으로 대체 표기
@@ -104,23 +104,36 @@ export function ReservDetail({ reserv, onBack }) {
   const { start: ns, end: ne } = parseSlot(f.slot);
   // 예약 추가와 동일한 시간 스테퍼용 — 슬롯 문자열 ↔ 시/분 동기화
   const sH = Math.floor(ns / 60), sM = ns % 60, eH = Math.floor(ne / 60), eM = ne % 60;
+  const overnight = isOvernight(f.slot);   // 종료 < 시작 → 익일 종료
+  const fEndDate = endDateFor(f.date, f.slot);
   const setSlot = (sh, sm, eh, em) => setF((s) => ({ ...s, slot: pad2(sh) + ":" + pad2(sm) + "~" + pad2(eh) + ":" + pad2(em) }));
   // 드래그 타임라인용 — 분 범위 ↔ 슬롯 동기화 + 같은 날·호실의 다른 예약(블락)
   const setRange = (lo, hi) => setF((s) => ({ ...s, slot: pad2(Math.floor(lo / 60)) + ":" + pad2(lo % 60) + "~" + pad2(Math.floor(hi / 60)) + ":" + pad2(hi % 60) }));
   const blocked = reservations.filter((x) => x.id !== r.id && x.room === f.room && x.date === f.date).map((x) => parseSlot(x.slot));
-  const timeInvalid = editing && ns >= ne && f.slot.includes("~");
+  const timeInvalid = editing && ns === ne && f.slot.includes("~"); // 길이 0만 무효(자정 넘김 허용)
+  // 충돌검사는 날짜를 절대 분으로 환산해 비교 — 같은 날 필터 없이 자정 넘김까지 대조
   const slotConflict = editing && !timeInvalid && reservations.some(
-    (x) => x.id !== r.id && x.room === f.room && x.date === f.date && overlaps({ id: r.id, slot: f.slot }, x)
+    (x) => x.id !== r.id && x.room === f.room && overlaps({ id: r.id, slot: f.slot, date: f.date, endDate: fEndDate }, x)
   );
   const canSave = !!f.deceased.trim() && !timeInvalid && !slotConflict;
 
   const save = async () => {
     if (!canSave) return;
     if (!(await confirm({ title: "예약 정보 저장", message: "변경한 예약 정보를 저장합니다." }))) return;
-    actions.updateReservation(r.id, { deceased: f.deceased.trim(), chief: f.chief.trim(), phone: f.phone.trim(), room: f.room, date: f.date, slot: f.slot.trim(), assignee: f.assignee.trim() });
+    actions.updateReservation(r.id, { deceased: f.deceased.trim(), chief: f.chief.trim(), phone: f.phone.trim(), room: f.room, date: f.date, slot: f.slot.trim(), endDate: fEndDate, assignee: f.assignee.trim() });
     setEditing(false);
   };
   const resend = () => { setSent(true); setTimeout(() => setSent(false), 1500); };
+
+  // 퇴실 처리 — 종료 시간을 '현재 시각'(분단위 버림·10분 스냅)으로 변경. 대시보드 호실카드와 동일 동작.
+  const checkout = async () => {
+    const now = new Date();
+    const nowStr = pad2(now.getHours()) + ":" + pad2(Math.floor(now.getMinutes() / 10) * 10);
+    const { startStr } = parseSlot(r.slot);
+    if (!(await confirm({ title: "퇴실 처리", message: `${r.deceased ? r.deceased + " · " : ""}${r.room} 예약을 퇴실 처리합니다.\n예약 종료 시간이 현재 시각(${nowStr})으로 변경됩니다.`, confirmLabel: "퇴실", danger: true }))) return;
+    const slot = startStr + "~" + nowStr;
+    actions.updateReservation(r.id, { slot, endDate: endDateFor(r.date, slot) });
+  };
 
   const inField = (label, key, extra = {}) => (
     <label className="flex items-center justify-between gap-3 text-[13px]">
@@ -133,7 +146,7 @@ export function ReservDetail({ reserv, onBack }) {
 
   return (
     <div>
-      <PageHeader title={r.deceased} sub={r.room + " · 보호자 " + r.chief} back={{ onClick: onBack, label: "뒤로" }}
+      <PageHeader title={r.deceased} sub={r.room + " · " + tp("guardian") + " " + r.chief} back={{ onClick: onBack, label: "뒤로" }}
         right={<div className="flex items-center gap-2">
           {editing
             ? <><Btn size="sm" variant="neutral" onClick={cancelEdit}>취소</Btn><Btn size="sm" onClick={save} disabled={!canSave}><Check className="h-3.5 w-3.5" /> 저장</Btn></>
@@ -144,17 +157,17 @@ export function ReservDetail({ reserv, onBack }) {
         <Card title="예약 정보">
           {editing ? (
             <div className="space-y-2.5">
-              {inField("반려동물", "deceased")}
-              {inField("보호자", "chief")}
+              {inField(tp("subject"), "deceased")}
+              {inField(tp("guardian"), "chief")}
               {inField("연락처", "phone", { inputMode: "tel" })}
               <label className="flex items-center justify-between gap-3 text-[13px]">
-                <span className="shrink-0" style={{ color: MUTE }}>호실</span>
+                <span className="shrink-0" style={{ color: MUTE }}>{tp("room")}</span>
                 <select value={f.room} onChange={(e) => setF((s) => ({ ...s, room: e.target.value }))}
                   className="w-44 px-2.5 text-[13px] outline-none focus-visible:ring-1"
                   style={{ height: 32, background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS, color: INK }}>
                   {CASE_ROOMS.map((n) => {
                     const blocked = n !== r.room && reservations.some(
-                      (x) => x.id !== r.id && x.room === n && x.date === f.date && overlaps({ id: r.id, slot: f.slot }, x)
+                      (x) => x.id !== r.id && x.room === n && overlaps({ id: r.id, slot: f.slot, date: f.date, endDate: fEndDate }, x)
                     );
                     return <option key={n} value={n} disabled={blocked}>{n}{blocked ? " (사용중)" : ""}</option>;
                   })}
@@ -177,42 +190,31 @@ export function ReservDetail({ reserv, onBack }) {
               </div>
               {(timeInvalid || slotConflict) && (
                 <div className="text-right text-[11px]" style={{ color: "#8a4b1c" }}>
-                  {timeInvalid ? "시작이 종료보다 늦습니다" : "해당 호실·일시에 이미 예약이 있습니다"}
+                  {timeInvalid ? "시작과 종료 시간이 같습니다" : "해당 호실·일시에 이미 예약이 있습니다"}
                 </div>
+              )}
+              {overnight && !timeInvalid && (
+                <div className="text-right text-[11px]" style={{ color: MUTE }}>익일 {pad2(eH)}:{pad2(eM)} 종료 ({fEndDate})</div>
               )}
               {inField("담당자", "assignee")}
               <div className="flex items-center justify-between text-[13px]"><span style={{ color: MUTE }}>영상</span><Tag s={r.status} /></div>
             </div>
           ) : (
             <div className="space-y-2 text-[13px]" style={{ color: INK }}>
-              <div className="flex justify-between"><span style={{ color: MUTE }}>반려동물</span><span style={{ fontFamily: SERIF, fontWeight: 700 }}>{r.deceased}</span></div>
-              <div className="flex justify-between"><span style={{ color: MUTE }}>보호자</span><span>{r.chief}</span></div>
-              <div className="flex justify-between"><span style={{ color: MUTE }}>연락처</span><span className="tabular-nums">{r.phone}</span></div>
-              <div className="flex justify-between"><span style={{ color: MUTE }}>호실·일정</span><span>{r.room} · {r.date} {r.slot}</span></div>
-              <div className="flex justify-between"><span style={{ color: MUTE }}>담당자</span><span>{r.assignee || "미배정"}</span></div>
-              <div className="flex items-center justify-between"><span style={{ color: MUTE }}>영상</span><Tag s={r.status} /></div>
+              <div className="flex gap-2"><span style={{ color: MUTE }}>{tp("subject")}</span><span style={{ fontFamily: SERIF, fontWeight: 700 }}>{r.deceased}</span></div>
+              <div className="flex gap-2"><span style={{ color: MUTE }}>{tp("guardian")}</span><span>{r.chief}</span></div>
+              <div className="flex gap-2"><span style={{ color: MUTE }}>연락처</span><span className="tabular-nums">{r.phone}</span></div>
+              <div className="flex gap-2"><span style={{ color: MUTE }}>{tp("room")}</span><span>{r.room}</span></div>
+              <div className="flex items-center gap-2"><span style={{ color: MUTE }}>일정</span><span className="inline-flex items-center">{r.date} <span className="ml-1 inline-flex items-center"><SlotText slot={r.slot} /></span></span></div>
+              <div className="flex items-center gap-2"><span style={{ color: MUTE }}>퇴실</span><span className="inline-flex items-center tabular-nums">{isOvernight(r.slot) && "익일 "}{parseSlot(r.slot).endStr || "—"}</span>
+                <button onClick={checkout} className="ml-auto px-3 py-1 text-[12px] font-semibold outline-none transition hover:bg-black/[.03] focus-visible:ring-1" style={{ borderRadius: 4, border: "1px solid " + LINE, color: MUTE }}>퇴실 처리</button>
+              </div>
+              <div className="flex gap-2"><span style={{ color: MUTE }}>담당자</span><span>{r.assignee || "미배정"}</span></div>
+              <div className="flex items-center gap-2"><span style={{ color: MUTE }}>영상</span><Tag s={r.status} /></div>
             </div>
           )}
         </Card>
-        {!editing && (
-        <Card title="추모영상">
-          <div className="relative flex items-center justify-center" style={{ aspectRatio: "16/9", background: "#2a323d", borderRadius: RADIUS }}>
-            <span className="text-[12px]" style={{ color: "#aab2bf" }}>{r.status === "published" ? "발행 완료" : r.status === "review" ? "접수 대기" : "제작 중"}</span>
-          </div>
-          {r.status === "published" ? (
-            <div className="mt-2.5 flex items-center justify-between gap-2">
-              <span className="min-w-0 truncate text-[11.5px] tabular-nums" style={{ color: MUTE, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{videoFile}</span>
-              <Btn size="sm" onClick={() => toast(videoFile + " 다운로드를 시작합니다")}><Download className="h-3.5 w-3.5" /> 다운로드</Btn>
-            </div>
-          ) : (
-            <div className="mt-2.5 flex items-center justify-between gap-2">
-              <span className="text-[11.5px]" style={{ color: FAINT }}>발행 완료 후 다운로드할 수 있습니다.</span>
-              <Btn size="sm" variant="neutral" disabled><Download className="h-3.5 w-3.5" /> 다운로드</Btn>
-            </div>
-          )}
-          <p className="mt-2 text-[11px]" style={{ color: FAINT }}>※ 영상 편집·컨펌은 관리자(HQ)에서 진행됩니다.</p>
-        </Card>
-        )}
+        {!editing && <MemorialVideoCard status={r.status} file={videoFile} requestedAt={r.requestedAt} />}
       </div>
 
       <div className="mt-4">
@@ -234,9 +236,9 @@ export function ReservDetail({ reserv, onBack }) {
         <Card title="📝 보호자 입력 정보 (유저 입력 폼 수신)">
           <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-[13px]" style={{ color: INK }}>
             {d.form.map((item, i) => (
-              <div key={i} className="flex justify-between gap-3" style={{ gridColumn: item.value && item.value.length > 18 ? "span 2" : undefined }}>
+              <div key={i} className="flex gap-2" style={{ gridColumn: item.value && item.value.length > 18 ? "span 2" : undefined }}>
                 <span className="shrink-0" style={{ color: MUTE }}>{item.label}</span>
-                <span className="text-right">{item.value}</span>
+                <span>{item.value}</span>
               </div>
             ))}
           </div>

@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, STATUS, RADIUS } from "../theme.js";
 import { Btn, PageHeader } from "../ui.jsx";
-import { useStore, actions } from "../store.js";
+import { useStore, actions, bizPartners } from "../store.js";
 import { confirm } from "../confirm.jsx";
 import * as D from "../data.js";
 import { matchQuery } from "../lib/util.js";
@@ -114,7 +114,9 @@ function InstantAddClip({ partner, onAdded }) {
 }
 
 export function Templates() {
-  const { templates: storeTpls, content, partners: allPartners } = useStore();
+  const s = useStore();
+  const { templates: storeTpls, content } = s;
+  const allPartners = bizPartners(s); // 현재 사업부 파트너만
   const [tpls, setTpls] = useState(storeTpls); // 저장 전 초안 (전체 템플릿 맵)
   const dirty = JSON.stringify(tpls) !== JSON.stringify(storeTpls);
   const saveTpls = () => actions.replaceTemplates(tpls);

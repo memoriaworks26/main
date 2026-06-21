@@ -17,6 +17,8 @@ export function StepBody({ step, st }) {
   // 배경 음악 미리듣기 — 실제 mp3 자산이 없는 목업이라 WebAudio로 잔잔한 톤을 합성해 소리가 나게 한다.
   // (본운영: b.src(실제 파일)로 <audio> 재생으로 교체)
   const [playingBgm, setPlayingBgm] = useState(null);
+  const [openPrivacy, setOpenPrivacy] = useState(false);   // 동의 0단계 — 개인정보 상세 펼침
+  const [openMarketing, setOpenMarketing] = useState(false); // 동의 0단계 — 마케팅 상세 펼침
   const audioCtxRef = useRef(null);
   const oscRef = useRef([]);
   const stopPreview = () => {
@@ -54,25 +56,32 @@ export function StepBody({ step, st }) {
   if (step === 0)
     return (
       <div>
-        <Title sub="소중한 기억을 영상으로 담기 위해 아래 동의가 필요합니다.">개인정보 활용 동의</Title>
+        <Title sub={st.T.sub0}>개인정보 활용 동의</Title>
         <div className="space-y-4 text-[12.5px] leading-relaxed" style={{ color: MUTE }}>
           {/* 1. 정보보호(개인정보) 수집·이용 — 필수 */}
           <div>
             <div className="px-4 py-3" style={{ background: "#f6f3ec", borderRadius: RADIUS, border: "1px solid " + LINE }}>
-              <div className="mb-1.5 flex items-center gap-1.5 font-bold" style={{ color: INK }}>
+              <div className="flex items-center gap-1.5 font-bold" style={{ color: INK }}>
                 개인정보 수집·이용 동의 <span className="px-1.5 py-[1px] text-[10px] font-bold" style={{ background: GOLD_D, color: "#fff", borderRadius: 3 }}>필수</span>
-                <button onClick={st.openPolicy} className="ml-auto text-[11.5px] font-semibold underline outline-none" style={{ color: GOLD_D }}>전문 보기</button>
+                <button onClick={() => setOpenPrivacy((v) => !v)} className="ml-auto text-[11.5px] font-semibold underline outline-none" style={{ color: GOLD_D }}>{openPrivacy ? "접기" : "펼쳐보기"}</button>
               </div>
-              <div style={{ whiteSpace: "pre-line" }}>{st.company?.consentPrivacy}</div>
-              {/* 처리·위탁 주체(정보 관리 주체) 고지 — 장례식장 수집 → 메모리아웍스 제작 위탁 */}
-              <div className="mt-2 pt-2" style={{ borderTop: "1px dashed " + LINE2 }}>
-                <p><b style={{ color: INK }}>처리·위탁</b> {st.link?.partnerName || "장례식장"}이(가) 수집하며, 추모영상 제작을 위해 <b style={{ color: INK }}>메모리아웍스</b>에 처리 위탁됩니다</p>
-                <p><b style={{ color: INK }}>제3자 제공</b> 법령에 근거한 경우를 제외하고 제3자에게 제공하지 않습니다</p>
-                <p>
-                  <b style={{ color: INK }}>개인정보 보호책임자</b> 메모리아웍스 고객센터
-                  {st.company?.csPhone ? <span> · {st.company.csPhone}</span> : null}
-                </p>
-              </div>
+              {openPrivacy && (
+                <div className="mt-2">
+                  <div className="flex justify-end">
+                    <button onClick={st.openPolicy} className="text-[11.5px] font-semibold underline outline-none" style={{ color: GOLD_D }}>전문 보기</button>
+                  </div>
+                  <div style={{ whiteSpace: "pre-line" }}>{st.company?.consentPrivacy}</div>
+                  {/* 처리·위탁 주체(정보 관리 주체) 고지 — 장례식장 수집 → 메모리아웍스 제작 위탁 */}
+                  <div className="mt-2 pt-2" style={{ borderTop: "1px dashed " + LINE2 }}>
+                    <p><b style={{ color: INK }}>처리·위탁</b> {st.link?.partnerName || "장례식장"}이(가) 수집하며, 추모영상 제작을 위해 <b style={{ color: INK }}>메모리아웍스</b>에 처리 위탁됩니다</p>
+                    <p><b style={{ color: INK }}>제3자 제공</b> 법령에 근거한 경우를 제외하고 제3자에게 제공하지 않습니다</p>
+                    <p>
+                      <b style={{ color: INK }}>개인정보 보호책임자</b> 메모리아웍스 고객센터
+                      {st.company?.csPhone ? <span> · {st.company.csPhone}</span> : null}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
             <button onClick={() => st.setAgreed((v) => !v)} className="mt-2 flex w-full items-center gap-2 text-left text-[13px] font-semibold outline-none" style={{ color: INK }}>
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm" style={{ background: st.agreed ? GOLD : "#fff", border: "1.5px solid " + (st.agreed ? GOLD : LINE2) }}>
@@ -88,11 +97,16 @@ export function StepBody({ step, st }) {
           {/* 2. 마케팅 활용 — 선택 (활용 내용 구체적으로 명시) */}
           <div>
             <div className="px-4 py-3" style={{ background: "#f6f3ec", borderRadius: RADIUS, border: "1px solid " + LINE }}>
-              <div className="mb-1.5 flex items-center gap-1.5 font-bold" style={{ color: INK }}>
+              <div className="flex items-center gap-1.5 font-bold" style={{ color: INK }}>
                 마케팅·홍보 활용 동의 <span className="px-1.5 py-[1px] text-[10px] font-bold" style={{ background: "#eceef0", color: "#5a6470", borderRadius: 3 }}>선택</span>
+                <button onClick={() => setOpenMarketing((v) => !v)} className="ml-auto text-[11.5px] font-semibold underline outline-none" style={{ color: GOLD_D }}>{openMarketing ? "접기" : "펼쳐보기"}</button>
               </div>
-              <div style={{ whiteSpace: "pre-line" }}>{st.company?.consentMarketing}</div>
-              <p className="mt-2" style={{ color: FAINT }}>※ 선택 항목으로, 동의하지 않아도 추모영상 제작·이용에는 영향이 없습니다.</p>
+              {openMarketing && (
+                <div className="mt-2">
+                  <div style={{ whiteSpace: "pre-line" }}>{st.company?.consentMarketing}</div>
+                  <p className="mt-2" style={{ color: FAINT }}>※ 선택 항목으로, 동의하지 않아도 추모영상 제작·이용에는 영향이 없습니다.</p>
+                </div>
+              )}
             </div>
             <button onClick={() => st.setMarketingAgreed((v) => !v)} className="mt-2 flex w-full items-center gap-2 text-left text-[13px] font-semibold outline-none" style={{ color: INK }}>
               <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm" style={{ background: st.marketingAgreed ? GOLD : "#fff", border: "1.5px solid " + (st.marketingAgreed ? GOLD : LINE2) }}>
@@ -110,7 +124,7 @@ export function StepBody({ step, st }) {
     const warn = "#b06030";
     return (
       <div>
-        <Title sub="추억 사진·영상을 올리고, 카드를 끌어 순서를 바꾸고 전환 효과를 정하세요. (최대 20개 · 100MB)">소스 업로드 · 장면 전환</Title>
+        <Title sub={st.T.sub2}>소스 업로드 · 장면 전환</Title>
         <div className="mb-3">
           <div className="mb-1 flex justify-between text-[11px]" style={{ color: MUTE }}>
             <span>사용 용량</span>
@@ -181,23 +195,23 @@ export function StepBody({ step, st }) {
   if (step === 1)
     return (
       <div>
-        <Title sub="추모영상에 쓸 독사진 3장을 올려주세요. 한 장은 타이틀, 나머지 2장은 AI 추억 영상이 됩니다.">AI 변환 · 독사진 3장</Title>
+        <Title sub={st.T.sub1}>{st.T.title1}</Title>
 
         {/* 반려동물 이름 — 타이틀(영정) 자막에 그대로 들어감 */}
         <div className="mb-4">
           <label className="block">
-            <span className="mb-1 block text-[12.5px] font-bold" style={{ color: INK }}>반려동물 이름 <span style={{ color: GOLD_D }}>*</span></span>
-            <input value={st.petName} onChange={(e) => st.setPetName(e.target.value)} placeholder="예: 콩이" maxLength={20}
+            <span className="mb-1 block text-[12.5px] font-bold" style={{ color: INK }}>{st.T.petNameLabel} <span style={{ color: GOLD_D }}>*</span></span>
+            <input value={st.petName} onChange={(e) => st.setPetName(e.target.value)} maxLength={20}
               className="w-full px-3 text-[15px] outline-none"
               style={{ height: 44, background: SURFACE, border: "1.5px solid " + (st.petName.trim() ? LINE : GOLD), borderRadius: RADIUS, color: INK, fontFamily: SERIF, fontWeight: 700 }} />
           </label>
-          <p className="mt-1 text-[11px]" style={{ color: FAINT }}>타이틀(영정) 자막에 그대로 표시됩니다.</p>
+          <p className="mt-1 text-[11px]" style={{ color: FAINT }}>{st.T.petNameHint}</p>
         </div>
 
         {/* 가이드 — 상단(3장 전체에 적용) */}
-        <PhotoExampleGuide />
+        <PhotoExampleGuide good={st.photos.good} bad={st.photos.bad} />
         <div className="mb-3 px-3 py-2 text-[11px] leading-relaxed" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
-          💡 <b style={{ color: INK }}>잘 나온 독사진</b>일수록 결과가 좋아요 — 아이만 또렷하게, 얼굴이 정면. (추억 슬라이드용 사진·영상은 다음 ‘소스 업로드’ 단계)
+          💡 {st.T.aiGuide}
         </div>
 
         <div className="mb-1.5 flex items-center gap-1.5 text-[12.5px] font-bold" style={{ color: INK }}>
@@ -256,7 +270,7 @@ export function StepBody({ step, st }) {
   if (step === 3)
     return (
       <div>
-        <Title sub="배경 음악을 고르면 미리듣기가 재생됩니다.">배경 음악</Title>
+        <Title sub={st.T.sub3}>배경 음악</Title>
         <div className="space-y-2">
           {D.BGM.map((b, i) => {
             const on = st.bgm === i;
@@ -286,14 +300,14 @@ export function StepBody({ step, st }) {
   if (step === 4)
     return (
       <div>
-        <Title sub="떠나보낸 아이에게 전하고 싶은 마음을 담아 주세요. 편지는 배경음과 함께 영상에 표시됩니다.">편지 작성</Title>
+        <Title sub={st.T.sub4}>편지 작성</Title>
         {/* 상단 — 우리 처음 만난 날 · 무지개다리 건넌 날. 편지 마지막에 크게 들어갑니다. */}
         <div className="mb-3 grid grid-cols-2 gap-2">
-          <DateField label="우리 처음 만난 날" value={st.metDate} onChange={st.setMetDate} />
-          <DateField label="무지개다리 건넌 날" value={st.partDate} onChange={st.setPartDate} />
+          <DateField label={st.T.metDateLabel} value={st.metDate} onChange={st.setMetDate} />
+          <DateField label={st.T.partDateLabel} value={st.partDate} onChange={st.setPartDate} />
         </div>
         <textarea value={st.letter} onChange={(e) => st.setLetter(e.target.value)} rows={7} maxLength={300}
-          placeholder={"받는이 (예: 내 사랑 몽이에게)\n\n전하고 싶은 마음을 적어주세요.\n\n글쓴이 (예: 엄마가)"}
+          placeholder={st.T.letterPlaceholder}
           className="w-full resize-none p-3 text-[13px] leading-relaxed outline-none"
           style={{ background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS, color: INK, fontFamily: SERIF }} />
         <div className="mt-1 text-right text-[11px]" style={{ color: FAINT }}>{st.letter.length} / 300</div>
@@ -303,7 +317,7 @@ export function StepBody({ step, st }) {
   if (step === 5)
     return (
       <div>
-        <Title sub="제작될 추모영상을 미리 확인합니다. (서버 렌더 영상 재생)">미리보기</Title>
+        <Title sub={st.T.sub5}>미리보기</Title>
         <div className="relative flex items-center justify-center" style={{ aspectRatio: "16/9", background: "#2a323d", borderRadius: RADIUS }}>
           <Play className="h-10 w-10 text-white" style={{ opacity: 0.85 }} fill="#fff" />
           <span className="absolute bottom-2 left-2 px-1.5 py-[2px] text-[9px] font-bold tracking-wider text-white" style={{ background: "rgba(0,0,0,.4)", borderRadius: 2 }}>16:9 · 1080p</span>

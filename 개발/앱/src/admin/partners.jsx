@@ -42,8 +42,9 @@ function LogoInput({ value, onChange }) {
 }
 
 function PartnerRegisterModal({ open, onClose }) {
-  const { partners } = useStore();
-  const blank = { bizUnit: D.BIZ_UNITS.find((b) => b.active)?.name || "", idCode: "", name: "", region: "", rooms: "", bizNo: "", ceo: "", address: "", bizType: "", bizItem: "", manager: "", phone: "", email: "", logo: "", memo: "" };
+  const { partners, bizUnits, bizUnit } = useStore();
+  const bizName = bizUnits.find((b) => b.id === bizUnit)?.name || "";  // 신규 파트너는 현재 사업부로 등록됨
+  const blank = { idCode: "", name: "", region: "", rooms: "", bizNo: "", ceo: "", address: "", bizType: "", bizItem: "", manager: "", phone: "", email: "", logo: "", memo: "" };
   const [f, setF] = useState(blank);
   useEffect(() => { if (open) setF(blank); /* eslint-disable-next-line */ }, [open]);
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
@@ -94,9 +95,7 @@ function PartnerRegisterModal({ open, onClose }) {
           </div>
           <label className="block">
             <span className="text-[12px] font-semibold" style={{ color: MUTE }}>사업부</span>
-            <select value={f.bizUnit} onChange={set("bizUnit")} className="mt-1 w-full px-3 text-[13px] outline-none" style={{ height: 34, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }}>
-              {D.BIZ_UNITS.filter((b) => b.active).map((b) => <option key={b.id}>{b.name}</option>)}
-            </select>
+            <div className="mt-1 flex items-center px-3 text-[13px]" style={{ height: 34, background: "#f6f3ec", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }}>{bizName}<span className="ml-1.5 text-[11.5px]" style={{ color: FAINT }}>· 현재 선택된 사업부로 등록</span></div>
           </label>
           {field("파트너사명 *", "name")}
           <label className="block">
@@ -168,7 +167,7 @@ function PartnerDetail({ partner: p, onBack, go }) {
   const cnt = (s) => rs.filter((r) => r.status === s).length;
   const online = dv.filter((d) => d.status !== "offline").length;
   const row = (label, val) => (
-    <div className="flex justify-between text-[13px]"><span style={{ color: MUTE }}>{label}</span><span style={{ color: INK }}>{val}</span></div>
+    <div className="flex gap-2 text-[13px]"><span style={{ color: MUTE }}>{label}</span><span style={{ color: INK }}>{val}</span></div>
   );
   // 인라인 편집 입력 행 (라벨 + 인풋) — 별도 모달 없이 이 페이지에서 수정
   const editRow = (label, key, extra = {}) => (
@@ -262,7 +261,7 @@ function PartnerDetail({ partner: p, onBack, go }) {
           {settle ? (
             <div className="space-y-2">
               {row("이번달 건수", settle.count + "건")}{row("청구", won(settle.billed))}{row("입금", won(settle.paid))}
-              <div className="flex items-center justify-between text-[13px]"><span style={{ color: MUTE }}>미수금</span><span style={{ color: settle.unpaid ? STATUS.review.c : INK }}>{won(settle.unpaid)}</span></div>
+              <div className="flex items-center gap-2 text-[13px]"><span style={{ color: MUTE }}>미수금</span><span style={{ color: settle.unpaid ? STATUS.review.c : INK }}>{won(settle.unpaid)}</span></div>
             </div>
           ) : <div className="text-[12.5px]" style={{ color: FAINT }}>정산 내역이 없습니다.</div>}
         </Card>
@@ -272,7 +271,8 @@ function PartnerDetail({ partner: p, onBack, go }) {
 }
 
 export function PartnersManage({ go, onLoginAsPartner }) {
-  const { partners } = useStore();
+  const { partners: allPartners, bizUnit, bizUnits } = useStore();
+  const partners = allPartners.filter((p) => p.bizUnit === bizUnit); // 현재 사업부 소속만
   const [sel, setSel] = useState(null);
   const [adding, setAdding] = useState(false);
   const [statusF, setStatusF] = useState("all"); // all | active | inactive
@@ -299,9 +299,13 @@ export function PartnersManage({ go, onLoginAsPartner }) {
 
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
-          {D.BIZ_UNITS.map((b) => (
-            <span key={b.id} className="px-2.5 py-1 text-[12px] font-semibold" style={{ borderRadius: RADIUS, background: b.active ? GOLD_SOFT : "transparent", color: b.active ? GOLD_D : FAINT, border: "1px solid " + (b.active ? GOLD_SOFT : LINE) }}>{b.name}{b.active ? ` · ${b.partners}개` : ""}</span>
-          ))}
+          {bizUnits.map((b) => {
+            const on = b.id === bizUnit;
+            const c = allPartners.filter((p) => p.bizUnit === b.id).length;
+            return (
+              <button key={b.id} onClick={() => actions.setBizUnit(b.id)} className="px-2.5 py-1 text-[12px] font-semibold outline-none transition focus-visible:ring-1" style={{ borderRadius: RADIUS, background: on ? GOLD_SOFT : "transparent", color: on ? GOLD_D : FAINT, border: "1px solid " + (on ? GOLD_SOFT : LINE) }}>{b.name} · {c}개</button>
+            );
+          })}
         </div>
         {/* 활성/비활성 필터 */}
         <div className="flex items-center gap-1.5">

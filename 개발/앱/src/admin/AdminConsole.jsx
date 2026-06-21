@@ -2,12 +2,12 @@
 // 각 화면 컴포넌트는 admin/ 하위 도메인 파일에서 import. (분리 전 admin.jsx 단일 파일)
 import React, { useState } from "react";
 import {
-  ChevronDown, Clapperboard, ClipboardList, Download, FolderOpen, HardDrive, KeyRound, LayoutGrid, LayoutTemplate, LogOut, MonitorPlay, Scissors, Settings, ShieldCheck, UserCircle, Users2, Wallet,
+  Check, ChevronDown, Clapperboard, ClipboardList, Download, FolderOpen, HardDrive, KeyRound, LayoutGrid, LayoutTemplate, LogOut, MonitorPlay, Plus, Scissors, Settings, ShieldCheck, UserCircle, Users2, Wallet, Building2,
 } from "lucide-react";
-import { NAVY, BG, SURFACE, LINE, GOLD, GOLD_SOFT, INK, MUTE, FAINT, NAV_LINE } from "../theme.js";
+import { NAVY, BG, SURFACE, LINE, LINE2, GOLD, GOLD_SOFT, GOLD_D, INK, MUTE, FAINT, NAV_LINE } from "../theme.js";
 import { Logo, NavItem, NavSection } from "../ui.jsx";
 import { toast } from "../toast.jsx";
-import { useStore } from "../store.js";
+import { useStore, actions } from "../store.js";
 import * as D from "../data.js";
 import { Dashboard } from "./overview.jsx";
 import { PartnersManage } from "./partners.jsx";
@@ -18,7 +18,7 @@ import { Templates } from "./templates.jsx";
 import { Settlement } from "./settlement.jsx";
 import { SettingsView, MySettings, AccountsManage } from "./settings.jsx";
 import { Storage, Signage, Downloads } from "./system.jsx";
-import { FormBuilder } from "./forms.jsx";
+import { BizUnitSettings } from "./forms.jsx";
 
 const ICON = { size: "h-4 w-4", sw: 1.9 };
 
@@ -55,6 +55,55 @@ function UserChip({ account, accounts, onSwitch }) {
   );
 }
 
+// 사업부 선택기 — 좌측 로고 아래(최상위 테넌트 전환·추가). 선택 시 전 데이터가 그 사업부로 스코핑.
+function BizUnitPicker() {
+  const { bizUnits, bizUnit, partners } = useStore();
+  const cur = bizUnits.find((b) => b.id === bizUnit) || bizUnits[0];
+  const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const count = (id) => partners.filter((p) => p.bizUnit === id).length;
+  const add = () => { const n = name.trim(); if (!n) return; actions.addBizUnit(n); setName(""); setAdding(false); setOpen(false); toast(n + " 사업부를 추가했습니다"); };
+  return (
+    <div className="relative px-3 py-3" style={{ borderBottom: "1px solid " + NAV_LINE }}>
+      <div className="mb-1.5 flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-wide" style={{ color: "#6b7787" }}><Building2 className="h-3 w-3" /> 사업부</div>
+      <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between rounded px-2.5 py-2 outline-none transition" style={{ background: "rgba(255,255,255,.06)", border: "1px solid " + NAV_LINE }}>
+        <span className="truncate text-[13px] font-bold" style={{ color: "#eef0f3" }}>{cur?.name}</span>
+        <ChevronDown className="h-4 w-4 shrink-0" style={{ color: "#8a95a3", transform: open ? "rotate(180deg)" : "none" }} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-20" onClick={() => { setOpen(false); setAdding(false); }} />
+          <div className="absolute left-3 right-3 z-30 mt-1 overflow-hidden rounded" style={{ background: "#fff", border: "1px solid " + LINE, boxShadow: "0 12px 32px -10px rgba(0,0,0,.45)" }}>
+            <div className="max-h-56 overflow-y-auto">
+              {bizUnits.map((b) => {
+                const on = b.id === bizUnit;
+                return (
+                  <button key={b.id} onClick={() => { actions.setBizUnit(b.id); setOpen(false); }} className="flex w-full items-center gap-2 px-3 py-2 text-left outline-none transition hover:bg-[#f6f3ec]" style={{ background: on ? GOLD_SOFT : "#fff" }}>
+                    <Check className="h-3.5 w-3.5 shrink-0" style={{ color: on ? GOLD_D : "transparent" }} />
+                    <span className="flex-1 truncate text-[13px]" style={{ color: INK, fontWeight: on ? 700 : 500 }}>{b.name}</span>
+                    <span className="text-[11px] tabular-nums" style={{ color: FAINT }}>{count(b.id)}개</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="border-t" style={{ borderColor: LINE }}>
+              {adding ? (
+                <div className="flex items-center gap-1.5 px-2 py-2">
+                  <input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); if (e.key === "Escape") setAdding(false); }} placeholder="새 사업부 이름" className="w-full px-2 py-1 text-[12.5px] outline-none" style={{ border: "1px solid " + LINE2, borderRadius: 4, color: INK }} />
+                  <button onClick={add} className="shrink-0 px-2.5 py-1 text-[12px] font-bold text-white" style={{ background: GOLD, borderRadius: 4 }}>추가</button>
+                </div>
+              ) : (
+                <button onClick={() => setAdding(true)} className="flex w-full items-center gap-1.5 px-3 py-2 text-[12.5px] font-semibold outline-none transition hover:bg-[#f6f3ec]" style={{ color: GOLD_D }}><Plus className="h-3.5 w-3.5" /> 사업부 추가</button>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function AdminConsole({ onOpenEditor, onLoginAsPartner }) {
   const { accounts } = useStore();
   const [accountId, setAccountId] = useState(D.ADMIN_ACCOUNTS[0].id); // 기본: 마스터 관리자
@@ -81,6 +130,7 @@ export default function AdminConsole({ onOpenEditor, onLoginAsPartner }) {
             <Logo height={30} />
           </div>
         </div>
+        <BizUnitPicker />
         <UserChip account={account} accounts={accounts} onSwitch={switchAccount} />
         <nav className="flex-1 overflow-y-auto px-2.5 pb-4">
           {can("downloads") && <>
@@ -92,7 +142,7 @@ export default function AdminConsole({ onOpenEditor, onLoginAsPartner }) {
           {can("overview") && <NavItem icon={<LayoutGrid className={ICON.size} strokeWidth={ICON.sw} />} label="대시보드" active={activePage === "overview"} onClick={() => go("overview")} />}
           {can("partners") && <NavItem icon={<Users2 className={ICON.size} strokeWidth={ICON.sw} />} label="파트너사 관리" active={activePage === "partners"} onClick={() => go("partners")} />}
           {can("customers") && <NavItem icon={<UserCircle className={ICON.size} strokeWidth={ICON.sw} />} label="고객관리" active={activePage === "customers"} onClick={() => go("customers")} />}
-          {can("forms") && <NavItem icon={<ClipboardList className={ICON.size} strokeWidth={ICON.sw} />} label="유저 입력 폼" active={activePage === "forms"} onClick={() => go("forms")} />}
+          {can("forms") && <NavItem icon={<ClipboardList className={ICON.size} strokeWidth={ICON.sw} />} label="사업부별 세팅" active={activePage === "forms"} onClick={() => go("forms")} />}
 
           {(can("production") || can("secondedit") || can("templates") || can("content")) && <NavSection>추모영상 제작</NavSection>}
           {can("production") && <NavItem icon={<Clapperboard className={ICON.size} strokeWidth={ICON.sw} />} label="편집·컨펌" active={activePage === "production"} onClick={() => go("production")} />}
@@ -136,7 +186,7 @@ export default function AdminConsole({ onOpenEditor, onLoginAsPartner }) {
           {activePage === "content" && <ContentHub />}
           {activePage === "settlement" && <Settlement />}
           {activePage === "accounts" && <AccountsManage account={account} />}
-          {activePage === "forms" && <FormBuilder />}
+          {activePage === "forms" && <BizUnitSettings />}
           {activePage === "settings" && <SettingsView account={account} />}
           {activePage === "mysettings" && <MySettings account={account} />}
           {activePage === "storage" && <Storage />}

@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { SERIF, SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS } from "../theme.js";
 import { Tag, Btn, PageHeader } from "../ui.jsx";
-import { useStore, actions } from "../store.js";
+import { useStore, actions, bizPartners, bizReservations } from "../store.js";
 import { confirm } from "../confirm.jsx";
 import { matchQuery } from "../lib/util.js";
 import * as D from "../data.js";
@@ -104,7 +104,9 @@ const PROD_TABS = [
 ];
 
 export function Production({ onOpenEditor, account }) {
-  const { reservations, partners } = useStore(); // 목 DB — 상태·담당자 전 화면 공유
+  const s = useStore(); // 목 DB — 상태·담당자 전 화면 공유
+  const reservations = bizReservations(s); // 현재 사업부 예약만
+  const partners = bizPartners(s);
   const [tab, setTab] = useState("review");
   const [pf, setPf] = useState("all");
   const [review, setReview] = useState(null); // 검수 창에 띄운 예약(컨펌 대기 · 렌더 완료 건)
@@ -228,7 +230,11 @@ const SE_TABS = [
 ];
 
 export function SecondEdit({ onOpenEditor, account }) {
-  const { reservations, secondJobs: jobs, partners } = useStore(); // 목 DB — 1차 발행 건이 후보로 전파
+  const s = useStore(); // 목 DB — 1차 발행 건이 후보로 전파
+  const reservations = bizReservations(s); // 현재 사업부 예약만
+  const partners = bizPartners(s);
+  const resvIds = new Set(reservations.map((r) => r.id));
+  const jobs = s.secondJobs.filter((j) => resvIds.has(j.reservId)); // 사업부 예약의 2차 가공 잡만
   const [tab, setTab] = useState("pending");
   const [picking, setPicking] = useState(false);
   const [q, setQ] = useState("");

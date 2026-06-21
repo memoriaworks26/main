@@ -9,7 +9,7 @@ import { RoomCard } from "../roomcard.jsx";
 import { useStore, actions } from "../store.js";
 import { confirm } from "../confirm.jsx";
 import { CUSTOMER_COLS, customerSortValue, toCustomerRow, renderCustomerCell } from "../admin/customers.jsx";
-import { usePartner, pad2, minToStr, CASE_ROOMS, parseSlot, TIMELINE_START, TIMELINE_END, BLOCK_COLOR, hasRoomConflict } from "./shared.jsx";
+import { usePartner, usePartnerTerm, pad2, minToStr, CASE_ROOMS, parseSlot, TIMELINE_START, TIMELINE_END, BLOCK_COLOR, hasRoomConflict, endDateFor, isOvernight, slotLabel, SlotText } from "./shared.jsx";
 import { TimeStepper } from "./intake.jsx";
 
 function SlotEditCell({ r, rows }) {
@@ -24,20 +24,20 @@ function SlotEditCell({ r, rows }) {
 
   const newSlot = te.startStr + "~" + te.endStr;
   const { start: ns, end: ne } = parseSlot(newSlot);
-  const timeInvalid = ns >= ne;
-  const timeConflict = !timeInvalid && hasRoomConflict(rows, r.room, newSlot, r.id);
+  const timeInvalid = ns === ne; // 길이 0만 무효(자정 넘김 허용)
+  const timeConflict = !timeInvalid && hasRoomConflict(rows, r.room, newSlot, r.id, r.date);
   const canSave = !timeInvalid && !timeConflict;
 
   const save = () => {
     if (!canSave) return;
-    actions.updateReservation(r.id, { slot: newSlot });
+    actions.updateReservation(r.id, { slot: newSlot, endDate: endDateFor(r.date, newSlot) });
     setEditing(false);
   };
 
   if (!editing) {
     return (
       <div className="flex items-center gap-1.5">
-        <span className="tabular-nums" style={{ color: MUTE }}>{r.slot}</span>
+        <SlotText slot={r.slot} className="tabular-nums" style={{ color: MUTE }} />
         <button onClick={startEdit} className="transition hover:opacity-60" style={{ color: FAINT }}>
           <Pencil className="h-3 w-3" />
         </button>
@@ -52,7 +52,8 @@ function SlotEditCell({ r, rows }) {
         <span style={{ color: FAINT }}>~</span>
         <TimeInput value={te.endStr} onChange={(v) => setTe((s) => ({ ...s, endStr: v }))} />
       </div>
-      {timeInvalid && <span className="text-[10.5px]" style={{ color: MUTE }}>시작 ≥ 종료</span>}
+      {timeInvalid && <span className="text-[10.5px]" style={{ color: MUTE }}>시작 = 종료</span>}
+      {!timeInvalid && isOvernight(newSlot) && <span className="text-[10.5px]" style={{ color: MUTE }}>익일 {te.endStr} 종료</span>}
       {timeConflict && <span className="text-[10.5px]" style={{ color: MUTE }}>다른 예약과 겹침</span>}
       <div className="flex items-center gap-2">
         <button onClick={() => setEditing(false)} className="text-[11.5px] font-semibold transition hover:opacity-70" style={{ color: MUTE }}>취소</button>
@@ -65,13 +66,13 @@ function SlotEditCell({ r, rows }) {
     </div>
   );
 }
-function RoomSelect({ value, rows, slot, id, onChange }) {
+function RoomSelect({ value, rows, slot, id, date, onChange }) {
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)}
       className="cursor-pointer px-2 py-1 text-[12px] font-semibold tabular-nums outline-none transition hover:bg-black/[.03]"
       style={{ background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK, width: 100 }}>
       {CASE_ROOMS.map((n) => {
-        const blocked = rows && slot && n !== value && hasRoomConflict(rows, n, slot, id);
+        const blocked = rows && slot && n !== value && hasRoomConflict(rows, n, slot, id, date);
         return (
           <option key={n} value={n} disabled={blocked}>
             {n}{blocked ? " (사용중)" : ""}
@@ -94,6 +95,7 @@ function TimeInput({ value, onChange }) {
 }
 
 function TodayTimeline({ rows, onDetail }) {
+  const tp = usePartnerTerm(); // 사업부별 파트너 용어
   const [openId, setOpenId] = useState(null);
   const [timeEdit, setTimeEdit] = useState({ startStr: "", endStr: "" });
   const [drag, setDrag] = useState(null); // { id, mode:"move"|"start"|"end", room, origStart, origEnd, startX, trackW, moved, preview:{start,end} }
@@ -119,7 +121,8 @@ function TodayTimeline({ rows, onDetail }) {
   };
 
   const saveTime = (r) => {
-    actions.updateReservation(r.id, { slot: timeEdit.startStr + "~" + timeEdit.endStr });
+    const slot = timeEdit.startStr + "~" + timeEdit.endStr;
+    actions.updateReservation(r.id, { slot, endDate: endDateFor(r.date, slot) });
     setOpenId(null);
   };
 
@@ -130,7 +133,7 @@ function TodayTimeline({ rows, onDetail }) {
     const track = e.currentTarget.closest("[data-track]");
     if (!track) return;
     const { start, end } = parseSlot(r.slot);
-    setDrag({ id: r.id, mode, room: r.room, origStart: start, origEnd: end,
+    setDrag({ id: r.id, mode, room: r.room, date: r.date, origStart: start, origEnd: end,
       startX: e.clientX, trackW: track.getBoundingClientRect().width, moved: false, preview: { start, end, room: r.room } });
   };
 
@@ -166,7 +169,7 @@ function TodayTimeline({ rows, onDetail }) {
       if (!d.preview) return;
       const newSlot = slotOf(d.preview.start, d.preview.end);
       const room = d.preview.room;
-      const ok = d.preview.start < d.preview.end && !hasRoomConflict(rows, room, newSlot, d.id);
+      const ok = d.preview.start < d.preview.end && !hasRoomConflict(rows, room, newSlot, d.id, d.date);
       const changed = newSlot !== slotOf(d.origStart, d.origEnd) || room !== d.room;
       if (!ok || !changed) return; // 충돌·역전이거나 변화 없음 → 취소
       const r = rows.find((x) => x.id === d.id);
@@ -175,7 +178,7 @@ function TodayTimeline({ rows, onDetail }) {
         ? `${who} · 호실 ${d.room} → ${room}\n예약시간을 ${newSlot}으로 변경합니다.`
         : `${who} · 예약시간을 ${newSlot}으로 변경합니다.`;
       if (await confirm({ title: "예약 변경", message: msg, confirmLabel: "변경" })) {
-        actions.updateReservation(d.id, { slot: newSlot, room });
+        actions.updateReservation(d.id, { slot: newSlot, room, endDate: endDateFor(d.date, newSlot) });
       }
     };
     window.addEventListener("pointermove", onMove);
@@ -208,25 +211,35 @@ function TodayTimeline({ rows, onDetail }) {
                 {roomRows.map((r) => {
                   const dragging = drag && drag.id === r.id;
                   const seg = dragging ? drag.preview : parseSlot(r.slot);
+                  // 자정 넘김(종료<시작)은 하루 뷰에서 시작~24:00까지 클립해 표시(드래그 중엔 같은날만)
+                  const segOvernight = !dragging && seg.end < seg.start;
                   const left = pct(seg.start);
-                  const width = Math.max(1.5, pct(seg.end) - left);
+                  const width = Math.max(1.5, (segOvernight ? 100 : pct(seg.end)) - left);
                   const open = openId === r.id;
-                  const bad = dragging && (seg.start >= seg.end || hasRoomConflict(rows, drag.preview.room, slotOf(seg.start, seg.end), r.id));
+                  const bad = dragging && (seg.start >= seg.end || hasRoomConflict(rows, drag.preview.room, slotOf(seg.start, seg.end), r.id, r.date));
                   return (
-                    <div key={r.id} title={r.deceased + " · " + r.slot}
+                    <div key={r.id} title={r.deceased + " · " + slotLabel(r.slot)}
                       className="absolute top-1 h-5 select-none text-[11px] font-bold text-white transition-[background] hover:brightness-95"
-                      style={{ left: left + "%", width: width + "%", background: bad ? "#b04a3a" : BLOCK_COLOR, borderRadius: 3,
+                      style={{ left: left + "%", width: width + "%",
+                        // 자정 넘김: 오른쪽 끝을 흐리게 페이드 → '다음날로 이어짐'을 시각화
+                        background: bad ? "#b04a3a" : segOvernight ? `linear-gradient(90deg, ${BLOCK_COLOR} 55%, ${BLOCK_COLOR}66 100%)` : BLOCK_COLOR,
+                        borderRadius: 3, borderTopRightRadius: segOvernight ? 0 : 3, borderBottomRightRadius: segOvernight ? 0 : 3,
                         border: open ? "2px solid " + INK : "none", touchAction: "none", zIndex: dragging ? 5 : 1,
                         boxShadow: dragging ? "0 2px 8px rgba(0,0,0,.25)" : "none" }}>
                       {/* 좌측 리사이즈 핸들 */}
                       <div onPointerDown={(e) => startDrag(e, r, "start")} className="absolute left-0 top-0 z-10 h-full" style={{ width: 7, cursor: "ew-resize" }} />
                       {/* 본체 — 드래그 이동 / 이동 없이 누르면 상세 */}
-                      <div onPointerDown={(e) => startDrag(e, r, "move")} className="flex h-full items-center overflow-hidden px-2"
+                      <div onPointerDown={(e) => startDrag(e, r, "move")} className="flex h-full items-center gap-1 overflow-hidden px-2"
                         style={{ cursor: dragging && drag.mode === "move" ? "grabbing" : "grab" }}>
                         <span className="truncate">{r.deceased}</span>
+                        {segOvernight && <span className="shrink-0 rounded px-1 text-[8.5px] font-bold" style={{ background: "rgba(255,255,255,.85)", color: GOLD_D }}>익일</span>}
                       </div>
-                      {/* 우측 리사이즈 핸들 */}
-                      <div onPointerDown={(e) => startDrag(e, r, "end")} className="absolute right-0 top-0 z-10 h-full" style={{ width: 7, cursor: "ew-resize" }} />
+                      {/* 자정 넘김 '이어짐' 화살표 — 24:00 경계 밖으로 다음날을 가리킴 */}
+                      {segOvernight && (
+                        <span className="absolute top-1/2 z-20 -translate-y-1/2 text-[13px] font-bold" style={{ right: -11, color: BLOCK_COLOR }}>›</span>
+                      )}
+                      {/* 우측 리사이즈 핸들 — 자정 넘김 건은 끝이 경계라 비활성 */}
+                      {!segOvernight && <div onPointerDown={(e) => startDrag(e, r, "end")} className="absolute right-0 top-0 z-10 h-full" style={{ width: 7, cursor: "ew-resize" }} />}
                       {/* 드래그 중 시간 라벨 */}
                       {dragging && (
                         <span className="absolute -top-5 left-0 z-20 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold tabular-nums"
@@ -245,13 +258,13 @@ function TodayTimeline({ rows, onDetail }) {
               const te = timeEdit;
               const newSlot = te.startStr + "~" + te.endStr;
               const { start: ns, end: ne } = parseSlot(newSlot);
-              const timeInvalid = ns >= ne; // 시작 ≥ 종료
-              const timeConflict = !timeInvalid && hasRoomConflict(rows, r.room, newSlot, r.id);
+              const timeInvalid = ns === ne; // 길이 0만 무효(자정 넘김 허용)
+              const timeConflict = !timeInvalid && hasRoomConflict(rows, r.room, newSlot, r.id, r.date);
               const canSaveTime = !timeInvalid && !timeConflict;
 
               return (
                 <div className="mx-3 mb-3 overflow-hidden" style={{ border: "1px solid " + LINE, borderRadius: 6, background: "#fff" }}>
-                  <div className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: "1px solid " + LINE, background: "#f5f2ec" }}>
+                  <div className="flex items-center gap-2 px-4 py-2.5" style={{ borderBottom: "1px solid " + LINE, background: "#f5f2ec" }}>
                     <span className="text-[13px] font-bold" style={{ fontFamily: SERIF, color: INK }}>{r.deceased}</span>
                     <div className="flex items-center gap-2">
                       {r.status === "published"
@@ -265,18 +278,18 @@ function TodayTimeline({ rows, onDetail }) {
                   </div>
 
                   <div className="space-y-2.5 px-4 py-3 text-[12.5px]">
-                    <div className="flex justify-between"><span style={{ color: MUTE }}>보호자</span><span style={{ color: INK }}>{r.chief}</span></div>
-                    <div className="flex justify-between"><span style={{ color: MUTE }}>연락처</span><span className="tabular-nums" style={{ color: INK }}>{r.phone}</span></div>
+                    <div className="flex gap-2"><span style={{ color: MUTE }}>{tp("guardian")}</span><span style={{ color: INK }}>{r.chief}</span></div>
+                    <div className="flex gap-2"><span style={{ color: MUTE }}>연락처</span><span className="tabular-nums" style={{ color: INK }}>{r.phone}</span></div>
 
                     {/* 호실 변경 — 현재 슬롯과 겹치는 호실은 disabled */}
-                    <div className="flex items-center justify-between">
-                      <span style={{ color: MUTE }}>호실 변경</span>
+                    <div className="flex items-center gap-2">
+                      <span style={{ color: MUTE }}>{tp("room")} 변경</span>
                       <select value={r.room}
                         onChange={(e) => actions.setReservationRoom(r.id, e.target.value)}
                         className="cursor-pointer px-2 py-1 text-[12px] font-semibold outline-none"
                         style={{ background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK, width: 100 }}>
                         {CASE_ROOMS.map((n) => {
-                          const blocked = n !== r.room && hasRoomConflict(rows, n, r.slot, r.id);
+                          const blocked = n !== r.room && hasRoomConflict(rows, n, r.slot, r.id, r.date);
                           return (
                             <option key={n} value={n} disabled={blocked}>
                               {n}{blocked ? " (사용중)" : ""}
@@ -293,7 +306,8 @@ function TodayTimeline({ rows, onDetail }) {
                         <TimeInput value={te.startStr || origStart} onChange={(v) => setTimeEdit((s) => ({ ...s, startStr: v }))} />
                         <span style={{ color: FAINT }}>~</span>
                         <TimeInput value={te.endStr || origEnd} onChange={(v) => setTimeEdit((s) => ({ ...s, endStr: v }))} />
-                        {timeInvalid && <span className="text-[11px]" style={{ color: MUTE }}>시작 ≥ 종료</span>}
+                        {timeInvalid && <span className="text-[11px]" style={{ color: MUTE }}>시작 = 종료</span>}
+                        {!timeInvalid && isOvernight(newSlot) && <span className="text-[11px]" style={{ color: MUTE }}>익일 {te.endStr} 종료</span>}
                         {timeConflict && <span className="text-[11px]" style={{ color: MUTE }}>다른 예약과 겹침</span>}
                       </div>
                     </div>
@@ -343,7 +357,7 @@ export function PDashboard({ onNew, onDetail }) {
     return () => clearInterval(t);
   }, []);
   // 호실 점유 = 현재 시각이 예약 시간대[시작~종료] 안에 있는 오늘 예약(자사). 퇴실(종료=현재시각) 시 자동으로 빈 호실 처리.
-  const activeReservOf = (roomName) => todayRows.find((r) => { if (r.room !== roomName) return false; const { start, end } = parseSlot(r.slot); return start <= nowMin && nowMin < end; });
+  const activeReservOf = (roomName) => todayRows.find((r) => { if (r.room !== roomName) return false; const { start, end } = parseSlot(r.slot); return end < start ? (nowMin >= start || nowMin < end) : (start <= nowMin && nowMin < end); });
   // 호실 카드 '신규 예약' → 해당 호실 + 현재 시각을 시작으로 프리필(분은 10분 스냅, 종료는 +3시간·24:00 캡).
   const newReservForRoom = (roomName) => {
     const d = new Date();
@@ -357,10 +371,12 @@ export function PDashboard({ onNew, onDetail }) {
   const checkoutRoom = async (room, reserv) => {
     if (!reserv) return;
     const now = new Date();
-    const nowStr = pad2(now.getHours()) + ":" + pad2(now.getMinutes());
+    // 퇴실 시각은 분단위 버림으로 10분 단위 스냅(실제 퇴실 시점을 10분 아래로 맞춤)
+    const nowStr = pad2(now.getHours()) + ":" + pad2(Math.floor(now.getMinutes() / 10) * 10);
     const { startStr } = parseSlot(reserv.slot);
     if (!(await confirm({ title: "퇴실 처리", message: `${room.name}${room.deceased ? " (" + room.deceased + ")" : ""} 호실을 퇴실 처리합니다.\n예약 종료 시간이 현재 시각(${nowStr})으로 변경됩니다.`, confirmLabel: "퇴실", danger: true }))) return;
-    actions.updateReservation(reserv.id, { slot: startStr + "~" + nowStr });
+    const slot = startStr + "~" + nowStr;
+    actions.updateReservation(reserv.id, { slot, endDate: endDateFor(reserv.date, slot) });
   };
   // 표 표시용 정렬본(타임라인·호실/시간 셀의 충돌검사는 원본 todayRows 유지)
   // 컬럼·렌더는 관리자 고객관리와 동일하게 통일 — 자사 화면이라 '파트너사' 컬럼만 제외
@@ -417,7 +433,7 @@ export function PDashboard({ onNew, onDetail }) {
         <Table cols={todayCols} rows={todaySorted} sort={sort} onSortChange={onSortChange} empty="오늘 예약이 없습니다." onRowClick={(r) => onDetail(r)} renderCell={(r, k) =>
           k === "deceased" ? <span style={{ fontFamily: SERIF, fontWeight: 700, color: INK }} className="hover:underline">{r.deceased}</span> :
           // 호실·시간 셀은 인라인 편집 컨트롤 — 셀 클릭이 상세 이동으로 번지지 않도록 차단
-          k === "room" ? <span onClick={(e) => e.stopPropagation()}><RoomSelect value={r.room} rows={todayRows} slot={r.slot} id={r.id} onChange={(v) => actions.setReservationRoom(r.id, v)} /></span> :
+          k === "room" ? <span onClick={(e) => e.stopPropagation()}><RoomSelect value={r.room} rows={todayRows} slot={r.slot} id={r.id} date={r.date} onChange={(v) => actions.setReservationRoom(r.id, v)} /></span> :
           k === "slot" ? <span onClick={(e) => e.stopPropagation()}><SlotEditCell r={r} rows={todayRows} /></span> :
           renderCustomerCell(r, k)
         } />

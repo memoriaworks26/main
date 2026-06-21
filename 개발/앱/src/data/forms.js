@@ -1,10 +1,24 @@
 // 더미 데이터 — 유저 입력 폼(시스템 고정 필드·파트너별 설정)·사업부·예약 상세.
 // 단일 폼 = 고유 링크 URL(접수 시 생성)에서 보호자가 작성하는 폼. forms.jsx=설계도, user/=실제 화면.
 
-// 사업부 (멀티 비즈니스 — 시뮬레이터 차용)
+// 사업부 (최상위 테넌트) — 모든 데이터(파트너사·고객·폼…)가 사업부로 묶인다.
+// 현재 시드 = 메모리아웍스 사업부. 추가 사업부는 store.addBizUnit로 동적 생성.
 export const BIZ_UNITS = [
-  { id: "biz-1", name: "반려동물 장례식장", partners: 3, active: true },
-  { id: "biz-2", name: "+ 사업부 추가 예정", partners: 0, active: false },
+  { id: "biz-1", name: "메모리아웍스" },
+];
+
+// 사업부별 용어 — 파트너 콘솔·유저 링크에 노출되는 표현을 1:1로 매칭(사업부마다 다를 수 있음).
+// 구조·레이아웃은 그대로, 표시 텍스트만 사업부 설정(termConfigs)을 따른다. 기본값은 반려동물 도메인.
+export const TERMS = [
+  { key: "subject",  concept: "대상(고인)",     partner: "반려동물",   user: "반려동물 이름" },
+  { key: "guardian", concept: "보호자",         partner: "보호자",     user: "보호자" },
+  { key: "room",     concept: "빈소/호실",      partner: "호실",       user: "빈소" },
+  { key: "video",    concept: "추모영상",       partner: "추모영상",   user: "추모영상" },
+  { key: "letter",   concept: "편지",           partner: "추모 편지",  user: "편지" },
+  { key: "metDate",  concept: "처음 만난 날",   partner: "입양일",     user: "우리 처음 만난 날" },
+  { key: "partDate", concept: "떠난 날",        partner: "장례일",     user: "무지개다리 건넌 날" },
+  { key: "photo",    concept: "사진",           partner: "사진",       user: "사진 업로드" },
+  { key: "checkout", concept: "퇴실",           partner: "퇴실",       user: "퇴실" },
 ];
 
 // 시스템 고정 필드 정의 — 파트너사는 선택 항목만 표시/숨김 + 라벨명 변경 가능.

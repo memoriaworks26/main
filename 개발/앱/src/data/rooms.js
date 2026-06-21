@@ -19,6 +19,8 @@ export const RESERVATIONS = [
   { id: "R-240617-05", partner: "무지개동산 반려동물장례식장", deceased: "단지", chief: "강민서", phone: "010-7741-2230", room: "3호실", date: "2026-06-17", slot: "09:00~12:30", requestedAt: "06.17 22:05", status: "confirm", assignee: "김도현", renderAt: Date.now() - 35000, renderDur: 150 },
   { id: "R-240617-06", partner: "무지개동산 반려동물장례식장", deceased: "나비", chief: "박은영", phone: "010-5521-7788", room: "4호실", date: "2026-06-17", slot: "13:00~16:00", requestedAt: "06.18 07:48", status: "rendering", assignee: "정다은" },
   { id: "R-240614-09", partner: "무지개동산 반려동물장례식장", deceased: "가을", chief: "서동현", phone: "010-3092-6612", room: "1호실", date: "2026-06-14", slot: "10:00~13:40", requestedAt: "06.16 15:30", status: "published", assignee: "김도현" },
+  // 자정 넘김(익일 종료) 예약 — endDate가 예약일 +1. 22:00 시작 → 익일 02:00 종료(대시보드 '오늘' 타임라인에서 이어짐 표시 확인용).
+  { id: "R-240617-12", partner: "무지개동산 반려동물장례식장", deceased: "밤톨", chief: "윤서진", phone: "010-3322-7788", room: "2호실", date: "2026-06-17", slot: "22:00~02:00", endDate: "2026-06-18", requestedAt: "06.17 21:40", status: "rendering", assignee: "김도현" },
   // 펫포레스트 추모관 (P-002)
   { id: "R-240617-03", partner: "펫포레스트 추모관", deceased: "초코", chief: "이정훈", phone: "010-2274-1188", room: "특1호실", date: "2026-06-17", slot: "11:00~14:30", requestedAt: "06.18 10:02", status: "review", assignee: null },
   { id: "R-240617-07", partner: "펫포레스트 추모관", deceased: "모카", chief: "정우성", phone: "010-8845-1190", room: "1호실", date: "2026-06-17", slot: "15:00~18:20", requestedAt: "06.18 11:15", status: "rendering", assignee: "이수아" },

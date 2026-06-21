@@ -60,8 +60,8 @@ export function ContactRow({ label, name, phone, hours }) {
   );
 }
 
-// 좋은/나쁜 사진 예시 — AI 변환 가이드에 실사 예시 사진으로 표시
-export function PhotoExampleGuide() {
+// 좋은/나쁜 사진 예시 — AI 변환 가이드. good/bad 사진은 사업부별 오버라이드(없으면 기본 강아지 사진).
+export function PhotoExampleGuide({ good, bad }) {
   const Card = ({ src, badge, badgeColor, BadgeIcon, caption, imgStyle }) => (
     <div className="overflow-hidden" style={{ background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS }}>
       <div className="relative overflow-hidden" style={{ aspectRatio: "1", background: "#e8e1d1" }}>
@@ -75,8 +75,8 @@ export function PhotoExampleGuide() {
   );
   return (
     <div className="mb-3 grid grid-cols-2 gap-2">
-      <Card src={dogGood} badge="좋은 예" badgeColor={STATUS.published.c} BadgeIcon={Check} caption="정면 · 또렷한 전신 · 한 마리" />
-      <Card src={dogBad} badge="피해주세요" badgeColor={FAINT} BadgeIcon={X} caption="흐릿함 · 여러 마리" imgStyle={{ filter: "blur(1.6px) saturate(.9)", transform: "scale(1.1)" }} />
+      <Card src={good || dogGood} badge="좋은 예" badgeColor={STATUS.published.c} BadgeIcon={Check} caption="정면 · 또렷한 전신 · 한 마리" />
+      <Card src={bad || dogBad} badge="피해주세요" badgeColor={FAINT} BadgeIcon={X} caption="흐릿함 · 여러 마리" imgStyle={bad ? undefined : { filter: "blur(1.6px) saturate(.9)", transform: "scale(1.1)" }} />
     </div>
   );
 }

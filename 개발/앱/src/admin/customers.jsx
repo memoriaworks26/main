@@ -4,13 +4,14 @@ import {
   Search, Trash2, Download,
 } from "lucide-react";
 import { SERIF, SURFACE, LINE, GOLD_D, INK, MUTE, FAINT, RADIUS } from "../theme.js";
-import { Tag, Card, Table, PageHeader, CopyBtn, useTableSort } from "../ui.jsx";
+import { Tag, Btn, Card, Table, PageHeader, CopyBtn, useTableSort } from "../ui.jsx";
 import { useStore, actions } from "../store.js";
 import { confirm } from "../confirm.jsx";
 import { toast } from "../toast.jsx";
 import { matchQuery } from "../lib/util.js";
 import * as D from "../data.js";
 import { SearchSelect } from "./shared.jsx";
+import { SlotText } from "../partner/shared.jsx";
 
 // 영상/예약 상태 태그 — 고객관리·대시보드 최근예약 공용(컬럼 일관)
 export const videoTag = (st) =>
@@ -36,14 +37,40 @@ export const CUSTOMER_COLS = [
 const STAGE_RANK = { review: 0, rendering: 1, confirm: 2, published: 3 };
 export const customerSortValue = (r, k) => (k === "video" || k === "progress") ? (STAGE_RANK[r.status] ?? 99) : (r[k] ?? "");
 // 예약 1건 → 고객관리 행 형태 (대시보드 최근예약과 공유)
-export const toCustomerRow = (r) => ({ id: r.id, deceased: r.deceased, chief: r.chief, phone: r.phone, partner: r.partner, date: r.date || (r.requestedAt || "").split(" ")[0], room: r.room, slot: r.slot, status: r.status, assignee: r.assignee });
+export const toCustomerRow = (r) => ({ id: r.id, deceased: r.deceased, chief: r.chief, phone: r.phone, partner: r.partner, date: r.date || (r.requestedAt || "").split(" ")[0], room: r.room, slot: r.slot, endDate: r.endDate, status: r.status, assignee: r.assignee });
 // 고객관리 행 셀 렌더 (대시보드 최근예약과 동일 표현)
 export const renderCustomerCell = (r, k) =>
   k === "deceased" ? <span style={{ fontFamily: SERIF, fontWeight: 700, color: INK }}>{r.deceased}</span> :
   k === "video" ? videoTag(r.status) :
   k === "progress" ? reservTag(r.status) :
+  k === "slot" ? <SlotText slot={r.slot} className="tabular-nums" /> :
   k === "assignee" ? (r.assignee || <span style={{ color: FAINT }}>미배정</span>) :
   r[k];
+
+// 추모영상 카드 — 고객관리 상세 · 파트너 예약 상세 공용(두 화면 동일 보장).
+// status 기준 슬레이트 라벨 + 발행 시 다운로드(미발행은 disabled) + HQ 안내.
+export function MemorialVideoCard({ status, file, requestedAt }) {
+  const vlabel = status === "published" ? "발행 완료" : status === "confirm" ? "컨펌 대기" : status === "review" ? "접수 대기" : "제작 중";
+  return (
+    <Card title="추모영상">
+      <div className="relative flex items-center justify-center" style={{ aspectRatio: "16/9", background: "#2a323d", borderRadius: RADIUS }}>
+        <span className="text-[12px]" style={{ color: "#aab2bf" }}>{vlabel}</span>
+      </div>
+      {status === "published" ? (
+        <div className="mt-2.5 flex items-center justify-between gap-2">
+          <span className="min-w-0 truncate text-[11.5px] tabular-nums" style={{ color: MUTE, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{file}</span>
+          <Btn size="sm" onClick={() => toast(file + " 다운로드를 시작합니다")}><Download className="h-3.5 w-3.5" /> 다운로드</Btn>
+        </div>
+      ) : (
+        <div className="mt-2.5 flex items-center justify-between gap-2">
+          <span className="text-[11.5px]" style={{ color: FAINT }}>발행 완료 후 다운로드할 수 있습니다.</span>
+          <Btn size="sm" variant="neutral" disabled><Download className="h-3.5 w-3.5" /> 다운로드</Btn>
+        </div>
+      )}
+      <p className="mt-2 text-[11px]" style={{ color: FAINT }}>※ 영상 편집·컨펌은 관리자(HQ)에서 진행됩니다.{requestedAt ? ` 컨펌 요청 ${requestedAt}` : ""}</p>
+    </Card>
+  );
+}
 
 // ── 고객관리 상세 (예약 1건 드릴다운) — 파트너 예약상세와 동일한 레이아웃 ──
 function CustomerDetail({ rid, onBack }) {
@@ -51,11 +78,9 @@ function CustomerDetail({ rid, onBack }) {
   const r = reservations.find((x) => x.id === rid);
   if (!r) return null;
   const link = D.LINKS.find((l) => l.deceased === r.deceased);
-  const vlabel = r.status === "published" ? "발행 완료" : r.status === "confirm" ? "컨펌 대기" : r.status === "review" ? "접수 대기" : "제작 중";
-  // 최종 렌더본 — 발행 완료 건만 다운로드 가능(파일명 규칙 자동 적용)
+  // 최종 렌더본 파일명(발행 완료 건만 다운로드 — MemorialVideoCard에서 처리)
   const fv = D.FINAL_VIDEOS.find((v) => v.deceased === r.deceased && v.partner === r.partner);
   const file = fv ? D.videoFileName(fv) : `${r.deceased}_추모영상.mp4`;
-  const canDownload = r.status === "published";
   return (
     <div>
       <PageHeader title={r.deceased} sub={r.partner + " · " + r.room + " · 보호자 " + r.chief} back={{ onClick: onBack, label: "뒤로" }}
@@ -69,33 +94,16 @@ function CustomerDetail({ rid, onBack }) {
       <div className="grid grid-cols-2 gap-4">
         <Card title="예약 정보">
           <div className="space-y-2 text-[13px]" style={{ color: INK }}>
-            <div className="flex justify-between"><span style={{ color: MUTE }}>반려동물</span><span style={{ fontFamily: SERIF, fontWeight: 700 }}>{r.deceased}</span></div>
-            <div className="flex justify-between"><span style={{ color: MUTE }}>보호자</span><span>{r.chief}</span></div>
-            <div className="flex justify-between"><span style={{ color: MUTE }}>연락처</span><span className="tabular-nums">{r.phone}</span></div>
-            <div className="flex justify-between"><span style={{ color: MUTE }}>호실·일정</span><span>{r.room} · {r.date} {r.slot}</span></div>
-            <div className="flex justify-between"><span style={{ color: MUTE }}>파트너사</span><span>{r.partner}</span></div>
-            <div className="flex justify-between"><span style={{ color: MUTE }}>담당자</span><span>{r.assignee || "미배정"}</span></div>
-            <div className="flex items-center justify-between"><span style={{ color: MUTE }}>영상</span>{videoTag(r.status)}</div>
+            <div className="flex gap-2"><span style={{ color: MUTE }}>반려동물</span><span style={{ fontFamily: SERIF, fontWeight: 700 }}>{r.deceased}</span></div>
+            <div className="flex gap-2"><span style={{ color: MUTE }}>보호자</span><span>{r.chief}</span></div>
+            <div className="flex gap-2"><span style={{ color: MUTE }}>연락처</span><span className="tabular-nums">{r.phone}</span></div>
+            <div className="flex items-center gap-2"><span style={{ color: MUTE }}>호실·일정</span><span className="inline-flex items-center">{r.room} · {r.date} <span className="ml-1 inline-flex items-center"><SlotText slot={r.slot} /></span></span></div>
+            <div className="flex gap-2"><span style={{ color: MUTE }}>파트너사</span><span>{r.partner}</span></div>
+            <div className="flex gap-2"><span style={{ color: MUTE }}>담당자</span><span>{r.assignee || "미배정"}</span></div>
+            <div className="flex items-center gap-2"><span style={{ color: MUTE }}>영상</span>{videoTag(r.status)}</div>
           </div>
         </Card>
-        <Card title="추모영상">
-          <div className="relative flex items-center justify-center" style={{ aspectRatio: "16/9", background: "#2a323d", borderRadius: RADIUS }}>
-            <span className="text-[12px]" style={{ color: "#aab2bf" }}>{vlabel}</span>
-          </div>
-          {canDownload ? (
-            <>
-              <button onClick={() => toast(file + " 다운로드를 시작합니다")}
-                className="mt-2.5 flex w-full items-center justify-center gap-1.5 py-2 text-[12.5px] font-semibold outline-none transition hover:bg-[#f6f3ec] focus-visible:ring-1"
-                style={{ borderRadius: RADIUS, border: "1px solid " + LINE, color: GOLD_D }}>
-                <Download className="h-3.5 w-3.5" /> 영상 다운로드
-              </button>
-              <p className="mt-1.5 truncate text-[10.5px] tabular-nums" style={{ color: FAINT, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{file}</p>
-            </>
-          ) : (
-            <p className="mt-2.5 text-[11.5px]" style={{ color: FAINT }}>발행 완료 후 영상을 다운로드할 수 있습니다.</p>
-          )}
-          <p className="mt-2 text-[11px]" style={{ color: FAINT }}>※ 영상 편집·컨펌은 관리자(HQ)에서 진행됩니다. 컨펌 요청 {r.requestedAt || "—"}</p>
-        </Card>
+        <MemorialVideoCard status={r.status} file={file} requestedAt={r.requestedAt || "—"} />
       </div>
 
       <div className="mt-4">
@@ -122,7 +130,11 @@ function CustomerDetail({ rid, onBack }) {
 
 export function Customers({ initialSel = null, account }) {
   const cols = CUSTOMER_COLS;
-  const { reservations, partners } = useStore(); // 목 DB — 고객관리 = 예약 spine 파생(발행·컨펌 상태 전파)
+  const store = useStore(); // 목 DB — 고객관리 = 예약 spine 파생(발행·컨펌 상태 전파)
+  // 현재 사업부 스코핑 — 소속 파트너사의 예약만(고객은 partner 이름으로 연결)
+  const partners = store.partners.filter((p) => p.bizUnit === store.bizUnit);
+  const bizNames = new Set(partners.map((p) => p.name));
+  const reservations = store.reservations.filter((r) => bizNames.has(r.partner));
   const canDelete = account?.role === "master"; // 예약건 삭제는 관리자권한(마스터)만 가능
   const [partner, setPartner] = useState("전체");
   const [q, setQ] = useState("");

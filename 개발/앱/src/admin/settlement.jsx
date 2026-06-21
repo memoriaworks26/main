@@ -8,7 +8,7 @@ import { Tag, Btn, MetricRow, Table, PageHeader, Modal, DateField, useTableSort 
 import { toast } from "../toast.jsx";
 import { confirm } from "../confirm.jsx";
 import { TradeStatement } from "../docs.jsx";
-import { useStore, actions, siKey as itemKey } from "../store.js";
+import { useStore, actions, siKey as itemKey, bizPartners } from "../store.js";
 import * as D from "../data.js";
 import { SaveBar } from "./shared.jsx";
 import { won, parseNum as num } from "../lib/format.js";
@@ -106,7 +106,10 @@ function AddSalesModal({ open, onClose, onAdd }) {
 }
 
 function PartnerSettleDetail({ partner, onBack, onIssue, onViewStatement }) {
-  const { settlementItems, partners } = useStore();
+  const s = useStore();
+  const partners = bizPartners(s); // 현재 사업부 파트너만
+  const bizNames = new Set(partners.map((p) => p.name));
+  const settlementItems = s.settlementItems.filter((i) => bizNames.has(i.partner)); // 사업부 매출 건만
   const pObj = partners.find((x) => x.name === partner); // 건당 단가 출처
   const storeItems = settlementItems.filter((i) => i.partner === partner);
   const [draft, setDraft] = useState(() => storeItems.map((i) => ({ ...i })));
@@ -319,7 +322,7 @@ function UnitPriceCell({ row }) {
 
 // ── 정산 (목록 → 파트너사 상세 → 거래명세서) ───────────────────
 export function Settlement() {
-  const { partners } = useStore(); // 목 DB — 신규 등록 파트너도 정산 목록에 노출
+  const partners = bizPartners(useStore()); // 현재 사업부 파트너만(신규 등록 포함)
   const [detail, setDetail] = useState(null);   // 파트너사명
   const [view, setView] = useState(null);       // 발행/조회 중인 거래명세서 { partner, items, period, issuedAt }
   // 전 파트너사 기준으로 정산 데이터 병합(정산 이력 없으면 0원·대기)

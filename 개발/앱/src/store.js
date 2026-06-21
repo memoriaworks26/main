@@ -6,7 +6,16 @@
 import { useSyncExternalStore } from "react";
 import * as D from "./data.js";
 
+// 시드 사업부(메모리아웍스) — 기존 더미 데이터는 전부 이 사업부 소속.
+const SEED_BIZ = D.BIZ_UNITS[0].id;
+
 let state = {
+  // 사업부 (최상위 테넌트) — 파트너사·고객·폼 등 모든 데이터가 bizUnit으로 묶임
+  bizUnits: D.BIZ_UNITS.map((b) => ({ ...b })),
+  bizUnit: SEED_BIZ,                                    // 현재 선택된 사업부
+  termConfigs: {},                                     // 사업부별 용어 설정 { [bizId]: { [termKey]: { partner, user } } }
+  userText: {},                                        // 사업부별 유저링크 텍스트 오버라이드 { [bizId]: { [key]: string } }
+  userPhotos: {},                                      // 사업부별 예시 사진 오버라이드 { [bizId]: { good, bad } (dataURL) }
   reservations: D.RESERVATIONS.map((r) => ({ ...r })),
   accounts: D.ADMIN_ACCOUNTS.map((a) => ({ ...a })),
   devices: D.DEVICES.map((d) => ({ ...d })),
@@ -21,7 +30,8 @@ let state = {
   },
   formConfigs: Object.fromEntries(Object.entries(D.FORM_CONFIGS).map(([k, v]) => [k, Object.fromEntries(Object.entries(v).map(([fk, fv]) => [fk, { ...fv }]))])), // 파트너별 폼 선택항목 설정
   rooms: D.ROOMS.map((r) => ({ ...r })),               // 호실(명칭·위치 편집) — 파트너 대시보드
-  partners: D.PARTNERS.map((p) => ({ ...p })),         // 파트너사(건당 단가 편집)
+  partners: D.PARTNERS.map((p) => ({ ...p, bizUnit: p.bizUnit || SEED_BIZ })),  // 파트너사 — 시드는 메모리아웍스 사업부 소속
+
   settlementItems: D.SETTLEMENT_ITEMS.map((i) => ({ ...i })), // 정산 매출 건(추가·수정·삭제)
   content: D.CONTENT.map((c) => ({ ...c })),           // 콘텐츠 허브 자산(클립·사진) — 즉시 추가 전파
   company: { ...D.COMPANY },                            // 회사정보 — 고객센터 연락처 등 편집값(설정 ↔ 유저링크 공유)
@@ -45,9 +55,43 @@ export function useStore() {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
+// ── 사업부 스코핑 헬퍼 ─────────────────────────────────────────
+// 현재 사업부의 파트너사 목록. (예약/고객은 partner 이름으로 연결되므로 이름 집합도 함께)
+export const bizPartners = (s) => s.partners.filter((p) => p.bizUnit === s.bizUnit);
+export const bizPartnerNames = (s) => new Set(bizPartners(s).map((p) => p.name));
+// 현재 사업부 예약(고객) — 소속 파트너의 예약만
+export const bizReservations = (s) => { const names = bizPartnerNames(s); return s.reservations.filter((r) => names.has(r.partner)); };
+// 사업부 용어 조회 — 설정값 없으면 기본 용어. (파트너 콘솔·유저 링크 라벨이 이걸 쓰면 텍스트만 사업부별로 바뀜)
+export const term = (s, key, side, bizId = s.bizUnit) => {
+  const def = D.TERMS.find((t) => t.key === key);
+  return s.termConfigs[bizId]?.[key]?.[side] ?? (def ? def[side] : key);
+};
+// 유저링크 텍스트 조회 — 사업부 오버라이드 있으면 그걸, 없으면 기본값(D.USER_TEXT).
+export const userTextOf = (s, bizId = s.bizUnit) => ({ ...D.USER_TEXT, ...(s.userText[bizId] || {}) });
+
 const mapById = (arr, id, patch) => arr.map((x) => (x.id === id ? { ...x, ...patch } : x));
 
 export const actions = {
+  // 사업부 (최상위 테넌트) — 전환 시 파트너사·고객·폼 등 전 데이터가 해당 사업부로 스코핑
+  setBizUnit: (id) => set({ bizUnit: id }),
+  addBizUnit: (name) => set((s) => { const id = "biz-" + Date.now(); return { bizUnits: [...s.bizUnits, { id, name }], bizUnit: id }; }), // 추가 즉시 선택
+  // 사업부 용어 설정 (파트너 콘솔·유저 링크 노출 텍스트 — bizId·termKey별 patch)
+  setTermConfig: (bizId, key, patch) => set((s) => ({
+    termConfigs: { ...s.termConfigs, [bizId]: { ...(s.termConfigs[bizId] || {}), [key]: { ...(s.termConfigs[bizId]?.[key] || {}), ...patch } } },
+  })),
+  // 사업부별 유저링크 텍스트 오버라이드 (key별). value가 기본값과 같으면 오버라이드 제거.
+  setUserText: (bizId, key, value) => set((s) => {
+    const cur = { ...(s.userText[bizId] || {}) };
+    if (value === D.USER_TEXT[key]) delete cur[key]; else cur[key] = value;
+    return { userText: { ...s.userText, [bizId]: cur } };
+  }),
+  // 사업부별 예시 사진 (good/bad) — dataURL. null이면 기본 사진으로 복원.
+  setUserPhoto: (bizId, key, dataUrl) => set((s) => {
+    const cur = { ...(s.userPhotos[bizId] || {}) };
+    if (dataUrl) cur[key] = dataUrl; else delete cur[key];
+    return { userPhotos: { ...s.userPhotos, [bizId]: cur } };
+  }),
+
   // 예약 (편집·컨펌 큐 ↔ 고객관리 ↔ 정산 ↔ 사이니지 공유)
   setReservationStatus: (id, status) => set((s) => ({ reservations: mapById(s.reservations, id, { status }) })),
   setReservationAssignee: (id, assignee) => set((s) => ({ reservations: mapById(s.reservations, id, { assignee }) })),
@@ -118,7 +162,8 @@ export const actions = {
   addPartner: (partner) => set((s) => {
     const def = s.templates[D.DEFAULT_TEMPLATE_ID] || { bgm: null, blocks: [] };
     const cloned = { bgm: def.bgm, blocks: def.blocks.map((b, i) => ({ ...b, id: "e-" + Date.now() + "-" + i })) };
-    return { partners: [...s.partners, partner], templates: { ...s.templates, [partner.id]: cloned } };
+    // 신규 파트너는 현재 선택된 사업부 소속으로 등록
+    return { partners: [...s.partners, { ...partner, bizUnit: s.bizUnit }], templates: { ...s.templates, [partner.id]: cloned } };
   }),
   updatePartner: (id, patch) => set((s) => ({ partners: mapById(s.partners, id, patch) })),
 

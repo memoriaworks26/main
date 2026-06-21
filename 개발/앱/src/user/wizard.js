@@ -6,19 +6,28 @@ import { confirm } from "../confirm.jsx";
 import { grabVideoFrame } from "../lib/media.js";
 import { getToken, resolveLink, uploadAsset, submitLink, shareUrlFor } from "../lib/userLink.js";
 import { BACKEND_LIVE } from "../lib/supabase.js";
-import { useStore } from "../store.js";
+import { useStore, userTextOf } from "../store.js";
 import * as D from "../data.js";
 import { parseMB } from "./parts.jsx";
 
 const STEPS = D.USER_STEPS;
 const TRANSITIONS = D.USER_TRANSITIONS; // 전환 효과 명칭은 data.js에서 단일 관리
 
-export function useUserWizard() {
+export function useUserWizard(previewBizId, stepCtl) {
   const token = getToken();
   const liveMode = BACKEND_LIVE && !!token;
-  const { company, partners } = useStore(); // 고객센터 문의처(본사 + 장례식장) — 설정에서 편집 → 하단 안내에 반영
+  const store = useStore(); // 고객센터 문의처(본사 + 장례식장) — 설정에서 편집 → 하단 안내에 반영
+  const { company, partners } = store;
+  const preview = !!previewBizId;
+  // 유저링크 표시 텍스트·예시사진 — preview면 해당 사업부, 실링크면 시드 사업부 기준(실시간 오버라이드 반영)
+  const bizForText = previewBizId || D.BIZ_UNITS[0].id;
+  const T = userTextOf(store, bizForText);
+  const photos = store.userPhotos[bizForText] || {}; // { good?, bad? } 예시 사진 오버라이드
 
-  const [step, setStep] = useState(0);
+  // 단계 — 외부(사업부별 세팅 미리보기)에서 제어하면 그걸 쓰고, 아니면 내부 상태
+  const [stepIn, setStepIn] = useState(0);
+  const step = stepCtl ? stepCtl.step : stepIn;
+  const setStep = stepCtl ? stepCtl.setStep : setStepIn;
   const [agreed, setAgreed] = useState(false);             // 정보보호(개인정보) 수집·이용 — 필수
   const [marketingAgreed, setMarketingAgreed] = useState(false); // 마케팅 활용 — 선택
   const [policyOpen, setPolicyOpen] = useState(false);     // 개인정보처리방침 전문 모달
@@ -135,6 +144,7 @@ export function useUserWizard() {
 
   // 위저드 입력 일괄 제출 → 렌더 큐잉(status=queued). 성공 시 완료 화면으로.
   const doSubmit = async () => {
+    if (preview) { toast("미리보기입니다 — 실제 제출되지 않습니다"); return; }
     if (submitting) return;
     if (!(await confirm({ title: "제출하기", message: "입력한 내용으로 추모영상 제작을 제출합니다.\n제출 후에는 수정할 수 없습니다.", confirmLabel: "제출" }))) return;
     setSubmitting(true);
@@ -160,12 +170,12 @@ export function useUserWizard() {
   };
 
   // StepBody에 넘기는 화면 상태·핸들러 묶음
-  const st = { agreed, setAgreed, marketingAgreed, setMarketingAgreed, uploads, removeUpload, addUpload, onFiles, fileRef, aiPhotos, addAiPhoto, onAiFiles, removeAiPhoto, aiFileRef, petName, setPetName, trans, setTrans, bgm, setBgm, letter, setLetter, metDate, setMetDate, partDate, setPartDate, titleSel, setTitleSel, transMap, setItemTrans, randomizeTrans, reorderUploads, totalMB, overLimit, link, shareUrl, videoStatus, company, openPolicy: () => setPolicyOpen(true) };
+  const st = { T, photos, preview, agreed, setAgreed, marketingAgreed, setMarketingAgreed, uploads, removeUpload, addUpload, onFiles, fileRef, aiPhotos, addAiPhoto, onAiFiles, removeAiPhoto, aiFileRef, petName, setPetName, trans, setTrans, bgm, setBgm, letter, setLetter, metDate, setMetDate, partDate, setPartDate, titleSel, setTitleSel, transMap, setItemTrans, randomizeTrans, reorderUploads, totalMB, overLimit, link, shareUrl, videoStatus, company, openPolicy: () => setPolicyOpen(true) };
 
   const last = STEPS.length - 1;
   const previewStep = last - 1;
   // AI 변환: 반려동물명 입력 + 독사진 3장 모두 업로드(+업로드 완료)해야 다음 단계로 진행 가능
   const blocked = (step === 0 && !agreed) || (step === 1 && (!petName.trim() || aiPhotos.length < 3 || aiUploadingNow)) || (step === 2 && (overLimit || uploadingNow)) || (step === previewStep && (submitting || uploadingNow));
 
-  return { st, step, setStep, last, previewStep, blocked, submitting, liveMode, link, company, partners, doSubmit, policyOpen, setPolicyOpen };
+  return { st, T, step, setStep, last, previewStep, blocked, submitting, liveMode, link, company, partners, doSubmit, policyOpen, setPolicyOpen };
 }

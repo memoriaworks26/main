@@ -12,8 +12,9 @@ import { StepBody } from "./steps.jsx";
 
 const STEPS = USER_STEPS;
 
-export default function UserMobile() {
-  const { st, step, setStep, last, previewStep, blocked, submitting, liveMode, link, company, partners, doSubmit, policyOpen, setPolicyOpen } = useUserWizard();
+export default function UserMobile({ previewBizId, step: stepProp, onStep }) {
+  const stepCtl = stepProp != null && onStep ? { step: stepProp, setStep: onStep } : undefined;
+  const { st, T, step, setStep, last, previewStep, blocked, submitting, liveMode, link, company, partners, doSubmit, policyOpen, setPolicyOpen } = useUserWizard(previewBizId, stepCtl);
 
   // 라이브에서 토큰이 유효하지 않거나 만료된 경우 — 안내 화면.
   if (link.ok === false || link.status === "expired") {
@@ -48,10 +49,10 @@ export default function UserMobile() {
           <div className="flex flex-col items-center px-5 py-5 text-center" style={{ background: "#faf7f1", borderBottom: "1px solid " + LINE }}>
             <Logo height={30} />
             <div className="mt-2.5 text-[14px] font-bold" style={{ color: INK }}>
-              {link.petName ? <><span style={{ fontFamily: SERIF }}>{link.petName}</span> 추모영상 제작</> : "추모영상 제작"}
+              {link.petName ? <><span style={{ fontFamily: SERIF }}>{link.petName}</span> {T.headerTitle}</> : T.headerTitle}
             </div>
             {link.partnerName && <div className="mt-0.5 text-[11px]" style={{ color: MUTE }}>{link.partnerName}</div>}
-            <div className="mt-0.5 text-[11px]" style={{ color: FAINT }}>{step + 1} / {STEPS.length} · {STEPS[step]}</div>
+            <div className="mt-0.5 text-[11px]" style={{ color: FAINT }}>{step + 1} / {STEPS.length} · {T["step" + step]}</div>
           </div>
           <Stepper step={step} />
           <div className="px-5 py-5" style={{ minHeight: 360 }}><StepBody step={step} st={st} /></div>
@@ -69,7 +70,7 @@ export default function UserMobile() {
                 className="flex items-center gap-1 px-5 py-2 text-[13px] font-bold text-white disabled:opacity-40"
                 style={{ background: GOLD, borderRadius: RADIUS }}>
                 {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                {step === 0 ? "동의하고 시작" : step === previewStep ? (submitting ? "제출 중…" : "영상 만들기") : "다음"}
+                {step === 0 ? T.btnAgree : step === previewStep ? (submitting ? "제출 중…" : T.btnMake) : T.btnNext}
                 {!submitting && <ChevronRight className="h-4 w-4" />}
               </button>
             ) : (

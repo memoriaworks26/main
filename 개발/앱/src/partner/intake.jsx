@@ -8,9 +8,10 @@ import { Btn, Card, PageHeader, DateField, CopyBtn } from "../ui.jsx";
 import { useStore } from "../store.js";
 import { confirm } from "../confirm.jsx";
 import * as D from "../data.js";
-import { usePartner, pad2, minToStr, parseSlot, overlaps, TIMELINE_START, TIMELINE_END } from "./shared.jsx";
+import { usePartner, usePartnerTerm, pad2, minToStr, parseSlot, overlaps, endDateFor, slotLabel, TIMELINE_START, TIMELINE_END } from "./shared.jsx";
 
 // 드래그 타임라인 — 막대를 클릭·드래그해 시간대 선택. 기존 예약(blocked)은 넘어가지 못하도록 제한.
+// 끝 손잡이를 24:00 너머로 끌면 종료가 00:00 쪽으로 감겨 자정 넘김(익일) 선택이 된다(endMin<startMin).
 export function DragTimeline({ startMin, endMin, blocked, onChange }) {
   const ref = React.useRef(null);
   const T0 = TIMELINE_START, T1 = TIMELINE_END, SPAN = T1 - T0, STEP = 10;
@@ -35,20 +36,66 @@ export function DragTimeline({ startMin, endMin, blocked, onChange }) {
     return [Math.max(m, lim), pivot];
   };
 
-  const beginDrag = (mode) => (e) => {
-    e.preventDefault();
-    if (mode !== "new") e.stopPropagation();
-    const pivot = mode === "left" ? endMin : mode === "right" ? startMin : posToMin(e.clientX);
-    const onMove = (ev) => {
-      const span = clampSpan(pivot, posToMin(ev.clientX));
-      if (span && span[1] > span[0]) onChange(span[0], span[1]);
-    };
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
+  const addMove = (onMove) => {
+    const onUp = () => { window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", onUp); };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+  };
+  // 빈 곳 클릭·드래그 → 새 선택. 오른쪽으로 24:00을 넘겨 끌면 익일(00:00~)로 감김.
+  const beginDrag = (e) => {
+    e.preventDefault();
+    const rect = ref.current.getBoundingClientRect();
+    const pivot = posToMin(e.clientX);
+    if (blocked.some((b) => pivot > b.start && pivot < b.end)) return; // 예약 안에서 시작 금지
+    const rawMin = (clientX) => T0 + Math.round((((clientX - rect.left) / rect.width) * SPAN) / STEP) * STEP; // 미클램프(경계 밖 허용)
+    addMove((ev) => {
+      const m = rawMin(ev.clientX);
+      if (m <= pivot) { // 왼쪽 — 같은날 [m, pivot]
+        const span = clampSpan(pivot, Math.max(m, T0));
+        if (span && span[1] > span[0]) onChange(span[0], span[1]);
+        return;
+      }
+      // 오른쪽 — 다음 예약 경계 전까지(경계 없으면 24:00 넘겨 익일까지 감김)
+      let lim = pivot + SPAN - STEP;
+      for (const b of blocked) if (b.start >= pivot) lim = Math.min(lim, b.start);
+      const endAbs = Math.max(pivot + STEP, Math.min(lim, m));
+      onChange(pivot, endAbs > T1 ? endAbs - T1 : endAbs);
+    });
+  };
+  // 끝 핸들 — 절대 종료(분)를 델타로 이동. 24:00을 넘겨 끌면 00:00 쪽으로 감겨 익일로 '확' 넘어감.
+  const beginEndDrag = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const startX = e.clientX, rect = ref.current.getBoundingClientRect();
+    const s = startMin;
+    const origEndAbs = endMin > s ? endMin : endMin + SPAN; // 같은날 endMin · 자정 넘김 endMin+1440
+    addMove((ev) => {
+      const deltaMin = ((ev.clientX - startX) / rect.width) * SPAN;
+      let endAbs = s + Math.round((origEndAbs - s + deltaMin) / STEP) * STEP;
+      endAbs = Math.max(s + STEP, Math.min(s + SPAN - STEP, endAbs)); // (시작, 시작+24h) · 최소 10분
+      if (endAbs <= T1) { // 같은날 구간 — 다음 예약 경계까지만(자정 넘기면 충돌은 상위에서 날짜인식 검사)
+        for (const b of blocked) if (b.start >= s) endAbs = Math.min(endAbs, b.start);
+        endAbs = Math.max(endAbs, s + STEP);
+      }
+      onChange(s, endAbs > T1 ? endAbs - T1 : endAbs);
+    });
+  };
+  // 시작 핸들 — 시작(분)을 델타로 이동(종료 고정). 같은날 구간에선 이전 예약 경계까지만.
+  const beginStartDrag = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const startX = e.clientX, rect = ref.current.getBoundingClientRect();
+    const origStart = startMin, overnight = endMin < origStart;
+    addMove((ev) => {
+      const deltaMin = ((ev.clientX - startX) / rect.width) * SPAN;
+      let start = Math.round((origStart + deltaMin) / STEP) * STEP;
+      if (overnight) {
+        start = Math.max(endMin + STEP, Math.min(T1 - STEP, start)); // 익일 유지(종료 이후)
+      } else {
+        let lo = T0;
+        for (const b of blocked) if (b.end <= endMin) lo = Math.max(lo, b.end);
+        start = Math.max(lo, Math.min(endMin - STEP, start));
+      }
+      onChange(start, endMin);
+    });
   };
 
   const ticks = [];
@@ -58,7 +105,7 @@ export function DragTimeline({ startMin, endMin, blocked, onChange }) {
     <div>
       <div
         ref={ref}
-        onPointerDown={beginDrag("new")}
+        onPointerDown={beginDrag}
         className="relative w-full cursor-crosshair select-none touch-none"
         style={{ height: 46, background: SURFACE, border: "1px solid " + LINE2, borderRadius: RADIUS }}
       >
@@ -80,23 +127,49 @@ export function DragTimeline({ startMin, endMin, blocked, onChange }) {
             <span className="text-[9px] font-semibold" style={{ color: MUTE }}>예약</span>
           </div>
         ))}
-        {/* 현재 선택 */}
-        {endMin > startMin && (
-          <div className="absolute top-1 bottom-1 flex items-center justify-center"
-            style={{ left: pct(startMin) + "%", width: (pct(endMin) - pct(startMin)) + "%", background: GOLD, borderRadius: 3 }}>
-            <span className="px-1 text-[10px] font-bold tabular-nums text-white whitespace-nowrap">
-              {minToStr(startMin)}~{minToStr(endMin)}
-            </span>
-            <div onPointerDown={beginDrag("left")}
-              className="absolute -left-1 top-0 bottom-0 w-2.5 cursor-ew-resize rounded-l"
-              style={{ background: GOLD_D }} />
-            <div onPointerDown={beginDrag("right")}
-              className="absolute -right-1 top-0 bottom-0 w-2.5 cursor-ew-resize rounded-r"
-              style={{ background: GOLD_D }} />
+        {/* 자정 경계 안내 — 오른쪽 끝까지 끌면 여기를 넘어 익일(00:00~)로 이어짐 */}
+        {endMin < startMin && (
+          <div className="pointer-events-none absolute top-0 bottom-0 z-20" style={{ left: 0, borderLeft: "2px dashed " + GOLD_D }}>
+            <span className="absolute rounded-br px-1 text-[8.5px] font-bold" style={{ top: 0, left: 0, color: "#fff", background: GOLD_D }}>익일 00:00</span>
           </div>
         )}
+        {/* 선택 막대 — 같은날은 한 조각, 자정 넘김은 [시작~24:00]+[00:00~종료] 두 조각이 자정에서 이어짐 */}
+        {(() => {
+          if (endMin === startMin) return null;
+          const overnight = endMin < startMin;
+          const startHandle = (
+            <div onPointerDown={beginStartDrag} className="absolute -left-1 top-0 bottom-0 z-10 w-2.5 cursor-ew-resize rounded-l" style={{ background: GOLD_D }} />
+          );
+          const endHandle = (
+            <div onPointerDown={beginEndDrag} className="absolute -right-1 top-0 bottom-0 z-10 w-2.5 cursor-ew-resize rounded-r" style={{ background: GOLD_D }} />
+          );
+          if (!overnight) {
+            return (
+              <div className="absolute top-1 bottom-1 flex items-center justify-center"
+                style={{ left: pct(startMin) + "%", width: (pct(endMin) - pct(startMin)) + "%", background: GOLD, borderRadius: 3 }}>
+                <span className="px-1 text-[10px] font-bold tabular-nums text-white whitespace-nowrap">{minToStr(startMin)}~{minToStr(endMin)}</span>
+                {startHandle}{endHandle}
+              </div>
+            );
+          }
+          return (
+            <>
+              {/* A: 시작 ~ 24:00 (오른쪽 끝이 흐려지며 자정 너머로 이어짐) */}
+              <div className="absolute top-1 bottom-1 flex items-center"
+                style={{ left: pct(startMin) + "%", right: 0, background: `linear-gradient(90deg, ${GOLD} 60%, ${GOLD}66)`, borderRadius: "3px 0 0 3px" }}>
+                <span className="px-1 text-[10px] font-bold tabular-nums text-white whitespace-nowrap">{minToStr(startMin)}~익일 {minToStr(endMin)}</span>
+                {startHandle}
+              </div>
+              {/* B: 00:00 ~ 종료 (익일 새벽 — 자정에서 A와 이어짐) */}
+              <div className="absolute top-1 bottom-1"
+                style={{ left: 0, width: Math.max(pct(endMin), 0.6) + "%", background: `linear-gradient(90deg, ${GOLD}66, ${GOLD} 40%)`, borderRadius: "0 3px 3px 0" }}>
+                {endHandle}
+              </div>
+            </>
+          );
+        })()}
       </div>
-      <p className="mt-1 text-[11px]" style={{ color: FAINT }}>막대를 클릭·드래그해 시간대를 선택하세요. (양끝 손잡이로 미세 조정)</p>
+      <p className="mt-1 text-[11px]" style={{ color: FAINT }}>막대를 클릭·드래그해 시간대를 선택하세요. <b style={{ color: GOLD_D }}>오른쪽 끝 손잡이를 24:00 너머로 끌면 자정을 넘겨 익일(00:00~)로 이어집니다.</b></p>
     </div>
   );
 }
@@ -162,6 +235,7 @@ export function TimeStepper({ h, m, onH, onM }) {
 
 export function Intake({ prefill } = {}) {
   const PARTNER = usePartner();
+  const tp = usePartnerTerm(); // 사업부별 파트너 용어
   const { reservations } = useStore();
   const rooms = D.ROOMS.filter((r) => r.type === "case");
   // 호실 카드에서 들어온 경우 해당 호실·현재 시각을 시작값으로 프리필. 아니면 블락(빗금)이 보이는 기존 예약일을 기본으로.
@@ -175,12 +249,14 @@ export function Intake({ prefill } = {}) {
   // 현재 입력 중인 슬롯
   const newSlot = pad2(sH) + ":" + pad2(sM) + "~" + pad2(eH) + ":" + pad2(eM);
   const { start: ns, end: ne } = parseSlot(newSlot);
-  const timeInvalid = ns >= ne;
+  const timeInvalid = ns === ne;        // 길이 0 = 무효(자정 넘김은 허용)
+  const endDate = endDateFor(date, newSlot);
 
-  // 해당 날짜·호실의 기존 예약과 겹치는지 확인
-  const sameDay = reservations.filter((r) => r.partner === PARTNER.name && r.date === date);
-  const slotConflict = (roomName) => !timeInvalid && sameDay.some(
-    (x) => x.room === roomName && overlaps({ id: "__new__", slot: newSlot }, x)
+  // 호실별 충돌 — 자정 넘김까지 비교하려고 날짜를 절대 분으로 환산(같은 날 필터 대신 전체 자사 예약과 대조)
+  const newResv = { id: "__new__", slot: newSlot, date, endDate };
+  const mine = reservations.filter((r) => r.partner === PARTNER.name);
+  const slotConflict = (roomName) => !timeInvalid && mine.some(
+    (x) => x.room === roomName && overlaps(newResv, x)
   );
   const currentConflict = slotConflict(room);
   const managerMissing = manager.trim().length === 0; // 담당자명 미입력
@@ -192,7 +268,8 @@ export function Intake({ prefill } = {}) {
     setSH(Math.floor(lo / 60)); setSM(lo % 60);
     setEH(Math.floor(hi / 60)); setEM(hi % 60);
   };
-  const blocked = sameDay.filter((x) => x.room === room).map((x) => parseSlot(x.slot));
+  // 타임라인 빗금(blocked)은 하루(00:00~24:00) 뷰 — 같은 날짜·호실 예약만 분 범위로 표시
+  const blocked = mine.filter((x) => x.room === room && x.date === date).map((x) => parseSlot(x.slot));
 
   const field = (label, ph, req) => (
     <label className="block">
@@ -200,7 +277,7 @@ export function Intake({ prefill } = {}) {
       <input placeholder={ph} className="mt-1 w-full bg-transparent px-3 text-[13px] outline-none" style={{ height: 36, background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS, color: INK }} />
     </label>
   );
-  const summary = date + " · " + room + " · " + pad2(sH) + ":" + pad2(sM) + " ~ " + pad2(eH) + ":" + pad2(eM);
+  const summary = date + " · " + room + " · " + slotLabel(newSlot);
   const doConfirm = async () => {
     if (!canConfirm) return;
     if (!(await confirm({ title: "예약 접수 확정", message: summary + "\n담당자 " + manager.trim() + "\n예약을 확정하고 보호자 영상제작 URL을 생성합니다." }))) return;
@@ -217,7 +294,7 @@ export function Intake({ prefill } = {}) {
             <div className="flex flex-wrap items-start gap-x-8 gap-y-3">
               <div style={{ width: 180 }}><DateField label="날짜" value={date} onChange={setDate} req /></div>
               <div className="min-w-0 flex-1">
-                <span className="text-[12px] font-semibold" style={{ color: MUTE }}>호실</span>
+                <span className="text-[12px] font-semibold" style={{ color: MUTE }}>{tp("room")}</span>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
                   {rooms.map((r) => {
                     const on = room === r.name;
@@ -265,7 +342,7 @@ export function Intake({ prefill } = {}) {
 
             {timeInvalid ? (
               <div className="mt-4 flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold" style={{ background: "#ede9e1", borderRadius: RADIUS, color: MUTE }}>
-                시작 시간이 종료 시간보다 늦습니다.
+                시작과 종료 시간이 같습니다. 시간대를 지정해주세요.
               </div>
             ) : currentConflict ? (
               <div className="mt-4 flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold" style={{ background: "#ede9e1", borderRadius: RADIUS, color: MUTE }}>
@@ -293,13 +370,13 @@ export function Intake({ prefill } = {}) {
                 style={{ height: 36, background: SURFACE, border: "1px solid " + (managerMissing ? GOLD : LINE), borderRadius: RADIUS, color: INK }} />
             </label>
           </Card>
-          <Card title="보호자 정보">
+          <Card title={tp("guardian") + " 정보"}>
             <div className="space-y-3">
               {field("성함", "홍길동", true)}
               {field("연락처", "010-0000-0000", true)}
             </div>
           </Card>
-          <Card title="반려동물 정보">
+          <Card title={tp("subject") + " 정보"}>
             <div className="space-y-3">
               {field("이름", "초코", true)}
               {field("품종", "골든리트리버", true)}

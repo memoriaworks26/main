@@ -5,18 +5,24 @@ import {
 } from "lucide-react";
 import { SURFACE, LINE2, GOLD, GOLD_D, INK, FAINT } from "../theme.js";
 import { Btn, Card, MetricRow, PageHeader, Table } from "../ui.jsx";
-import { useStore } from "../store.js";
+import { useStore, actions } from "../store.js";
 import * as D from "../data.js";
 import { CUSTOMER_COLS, toCustomerRow, renderCustomerCell } from "./customers.jsx";
 import { man } from "../lib/format.js";
 
 export function Dashboard({ go }) {
-  const { reservations, partners } = useStore();
+  const store = useStore();
+  const { bizUnits, bizUnit } = store;
+  // 현재 사업부 스코핑 — 소속 파트너사 + 그 예약만
+  const partners = store.partners.filter((p) => p.bizUnit === bizUnit);
+  const bizNames = new Set(partners.map((p) => p.name));
+  const reservations = store.reservations.filter((r) => bizNames.has(r.partner));
   const total = partners.length;
   const active = partners.filter((p) => p.active).length;
   const resv = partners.reduce((s, p) => s + p.reservThisMonth, 0);
-  const billed = D.SETTLEMENT_PARTNERS.reduce((s, p) => s + p.billed, 0);
-  const unpaid = D.SETTLEMENT_PARTNERS.reduce((s, p) => s + p.unpaid, 0);
+  // 정산 데이터는 사업부 태깅 전 → 파트너 없는(신규) 사업부는 0으로
+  const billed = total ? D.SETTLEMENT_PARTNERS.reduce((s, p) => s + p.billed, 0) : 0;
+  const unpaid = total ? D.SETTLEMENT_PARTNERS.reduce((s, p) => s + p.unpaid, 0) : 0;
   // 고객관리와 같은 리스트 · 최신순(예약일 내림차순) 상위 5건
   const recent = reservations.map(toCustomerRow)
     .sort((a, b) => String(b.date).localeCompare(String(a.date)))
@@ -38,11 +44,15 @@ export function Dashboard({ go }) {
       <div className="mb-4">
         <Card title="사업부별 현황">
           <div className="flex flex-wrap items-center gap-2">
-            {D.BIZ_UNITS.map((b) => (
-              <span key={b.id} className="px-3.5 py-1.5 text-[12.5px] font-semibold" style={{ borderRadius: 999, background: b.active ? GOLD : SURFACE, color: b.active ? "#fff" : FAINT, border: "1px solid " + (b.active ? GOLD : LINE2) }}>
-                {b.name}{b.active ? ` · ${b.partners}개 파트너사` : ""}
-              </span>
-            ))}
+            {bizUnits.map((b) => {
+              const on = b.id === bizUnit;
+              const c = store.partners.filter((p) => p.bizUnit === b.id).length;
+              return (
+                <button key={b.id} onClick={() => actions.setBizUnit(b.id)} className="px-3.5 py-1.5 text-[12.5px] font-semibold outline-none transition focus-visible:ring-1" style={{ borderRadius: 999, background: on ? GOLD : SURFACE, color: on ? "#fff" : FAINT, border: "1px solid " + (on ? GOLD : LINE2) }}>
+                  {b.name} · {c}개 파트너사
+                </button>
+              );
+            })}
           </div>
         </Card>
       </div>
