@@ -16,6 +16,9 @@ export function loadConfig() {
     finalBucket: process.env.FINAL_BUCKET || "memoria-final",
     pollMs: +(process.env.POLL_INTERVAL_MS || 5000),
     maxAttempts: +(process.env.MAX_ATTEMPTS || 3),
+    concurrency: Math.max(1, +(process.env.CONCURRENCY || 2)),    // 동시 렌더 수(피크 흡수). 레플리카 병행도 안전(claim=SKIP LOCKED)
+    staleMinutes: +(process.env.STALE_RENDER_MIN || 15),          // rendering이 이만큼 멈추면 리퍼가 재큐/실패
+    reaperMs: +(process.env.REAPER_INTERVAL_MS || 60000),         // 리퍼 점검 주기
     stub: process.env.WORKER_STUB !== "0",
     higgsfield: { key: process.env.HIGGSFIELD_API_KEY, secret: process.env.HIGGSFIELD_SECRET },
   };

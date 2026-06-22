@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────
 // FFmpeg 합성 — 템플릿 블록(이미지/영상) → 16:9 세그먼트 정규화 → concat → BGM.
-//   ffmpeg-static 휴대용 바이너리 사용(로컬·Render 동일). 캡션 drawtext(한글은 fontfile 필요).
+//   ffmpeg-static 휴대용 바이너리 사용(로컬·Railway 동일). 캡션 drawtext(한글은 fontfile 필요).
 //   세그먼트 단위로 인코딩 후 concat → 혼합 입력(이미지+영상)도 안정적으로 이어붙임.
 // ─────────────────────────────────────────────────────────────
 import { spawn } from "node:child_process";

@@ -1,6 +1,6 @@
 # 메모리아웍스 렌더 워커
 
-큐(`memoria.submissions.status='queued'`)를 소비해 추모영상을 렌더하고 `done`으로 갱신하는 **서버 컴포넌트**. 프론트/DB와는 큐로만 통신하므로 **로컬에서 돌리든 Render에 올리든 동일**하게 동작한다(위치 독립). → 로컬에서 만들어 검증하고, 출시 때 같은 코드를 Render에 배포(.env만 한 번 붙여넣기).
+큐(`memoria.submissions.status='queued'`)를 소비해 추모영상을 렌더하고 `done`으로 갱신하는 **서버 컴포넌트**. 프론트/DB와는 큐로만 통신하므로 **로컬에서 돌리든 Railway에 올리든 동일**하게 동작한다(위치 독립). → 로컬에서 만들어 검증하고, 출시 때 같은 코드를 Railway에 배포(.env만 한 번 붙여넣기).
 
 ## 실행 (로컬)
 ```bash
@@ -26,7 +26,7 @@ npm start                   # 상시 폴링
 ## 구조
 ```
 worker/
-  .env.example        # 키 1:1 (로컬·Render 동일)
+  .env.example        # 키 1:1 (로컬·Railway 동일)
   src/
     index.js          # 메인 루프(--once 지원)
     config.js         # env 로드·검증

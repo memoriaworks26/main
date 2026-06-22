@@ -11,6 +11,13 @@ export async function claimJob() {
   return data && data.id ? data : null;
 }
 
+// 멈춘(rendering) 렌더 복구 — N분 이상 정지 시 재큐(또는 시도초과면 failed). 처리 건수 반환.
+export async function requeueStale(minutes, maxAttempts) {
+  const { data, error } = await db.rpc("requeue_stale_renders", { p_minutes: minutes, p_max_attempts: maxAttempts });
+  if (error) throw new Error("리퍼 실패: " + error.message);
+  return data || 0;
+}
+
 // 제출물의 업로드 자산(사진·영상) — sort_order 순.
 export async function fetchAssets(job) {
   const { data, error } = await db
