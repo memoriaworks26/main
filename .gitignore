@@ -5,3 +5,9 @@
 node_modules/
 dist/
 *.log
+
+# 시크릿 (절대 커밋 금지)
+.env
+.env.local
+.env.*.local
+.secrets.local.md
