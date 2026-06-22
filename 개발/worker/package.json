@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "description": "메모리아웍스 렌더 워커 — 큐(submissions.queued) 소비 → AI·FFmpeg 렌더 → done",
-  "engines": { "node": ">=18" },
+  "engines": { "node": ">=22" },
   "scripts": {
     "start": "node src/index.js",
     "once": "node src/index.js --once",
