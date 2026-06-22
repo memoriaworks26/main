@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { toast } from "../toast.jsx";
 import { confirm } from "../confirm.jsx";
 import { grabVideoFrame, grabVideoDuration } from "../lib/media.js";
-import { getToken, resolveLink, uploadAsset, submitLink, shareUrlFor } from "../lib/userLink.js";
+import { getToken, resolveLink, fetchLinkConfig, uploadAsset, submitLink, shareUrlFor } from "../lib/userLink.js";
 import { BACKEND_LIVE } from "../lib/supabase.js";
 import { useStore, userTextOf } from "../store.js";
 import * as D from "../data.js";
@@ -17,12 +17,9 @@ export function useUserWizard(previewBizId, stepCtl) {
   const token = getToken();
   const liveMode = BACKEND_LIVE && !!token;
   const store = useStore(); // 고객센터 문의처(본사 + 장례식장) — 설정에서 편집 → 하단 안내에 반영
-  const { company, partners } = store;
+  const { partners } = store;
   const preview = !!previewBizId;
-  // 유저링크 표시 텍스트·예시사진 — preview면 해당 사업부, 실링크면 시드 사업부 기준(실시간 오버라이드 반영)
   const bizForText = previewBizId || D.BIZ_UNITS[0].id;
-  const T = userTextOf(store, bizForText);
-  const examplePhotos = store.userPhotos[bizForText] || {}; // { good?, bad? } 예시 사진 오버라이드
 
   // 단계 — 외부(사업부별 세팅 미리보기)에서 제어하면 그걸 쓰고, 아니면 내부 상태
   const [stepIn, setStepIn] = useState(0);
@@ -90,6 +87,31 @@ export function useUserWizard(previewBizId, stepCtl) {
     });
     return () => { alive = false; };
   }, [token]);
+
+  // [QA] 실 보호자 링크 — 토큰의 사업부 공개설정(예시사진·유저문구·동의문구·고객센터) 로드.
+  //   실패하면 null → 아래 계산이 기본값으로 폴백(현 동작 유지).
+  const [linkConfig, setLinkConfig] = useState(null);
+  useEffect(() => {
+    if (preview || !liveMode) return;
+    let alive = true;
+    fetchLinkConfig(token).then((c) => { if (alive && c) setLinkConfig(c); });
+    return () => { alive = false; };
+  }, [token, preview, liveMode]);
+
+  // 표시 텍스트·예시사진·고객센터/동의문구 — 실 보호자 링크면 linkConfig(토큰 사업부) 우선,
+  //   아니면(preview/데모) store·시드 기준. linkConfig null이면 자동 폴백(현 동작 유지).
+  const cfg = (!preview && liveMode) ? linkConfig : null;
+  const T = { ...userTextOf(store, bizForText), ...(cfg?.user_text || {}) };
+  const examplePhotos = cfg?.user_photos || store.userPhotos[bizForText] || {};
+  const company = cfg ? {
+    ...store.company,
+    csPhone: cfg.cs_phone ?? store.company.csPhone,
+    csHours: cfg.cs_hours ?? store.company.csHours,
+    consentPrivacy: cfg.consent_privacy ?? store.company.consentPrivacy,
+    consentMarketing: cfg.consent_marketing ?? store.company.consentMarketing,
+    privacyPolicy: cfg.privacy_policy ?? store.company.privacyPolicy,
+    privacyOfficer: cfg.privacy_officer ?? store.company.privacyOfficer,
+  } : store.company;
 
   // 사진(슬라이드)·영상(추억 영상) 공통 삭제/추가/순서변경 — kind별 state(setList)에 적용.
   const makeRemove = (setList, label) => async (id) => {

@@ -52,6 +52,20 @@ export async function signOut() {
   if (sb) await sb.auth.signOut();
 }
 
+// 본인 비밀번호 변경 — 현재 비번 재인증 후 변경(세션 탈취 시 무단변경 방지).
+//   관리자·파트너 공통(로그인된 본인). Supabase 비번 최소길이(6) 이상 필요.
+export async function changePassword(currentPassword, newPassword) {
+  const sb = getClient();
+  if (!sb) throw new Error("백엔드가 설정되지 않았습니다.");
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user?.email) throw new Error("세션이 만료되었습니다. 다시 로그인해 주세요.");
+  // 현재 비밀번호 확인(재인증) — 같은 유저 재로그인이라 세션만 갱신됨.
+  const { error: reErr } = await sb.auth.signInWithPassword({ email: user.email, password: currentPassword });
+  if (reErr) throw new Error("현재 비밀번호가 올바르지 않습니다.");
+  const { error } = await sb.auth.updateUser({ password: newPassword });
+  if (error) throw new Error(error.message.includes("at least") ? "비밀번호는 6자 이상이어야 합니다." : error.message);
+}
+
 // 세션 신원 해석. staff(관리자) 우선, 아니면 partner. 둘 다 아니면 none.
 // RLS가 본인 행만 주지만 master는 staff 전체가 보이므로 반드시 uid로 필터.
 export async function fetchProfile(session) {

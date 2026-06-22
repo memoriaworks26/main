@@ -18,13 +18,14 @@ const companyToRow = (patch) => { const o = {}; for (const [d, dbk] of Object.en
 
 export async function fetchConfig() {
   const d = need();
-  const [co, tc, ut, fc] = await Promise.all([
+  const [co, tc, ut, fc, up] = await Promise.all([
     d.from("company").select("*").eq("id", 1).maybeSingle(),
     d.from("term_configs").select("*"),
     d.from("user_text_overrides").select("*"),
     d.from("form_configs").select("*"),
+    d.from("user_photos").select("*"),
   ]);
-  for (const r of [co, tc, ut, fc]) if (r.error) throw new Error("설정 조회 실패: " + r.error.message);
+  for (const r of [co, tc, ut, fc, up]) if (r.error) throw new Error("설정 조회 실패: " + r.error.message);
 
   const termConfigs = {};
   (tc.data || []).forEach((r) => {
@@ -34,8 +35,22 @@ export async function fetchConfig() {
   (ut.data || []).forEach((r) => { (userText[r.biz_unit_id] ||= {})[r.key] = r.value; });
   const formConfigs = {};
   (fc.data || []).forEach((r) => { (formConfigs[r.partner_id] ||= {})[r.field_key] = { hidden: r.hidden, label: r.label }; });
+  const userPhotos = {};
+  (up.data || []).forEach((r) => { (userPhotos[r.biz_unit_id] ||= {})[r.key] = r.data_url; });
 
-  return { company: mapCompany(co.data), termConfigs, userText, formConfigs };
+  return { company: mapCompany(co.data), termConfigs, userText, formConfigs, userPhotos };
+}
+
+// 사업부 예시사진 저장/초기화(data_url). key='good'|'bad'.
+export async function upsertUserPhoto(bizId, key, dataUrl) {
+  const d = need();
+  const { error } = await d.from("user_photos").upsert({ biz_unit_id: bizId, key, data_url: dataUrl, updated_at: new Date().toISOString() });
+  if (error) throw new Error(error.message);
+}
+export async function deleteUserPhoto(bizId, key) {
+  const d = need();
+  const { error } = await d.from("user_photos").delete().eq("biz_unit_id", bizId).eq("key", key);
+  if (error) throw new Error(error.message);
 }
 
 export async function updateCompany(patch) {

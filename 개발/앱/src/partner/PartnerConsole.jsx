@@ -7,7 +7,7 @@ import {
 import { NAVY, BG, LINE, LINE2, GOLD, GOLD_D, INK, MUTE, FAINT, NAV_LINE, RADIUS } from "../theme.js";
 import { Logo, Btn, Card, PageHeader, NavItem, NavSection, Modal, PwField } from "../ui.jsx";
 import { toast } from "../toast.jsx";
-import { signOut } from "../lib/auth.js";
+import { signOut, changePassword, DEV_PREVIEW } from "../lib/auth.js";
 import { useStore, actions } from "../store.js";
 import * as D from "../data.js";
 import { PartnerCtx, ICON } from "./shared.jsx";
@@ -23,9 +23,17 @@ function PwChangeModal({ open, onClose }) {
   const [done, setDone] = useState(false);
   const reset = () => { setCur(""); setNext(""); setConfirm(""); setDone(false); };
   const close = () => { reset(); onClose(); };
+  const [busy, setBusy] = useState(false);
   const err = !next ? "" : next.length < 8 ? "새 비밀번호는 8자 이상이어야 합니다." : (confirm && next !== confirm) ? "새 비밀번호가 일치하지 않습니다." : "";
-  const ok = cur && next.length >= 8 && next === confirm;
-  const submit = () => { if (!ok) return; setDone(true); setTimeout(close, 1400); };
+  const ok = cur && next.length >= 8 && next === confirm && !busy;
+  const submit = async () => {
+    if (!ok) return;
+    if (DEV_PREVIEW) { setDone(true); setTimeout(close, 1400); return; }
+    setBusy(true);
+    try { await changePassword(cur, next); setDone(true); setTimeout(close, 1400); }
+    catch (e) { toast(e.message || "비밀번호 변경 실패"); }
+    finally { setBusy(false); }
+  };
   return (
     <Modal open={open} onClose={close} width={360}>
       <div className="flex items-center justify-between px-5" style={{ height: 50, borderBottom: "1px solid " + LINE }}>

@@ -10,6 +10,7 @@ const need = () => { const d = db(); if (!d) throw new Error("백엔드 미연�
 const mapVideo = (r) => ({
   id: r.id,
   partnerId: r.partner_id,
+  reservationId: r.reservation_id,
   partner: r.partner?.name ?? r.partner_id,
   deceased: r.deceased,
   room: r.room_no,
@@ -17,6 +18,7 @@ const mapVideo = (r) => ({
   date: r.funeral_date,
   sizeMB: r.final_mb != null ? Number(r.final_mb) : 0,
   srcMB: r.source_mb != null ? Number(r.source_mb) : 0,
+  finalPath: r.final_path, sourcePath: r.source_path,  // 다운로드 서명URL 대상
   status: r.status,
 });
 

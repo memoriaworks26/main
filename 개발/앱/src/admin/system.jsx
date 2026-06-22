@@ -9,6 +9,7 @@ import { toast } from "../toast.jsx";
 import { confirm } from "../confirm.jsx";
 import { useStore, actions } from "../store.js";
 import * as D from "../data.js";
+import * as storage from "../lib/storage.js";
 import { SearchSelect } from "./shared.jsx";
 
 export function Signage() {
@@ -71,6 +72,16 @@ function PeriodDownload({ canDelete = true, finalOnly = false }) {
     if (await confirm({ title: "자산 삭제", message: `선택한 ${delIds.length}개 자산을 삭제합니다.\n영구 삭제되며 복구할 수 없습니다.`, danger: true })) removeIds(delIds);
   };
   const deleteOne = async (v) => { if (await confirm({ title: "자산 삭제", message: `「${D.assetFileName(v, target)}」을(를) 삭제합니다.\n영구 삭제되며 복구할 수 없습니다.`, danger: true })) removeIds([v.id]); };
+  // [QA] 실 다운로드 — 대상(final/source/both)별 서명URL 발급 + 감사로그(log_access).
+  const dlOne = (v) => {
+    const jobs = [];
+    if ((target === "final" || target === "both") && v.finalPath) jobs.push([v.finalPath, D.videoFileName(v)]);
+    if ((target === "source" || target === "both") && v.sourcePath) jobs.push([v.sourcePath, D.sourceFileName(v)]);
+    if (!jobs.length) { toast("다운로드할 파일이 아직 없습니다(렌더 전)."); return; }
+    jobs.forEach(([p, fn]) => storage.downloadAsset(storage.BUCKETS.final, p, fn, { action: "download", targetType: "video", targetId: v.id, partnerId: v.partnerId })
+      .catch((e) => toast("다운로드 실패: " + e.message)));
+  };
+  const dlSel = () => { if (!selRows.length) return; selRows.forEach(dlOne); };
 
   // 현재 필터 결과 중 선택된 것 (필터 밖 선택은 집계 제외)
   const selRows = rows.filter((r) => sel.has(r.id));
@@ -157,7 +168,7 @@ function PeriodDownload({ canDelete = true, finalOnly = false }) {
               <span className="w-32 text-right text-[12px] tabular-nums" style={{ color: MUTE }}>{fmtDt(v.datetime)}</span>
               <span className="w-20 text-right text-[12px] tabular-nums" style={{ color: MUTE }}>{fmtSize(sz(v))}</span>
               <span className="flex w-14 items-center justify-end gap-1">
-                <button onClick={() => toast(D.assetFileName(v, target) + " 다운로드를 시작합니다")} className="flex items-center justify-center p-1 outline-none" style={{ color: GOLD_D }} title="개별 다운로드"><Download className="h-3.5 w-3.5" /></button>
+                <button onClick={() => dlOne(v)} className="flex items-center justify-center p-1 outline-none" style={{ color: GOLD_D }} title="개별 다운로드"><Download className="h-3.5 w-3.5" /></button>
                 {canDelete && <button onClick={() => deleteOne(v)} className="flex items-center justify-center p-1 outline-none transition hover:opacity-70" style={{ color: "#c0392b" }} title="삭제"><Trash2 className="h-3.5 w-3.5" /></button>}
               </span>
             </div>
@@ -172,8 +183,8 @@ function PeriodDownload({ canDelete = true, finalOnly = false }) {
         </span>
         <div className="ml-auto flex items-center gap-2">
           {canDelete && <Btn size="sm" variant="ghost" disabled={selRows.length === 0} onClick={deleteSel}><span className="inline-flex items-center gap-1.5" style={{ color: "#c0392b" }}><Trash2 className="h-3.5 w-3.5" /> 선택 삭제</span></Btn>}
-          <Btn size="sm" variant="ghost" disabled={selRows.length === 0} onClick={() => toast(selRows.length + "개 다운로드를 시작합니다")}><Download className="h-3.5 w-3.5" /> 선택 다운로드</Btn>
-          <Btn size="sm" disabled={rows.length === 0} onClick={() => toast("전체 ZIP 다운로드를 시작합니다")}><Download className="h-3.5 w-3.5" /> 전체 ZIP ({fmtSize(totalSize)})</Btn>
+          <Btn size="sm" variant="ghost" disabled={selRows.length === 0} onClick={dlSel}><Download className="h-3.5 w-3.5" /> 선택 다운로드</Btn>
+          <Btn size="sm" disabled={rows.length === 0} onClick={() => toast("전체 ZIP 묶음은 서버 측 처리 예정입니다 — 개별·선택 다운로드를 이용하세요.")}><Download className="h-3.5 w-3.5" /> 전체 ZIP ({fmtSize(totalSize)})</Btn>
         </div>
       </div>
       <p className="mt-2.5 text-[11px] leading-relaxed" style={{ color: FAINT }}>

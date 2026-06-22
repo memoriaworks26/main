@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { SERIF, SURFACE, LINE, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS, SUB_LABEL } from "../theme.js";
 import { Tag, Btn, Card, Table, PageHeader, CopyBtn, DateField, useTableSort } from "../ui.jsx";
-import { useStore, actions } from "../store.js";
+import { useStore, actions, videoFor } from "../store.js";
 import { confirm } from "../confirm.jsx";
 import { CUSTOMER_COLS, customerSortValue, toCustomerRow, renderCustomerCell, MemorialVideoCard } from "../admin/customers.jsx";
 import { matchQuery } from "../lib/util.js";
@@ -85,7 +85,8 @@ export function PList({ onDetail, onNew }) {
 
 // 예약 상세 — 수정은 모달 없이 이 페이지 인라인으로 진행
 export function ReservDetail({ reserv, onBack }) {
-  const { reservations, submissions } = useStore();
+  const store = useStore();
+  const { reservations, submissions } = store;
   const tp = usePartnerTerm(); // 사업부별 파트너 용어
   const CASE_ROOMS = useCaseRooms();
   const r = reservations.find((x) => x.id === (reserv && reserv.id)) || reserv;
@@ -227,7 +228,7 @@ export function ReservDetail({ reserv, onBack }) {
             </div>
           )}
         </Card>
-        {!editing && <MemorialVideoCard status={r.status} file={videoFile} requestedAt={r.requestedAt} />}
+        {!editing && <MemorialVideoCard status={r.status} file={videoFile} requestedAt={r.requestedAt} video={videoFor(store, r.id)} />}
       </div>
 
       <div className="mt-4">

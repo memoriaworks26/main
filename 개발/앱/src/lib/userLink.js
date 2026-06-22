@@ -48,6 +48,18 @@ export async function resolveLink(token) {
   }
 }
 
+// 토큰의 사업부 공개설정(예시사진·유저문구·동의문구·고객센터 등) — 토큰 검증 후 화이트리스트.
+//   없거나 실패하면 null(호출측이 기본값으로 폴백). 계좌·사업자번호 등 민감정보는 미포함.
+export async function fetchLinkConfig(token) {
+  if (!BACKEND_LIVE || !token) return null;
+  try {
+    const sb = getClient();
+    const { data, error } = await sb.rpc("get_user_link_config", { p_token: token });
+    if (error || !data) return null;
+    return data; // { cs_phone, cs_hours, consent_privacy, consent_marketing, privacy_policy, privacy_officer, terms, user_text, user_photos }
+  } catch { return null; }
+}
+
 // 파일 1건 업로드. 반환: { storagePath, name, sizeMB, kind }.
 // 라이브가 아니면 업로드를 건너뛰고 합성 경로만 돌려준다(목업 동작 유지).
 export async function uploadAsset(token, file, { kind }) {

@@ -31,7 +31,7 @@ export async function updateDevice(id, patch) {
 }
 
 // ── 표출 소스(광고·대기·알림) — 파트너별 ──
-const mapSource = (r) => ({ id: r.id, cat: r.cat, name: r.name, kind: r.kind, file: r.file, active: r.active });
+const mapSource = (r) => ({ id: r.id, cat: r.cat, name: r.name, kind: r.kind, file: r.file, storagePath: r.storage_path, active: r.active });
 
 export async function fetchSources(partnerId) {
   const d = need();
@@ -44,7 +44,7 @@ export async function fetchSources(partnerId) {
 export async function addSource(partnerId, src) {
   const d = need();
   const { data, error } = await d.from("signage_sources")
-    .insert({ id: src.id, partner_id: partnerId, cat: src.cat, name: src.name, kind: src.kind, file: src.file, active: !!src.active })
+    .insert({ id: src.id, partner_id: partnerId, cat: src.cat, name: src.name, kind: src.kind, file: src.file, storage_path: src.storagePath ?? null, active: !!src.active })
     .select().single();
   if (error) throw new Error(error.message);
   return mapSource(data);

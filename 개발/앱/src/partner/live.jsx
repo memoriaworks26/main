@@ -211,20 +211,22 @@ function SourceManagerModal({ cat, onClose }) {
   const Icon = meta.icon;
   const [name, setName] = useState("");
   const [kind, setKind] = useState("이미지");
-  const [file, setFile] = useState("");
+  const [file, setFile] = useState("");        // 표시 파일명
+  const [fileObj, setFileObj] = useState(null); // 실제 업로드 파일
 
-  // 파일 업로드(목업) — 드롭존 클릭 시 선택된 파일로 간주
-  const pickFile = () => {
-    const def = SOURCE_KINDS.find((k) => k.key === kind);
-    const fn = (kind === "영상" ? "새_영상_" : "새_이미지_") + Date.now().toString(36).slice(-4) + def.ext;
-    setFile(fn);
-    if (!name.trim()) setName(fn.replace(/\.\w+$/, ""));
+  // 실제 파일 선택 — File 객체 보관(업로드는 store가 스토리지로). 종류는 파일 MIME로 자동 보정.
+  const onPick = (e) => {
+    const f = e.target.files?.[0]; e.target.value = ""; if (!f) return;
+    setFileObj(f); setFile(f.name);
+    if (f.type) setKind(f.type.startsWith("video") ? "영상" : "이미지");
+    if (!name.trim()) setName(f.name.replace(/\.\w+$/, ""));
   };
+  const clearFile = () => { setFileObj(null); setFile(""); };
   const add = () => {
-    if (!file) { toast("이미지 또는 영상 파일을 올려주세요"); return; }
+    if (!fileObj) { toast("이미지 또는 영상 파일을 올려주세요"); return; }
     const nm = name.trim() || file.replace(/\.\w+$/, "");
-    actions.addSignageSource({ id: "src-" + Date.now().toString(36), cat, name: nm, kind, file, active: false });
-    setName(""); setFile("");
+    actions.addSignageSource({ id: "src-" + Date.now().toString(36), cat, name: nm, kind, file, fileObj, active: false });
+    setName(""); clearFile();
     toast(meta.label + " 소스를 등록했습니다");
   };
 
@@ -290,15 +292,16 @@ function SourceManagerModal({ cat, onClose }) {
             <div className="mb-2 flex items-center gap-2 px-3 py-2.5" style={{ background: GOLD_SOFT, border: "1px solid " + GOLD, borderRadius: RADIUS }}>
               {kind === "영상" ? <Film className="h-4 w-4" style={{ color: GOLD_D }} /> : <ImageIcon className="h-4 w-4" style={{ color: GOLD_D }} />}
               <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold" style={{ color: INK }}>{file}</span>
-              <button onClick={() => setFile("")} className="shrink-0 transition hover:opacity-70" style={{ color: MUTE }}><X className="h-3.5 w-3.5" /></button>
+              <button onClick={clearFile} className="shrink-0 transition hover:opacity-70" style={{ color: MUTE }}><X className="h-3.5 w-3.5" /></button>
             </div>
           ) : (
-            <button onClick={pickFile} className="mb-2 flex w-full flex-col items-center justify-center gap-1.5 py-6 outline-none transition hover:border-[#c9a86a]"
+            <label className="mb-2 flex w-full cursor-pointer flex-col items-center justify-center gap-1.5 py-6 outline-none transition hover:border-[#c9a86a]"
               style={{ border: "1.5px dashed " + LINE2, borderRadius: RADIUS, background: "#faf8f3" }}>
+              <input type="file" className="hidden" accept={kind === "영상" ? "video/*" : "image/*"} onChange={onPick} />
               <Upload className="h-6 w-6" style={{ color: GOLD }} />
               <span className="text-[12.5px] font-semibold" style={{ color: INK }}>{kind} 파일 끌어다 놓기 또는 눌러서 선택</span>
               <span className="text-[11px]" style={{ color: FAINT }}>{kind === "영상" ? "mp4 · mov" : "jpg · png"}</span>
-            </button>
+            </label>
           )}
           <input value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()}
             placeholder="소스 이름"

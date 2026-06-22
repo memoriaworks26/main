@@ -8,6 +8,7 @@ import { Tag, Btn, Card, Table, PageHeader, PwField, useTableSort } from "../ui.
 import { toast } from "../toast.jsx";
 import { confirm as confirmDialog } from "../confirm.jsx";
 import { useStore, actions } from "../store.js";
+import { changePassword, DEV_PREVIEW } from "../lib/auth.js";
 import * as D from "../data.js";
 
 // ── 고객센터 (유저 문의처) — 마스터가 등록 → 유저링크 하단 문의 안내에 노출 ──
@@ -217,11 +218,19 @@ function PasswordResetModal({ account, onClose }) {
   const [next, setNext] = useState("");
   const [confirm, setConfirm] = useState("");
   const [done, setDone] = useState(false);
+  const [busy, setBusy] = useState(false);
 
   const tooShort = next.length > 0 && next.length < 8;
   const mismatch = confirm.length > 0 && next !== confirm;
-  const canSubmit = cur.trim() && next.length >= 8 && next === confirm;
-  const submit = () => { if (canSubmit) setDone(true); };
+  const canSubmit = cur.trim() && next.length >= 8 && next === confirm && !busy;
+  const submit = async () => {
+    if (!canSubmit) return;
+    if (DEV_PREVIEW) { setDone(true); return; }  // 개발 미리보기 — 목업
+    setBusy(true);
+    try { await changePassword(cur, next); setDone(true); }
+    catch (e) { toast(e.message || "비밀번호 변경 실패"); }
+    finally { setBusy(false); }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: "rgba(20,26,36,.46)" }} onClick={onClose}>
@@ -239,7 +248,7 @@ function PasswordResetModal({ account, onClose }) {
               <Check className="h-6 w-6" strokeWidth={2.4} style={{ color: GOLD_D }} />
             </span>
             <div className="text-[14px] font-bold" style={{ color: INK }}>비밀번호가 변경되었습니다</div>
-            <p className="mt-1.5 text-[12px]" style={{ color: MUTE }}>다음 로그인부터 새 비밀번호를 사용하세요. (목업)</p>
+            <p className="mt-1.5 text-[12px]" style={{ color: MUTE }}>다음 로그인부터 새 비밀번호를 사용하세요.</p>
             <div className="mt-5"><Btn size="sm" onClick={onClose}>확인</Btn></div>
           </div>
         ) : (

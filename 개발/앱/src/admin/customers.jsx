@@ -5,10 +5,11 @@ import {
 } from "lucide-react";
 import { SERIF, SURFACE, LINE, GOLD_D, INK, MUTE, FAINT, RADIUS, SUB_LABEL } from "../theme.js";
 import { Tag, Btn, Card, Table, PageHeader, CopyBtn, useTableSort } from "../ui.jsx";
-import { useStore, actions, submissionFor } from "../store.js";
+import { useStore, actions, submissionFor, videoFor } from "../store.js";
 import { confirm } from "../confirm.jsx";
 import { toast } from "../toast.jsx";
 import { matchQuery } from "../lib/util.js";
+import * as storage from "../lib/storage.js";
 import { SearchSelect } from "./shared.jsx";
 import { SlotText } from "../partner/shared.jsx";
 
@@ -48,8 +49,14 @@ export const renderCustomerCell = (r, k) =>
 
 // 추모영상 카드 — 고객관리 상세 · 파트너 예약 상세 공용(두 화면 동일 보장).
 // status 기준 슬레이트 라벨 + 발행 시 다운로드(미발행은 disabled) + HQ 안내.
-export function MemorialVideoCard({ status, file, requestedAt }) {
+export function MemorialVideoCard({ status, file, requestedAt, video }) {
   const vlabel = status === "published" ? "발행 완료" : status === "confirm" ? "컨펌 대기" : status === "review" ? "접수 대기" : "제작 중";
+  // [QA] 실 다운로드 — videos.finalPath 서명URL + 감사로그. 경로 없으면 안내.
+  const dl = () => {
+    if (!video?.finalPath) { toast("아직 다운로드할 최종본이 없습니다."); return; }
+    storage.downloadAsset(storage.BUCKETS.final, video.finalPath, file, { action: "download", targetType: "video", targetId: video.id, partnerId: video.partnerId })
+      .catch((e) => toast("다운로드 실패: " + e.message));
+  };
   return (
     <Card title="추모영상">
       <div className="relative flex items-center justify-center" style={{ aspectRatio: "16/9", background: "#2a323d", borderRadius: RADIUS }}>
@@ -58,7 +65,7 @@ export function MemorialVideoCard({ status, file, requestedAt }) {
       {status === "published" ? (
         <div className="mt-2.5 flex items-center justify-between gap-2">
           <span className="min-w-0 truncate text-[11.5px] tabular-nums" style={{ color: MUTE, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{file}</span>
-          <Btn size="sm" onClick={() => toast(file + " 다운로드를 시작합니다")}><Download className="h-3.5 w-3.5" /> 다운로드</Btn>
+          <Btn size="sm" onClick={dl}><Download className="h-3.5 w-3.5" /> 다운로드</Btn>
         </div>
       ) : (
         <div className="mt-2.5 flex items-center justify-between gap-2">
@@ -109,7 +116,7 @@ function CustomerDetail({ rid, onBack }) {
             <div className="flex items-center gap-2"><span style={{ color: MUTE }}>영상</span>{videoTag(r.status)}</div>
           </div>
         </Card>
-        <MemorialVideoCard status={r.status} file={file} requestedAt={r.requestedAt || "—"} />
+        <MemorialVideoCard status={r.status} file={file} requestedAt={r.requestedAt || "—"} video={videoFor(store, r.id)} />
       </div>
 
       <div className="mt-4">

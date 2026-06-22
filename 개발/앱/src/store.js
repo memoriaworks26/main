@@ -98,6 +98,8 @@ export const partnerSettle = (s, partnerName) => {
 };
 // [QA-P1] 예약의 보호자 제작링크(submission) 조회 — 고객상세·예약상세 공용.
 export const submissionFor = (s, reservationId) => s.submissions.find((x) => x.reservationId === reservationId) || null;
+// [QA] 예약의 발행 영상(videos) 조회 — 다운로드(서명URL) 대상.
+export const videoFor = (s, reservationId) => s.videos.find((x) => x.reservationId === reservationId) || null;
 // 현재 사업부 전체 정산 합계.
 export const bizSettleTotals = (s) => bizPartners(s).reduce((acc, p) => {
   const r = partnerSettle(s, p.name);
@@ -165,8 +167,8 @@ export const actions = {
   // [Phase4-5b] 입금·명세서 적재.
   hydrateSettlementExtra: ({ deposits, statements }) => set({ settlementDeposits: deposits, statements }),
   // [Phase4-7] 설정(회사·용어·유저문구·폼) 적재.
-  hydrateConfig: ({ company, termConfigs, userText, formConfigs }) => set((s) => ({
-    company: { ...s.company, ...company }, termConfigs, userText, formConfigs,
+  hydrateConfig: ({ company, termConfigs, userText, formConfigs, userPhotos }) => set((s) => ({
+    company: { ...s.company, ...company }, termConfigs, userText, formConfigs, userPhotos: userPhotos || {},
   })),
 
   // 사업부 (최상위 테넌트) — 전환 시 파트너사·고객·폼 등 전 데이터가 해당 사업부로 스코핑
@@ -198,12 +200,16 @@ export const actions = {
     }
     set(apply);
   },
-  // 사업부별 예시 사진 (good/bad) — dataURL. null이면 기본 사진으로 복원.
-  setUserPhoto: (bizId, key, dataUrl) => set((s) => {
-    const cur = { ...(s.userPhotos[bizId] || {}) };
-    if (dataUrl) cur[key] = dataUrl; else delete cur[key];
-    return { userPhotos: { ...s.userPhotos, [bizId]: cur } };
-  }),
+  // 사업부별 예시 사진 (good/bad) — dataURL. null이면 기본 사진으로 복원. [QA] DB 영속화.
+  setUserPhoto: (bizId, key, dataUrl) => {
+    const apply = (s) => { const cur = { ...(s.userPhotos[bizId] || {}) }; if (dataUrl) cur[key] = dataUrl; else delete cur[key]; return { userPhotos: { ...s.userPhotos, [bizId]: cur } }; };
+    if (LIVE) {
+      (dataUrl ? cfg.upsertUserPhoto(bizId, key, dataUrl) : cfg.deleteUserPhoto(bizId, key))
+        .then(() => set(apply)).catch((e) => toast("예시사진 저장 실패: " + e.message));
+      return;
+    }
+    set(apply);
+  },
 
   // 예약 (편집·컨펌 큐 ↔ 고객관리 ↔ 정산 ↔ 사이니지 공유) [Phase4-2 배선]
   // [QA-P0] 예약접수(intake) 실배선. 신규 예약 생성 → store/DB 반영. 반환: 생성된 예약(id 포함).
@@ -327,17 +333,27 @@ export const actions = {
   // 사이니지 표출 소스 (광고·대기·알림) — 파트너별 [Phase4-6 배선]
   addSignageSource: (src) => {
     if (LIVE) {
-      signage.addSource(state.currentPartnerId, src)
+      const pid = state.currentPartnerId;
+      if (!pid) { toast("파트너 컨텍스트가 없습니다."); return; }
+      const finish = (storagePath) => signage.addSource(pid, { ...src, storagePath })
         .then((a) => set((s) => ({ signageSources: [...s.signageSources, a] })))
         .catch((e) => toast("소스 추가 실패: " + e.message));
+      if (src.fileObj) {  // 실제 파일 업로드(memoria-content, 파트너 폴더) → 경로 저장
+        const path = `${pid}/signage/${src.id}.${storage.extOf(src.fileObj.name)}`;
+        storage.uploadFile(storage.BUCKETS.content, path, src.fileObj).then(() => finish(path)).catch((e) => toast("업로드 실패: " + e.message));
+      } else { finish(null); }
       return;
     }
     set((s) => ({ signageSources: [...s.signageSources, src] }));
   },
   removeSignageSource: (id) => {
     if (LIVE) {
+      const sp = state.signageSources.find((x) => x.id === id)?.storagePath;
       signage.removeSource(id)
-        .then(() => set((s) => ({ signageSources: s.signageSources.filter((x) => x.id !== id) })))
+        .then(() => {
+          set((s) => ({ signageSources: s.signageSources.filter((x) => x.id !== id) }));
+          if (sp) storage.removeFiles(storage.BUCKETS.content, [sp]).catch(() => {}); // 스토리지 파일 정리(best-effort)
+        })
         .catch((e) => toast("소스 삭제 실패: " + e.message));
       return;
     }

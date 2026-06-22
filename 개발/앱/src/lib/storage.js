@@ -35,5 +35,24 @@ export async function removeFiles(bucket, paths) {
   if (error) throw new Error("삭제 실패: " + error.message);
 }
 
+// 서명URL을 만들어 브라우저 다운로드 트리거 + (가능하면) 감사로그 적재.
+//   audit = { action, targetType, targetId, partnerId } — log_access RPC(추기전용)로 누가 받았는지 기록.
+export async function downloadAsset(bucket, path, filename, audit) {
+  const sb = need();
+  const url = await signedUrl(bucket, path, 300);
+  if (audit) {
+    try {
+      await sb.schema("memoria").rpc("log_access", {
+        p_action: audit.action || "download", p_target_type: audit.targetType || "video",
+        p_target_id: audit.targetId || path, p_partner_id: audit.partnerId || null,
+        p_detail: { bucket, path, filename },
+      });
+    } catch { /* 감사로그 실패는 다운로드를 막지 않음 */ }
+  }
+  const a = document.createElement("a");
+  a.href = url; a.download = filename || path.split("/").pop(); a.rel = "noopener";
+  document.body.appendChild(a); a.click(); a.remove();
+}
+
 // 확장자 추출(경로 생성용).
 export const extOf = (name = "") => { const i = name.lastIndexOf("."); return i > 0 ? name.slice(i + 1).toLowerCase() : "bin"; };
