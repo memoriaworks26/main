@@ -5,9 +5,8 @@ import {
 } from "lucide-react";
 import { SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, STATUS, RADIUS } from "../theme.js";
 import { Tag, Btn, Card, Summary, Table, PageHeader, Modal, CopyBtn, useTableSort } from "../ui.jsx";
-import { useStore, actions } from "../store.js";
+import { useStore, actions, partnerSettle } from "../store.js";
 import { confirm } from "../confirm.jsx";
-import * as D from "../data.js";
 import { won, parseNum as num } from "../lib/format.js";
 import { matchQuery } from "../lib/util.js";
 const today = () => new Date().toISOString().slice(0, 10); // 계약일 자동 기입용 (YYYY-MM-DD)
@@ -50,7 +49,8 @@ function PartnerRegisterModal({ open, onClose }) {
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
   const idCode = f.idCode.trim();
   const dupCode = !!idCode && partners.some((p) => String(p.idCode || "").toLowerCase() === idCode.toLowerCase());
-  const canSubmit = !!f.name.trim() && !!idCode && !dupCode;
+  // ID코드 = 로그인 아이디 = 초기 비밀번호 → 비번 정책(최소 6자) 위해 6자 이상.
+  const canSubmit = !!f.name.trim() && idCode.length >= 6 && !dupCode;
   const nextId = () => {
     const nums = partners.map((p) => parseInt(String(p.id).replace(/\D/g, ""), 10)).filter((n) => !isNaN(n));
     return "P-" + String((nums.length ? Math.max(...nums) : 0) + 1).padStart(3, "0");
@@ -100,7 +100,7 @@ function PartnerRegisterModal({ open, onClose }) {
           {field("파트너사명 *", "name")}
           <label className="block">
             <span className="text-[12px] font-semibold" style={{ color: MUTE }}>ID 코드(로그인 ID) *</span>
-            <input value={f.idCode} onChange={set("idCode")} placeholder="예: greenfield"
+            <input value={f.idCode} onChange={set("idCode")} placeholder="예: greenfield (6자 이상)"
               className="mt-1 w-full px-3 text-[13px] outline-none" style={{ height: 34, background: "#fff", border: "1px solid " + (dupCode ? "#8a4b1c" : LINE2), borderRadius: RADIUS, color: INK }} />
             <span className="mt-1 block text-[10.5px]" style={{ color: dupCode ? "#8a4b1c" : FAINT }}>{dupCode ? "이미 사용 중인 ID 코드입니다" : "파트너사 로그인 ID로 사용 · 고유 코드(내부 식별자)는 자동 부여"}</span>
           </label>
@@ -145,7 +145,8 @@ function PartnerDetail({ partner: p, onBack, go }) {
   const goLink = (page) => go && (
     <button onClick={() => go(page)} className="flex items-center gap-0.5 text-[12px] font-semibold outline-none hover:underline" style={{ color: GOLD }}>바로가기 <ChevronRight className="h-3.5 w-3.5" /></button>
   );
-  const { partners, reservations, devices } = useStore();
+  const store = useStore();
+  const { partners, reservations, devices } = store;
   const [editing, setEditing] = useState(false);
   // 건당 단가는 [정산 내역]에서 관리 — 파트너사 편집에서는 다루지 않음
   const seed = () => ({ idCode: p.idCode || "", name: p.name, region: p.region, manager: p.manager, phone: p.phone || "", logo: p.logo || "", memo: p.memo || "", active: p.active });
@@ -154,7 +155,7 @@ function PartnerDetail({ partner: p, onBack, go }) {
   const cancelEdit = () => setEditing(false);
   const idCode = f.idCode.trim();
   const dupCode = !!idCode && partners.some((x) => x.id !== p.id && String(x.idCode || "").toLowerCase() === idCode.toLowerCase());
-  const canSave = !!f.name.trim() && !!idCode && !dupCode;
+  const canSave = !!f.name.trim() && idCode.length >= 6 && !dupCode;
   const save = async () => {
     if (!canSave) return;
     if (!(await confirm({ title: "파트너사 정보 저장", message: "변경한 파트너사 정보를 저장합니다." }))) return;
@@ -163,7 +164,7 @@ function PartnerDetail({ partner: p, onBack, go }) {
   };
   const rs = reservations.filter((r) => r.partner === p.name);
   const dv = devices.filter((d) => d.partner === p.name);
-  const settle = D.SETTLEMENT_PARTNERS.find((x) => x.partner === p.name);
+  const settle = partnerSettle(store, p.name);  // [QA-P1] store 매출·입금에서 집계(목업 제거)
   const cnt = (s) => rs.filter((r) => r.status === s).length;
   const online = dv.filter((d) => d.status !== "offline").length;
   const row = (label, val) => (
@@ -197,7 +198,7 @@ function PartnerDetail({ partner: p, onBack, go }) {
               <div className="flex items-center justify-between text-[13px]"><span style={{ color: MUTE }}>고유 코드 <span style={{ color: FAINT }}>(고정)</span></span><span className="tabular-nums font-semibold" style={{ color: GOLD_D }}>{p.id}</span></div>
               <label className="flex items-center justify-between gap-3 text-[13px]">
                 <span className="shrink-0" style={{ color: MUTE }}>ID 코드 <span style={{ color: FAINT }}>(로그인 ID)</span></span>
-                <input value={f.idCode} onChange={(e) => setF((s) => ({ ...s, idCode: e.target.value }))} placeholder="예: greenfield"
+                <input value={f.idCode} onChange={(e) => setF((s) => ({ ...s, idCode: e.target.value }))} placeholder="예: greenfield (6자 이상)"
                   className="w-44 px-2.5 text-[13px] outline-none focus-visible:ring-1" style={{ height: 32, background: SURFACE, border: "1px solid " + (dupCode ? "#8a4b1c" : LINE), borderRadius: RADIUS, color: INK }} />
               </label>
               {dupCode && <div className="text-right text-[10.5px]" style={{ color: "#8a4b1c" }}>이미 사용 중인 ID 코드입니다</div>}
@@ -258,7 +259,7 @@ function PartnerDetail({ partner: p, onBack, go }) {
           </div>
         </Card>
         <Card title="정산" action={goLink("settlement")}>
-          {settle ? (
+          {settle.count > 0 ? (
             <div className="space-y-2">
               {row("이번달 건수", settle.count + "건")}{row("청구", won(settle.billed))}{row("입금", won(settle.paid))}
               <div className="flex items-center gap-2 text-[13px]"><span style={{ color: MUTE }}>미수금</span><span style={{ color: settle.unpaid ? STATUS.review.c : INK }}>{won(settle.unpaid)}</span></div>

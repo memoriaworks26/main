@@ -117,18 +117,18 @@ function PartnerSettleDetail({ partner, onBack, onIssue, onViewStatement }) {
   const dirty = JSON.stringify(draft) !== JSON.stringify(storeItems);
   const saveItems = () => actions.replacePartnerSettlement(partner, draft);
   const resetItems = () => setDraft(storeItems.map((i) => ({ ...i })));
-  const statements = D.STATEMENTS.filter((s) => s.partner === partner);
-  const [deposits, setDeposits] = useState(() => D.SETTLEMENT_DEPOSITS.filter((d) => d.partner === partner));
+  const statements = s.statements.filter((x) => x.partner === partner);              // [Phase4-5b] store
+  const deposits = s.settlementDeposits.filter((d) => d.partner === partner);         // [Phase4-5b] store
   const [depositOpen, setDepositOpen] = useState(false);
   const [addingModal, setAddingModal] = useState(false);
   const [bulkAmt, setBulkAmt] = useState("");
   const [editDepId, setEditDepId] = useState(null);
   const [editDepForm, setEditDepForm] = useState({});
-  const addDeposit = (dp) => setDeposits((prev) => [...prev, dp].sort((a, b) => a.date.localeCompare(b.date)));
+  const addDeposit = (dp) => actions.addDeposit(dp);
   const startEditDep = (dep) => { setEditDepId(dep.id); setEditDepForm({ ...dep }); };
   const cancelEditDep = () => { setEditDepId(null); setEditDepForm({}); };
-  const saveDep = async () => { if (!(await confirm({ title: "입금 내역 저장", message: "수정한 입금 내역을 저장합니다." }))) return; setDeposits((prev) => prev.map((d) => d.id === editDepId ? { ...editDepForm, amount: num(String(editDepForm.amount)) } : d)); cancelEditDep(); };
-  const removeDep = async (id) => { if (await confirm({ title: "입금 내역 삭제", message: "이 입금 내역을 삭제합니다.", danger: true })) setDeposits((prev) => prev.filter((d) => d.id !== id)); };
+  const saveDep = async () => { if (!(await confirm({ title: "입금 내역 저장", message: "수정한 입금 내역을 저장합니다." }))) return; actions.updateDeposit(editDepId, { ...editDepForm, amount: num(String(editDepForm.amount)) }); cancelEditDep(); };
+  const removeDep = async (id) => { if (await confirm({ title: "입금 내역 삭제", message: "이 입금 내역을 삭제합니다.", danger: true })) actions.removeDeposit(id); };
   const depositTotal = deposits.reduce((s, d) => s + d.amount, 0);
   const billed = items.reduce((s, i) => s + i.amount, 0);
   const [sub, setSub] = useState("main");
@@ -164,7 +164,9 @@ function PartnerSettleDetail({ partner, onBack, onIssue, onViewStatement }) {
   const issue = async () => {
     if (!selItems.length) return;
     if (!(await confirm({ title: "거래명세서 발행", message: `선택한 ${selItems.length}건(${won(selAmount)})으로 거래명세서를 발행합니다.\n발행 시 단가가 동결됩니다.`, confirmLabel: "발행" }))) return;
-    onIssue({ partner, items: selItems, period: fmtYmd(from) + " ~ " + fmtYmd(to), issuedAt: "2026. 06. 18", amount: selAmount });
+    const period = fmtYmd(from) + " ~ " + fmtYmd(to);
+    actions.addStatement({ id: "TS-" + Date.now().toString(36), partner, period, issuedAt: "2026. 06. 18", count: selItems.length, amount: selAmount, status: "sent" }); // [Phase4-5b] 발행 영구화
+    onIssue({ partner, items: selItems, period, issuedAt: "2026. 06. 18", amount: selAmount });
   };
 
   const ckbox = (on) => (
@@ -322,17 +324,17 @@ function UnitPriceCell({ row }) {
 
 // ── 정산 (목록 → 파트너사 상세 → 거래명세서) ───────────────────
 export function Settlement() {
-  const partners = bizPartners(useStore()); // 현재 사업부 파트너만(신규 등록 포함)
+  const s = useStore();
+  const partners = bizPartners(s); // 현재 사업부 파트너만(신규 등록 포함)
   const [detail, setDetail] = useState(null);   // 파트너사명
   const [view, setView] = useState(null);       // 발행/조회 중인 거래명세서 { partner, items, period, issuedAt }
-  // 전 파트너사 기준으로 정산 데이터 병합(정산 이력 없으면 0원·대기)
-  // 건당 단가는 파트너사 DB(p.unitPrice)에서 끌어와 여기서 직접 관리
-  const settleRows = partners.map((p) => ({
-    ...(D.SETTLEMENT_PARTNERS.find((x) => x.partner === p.name)
-      || { partner: p.name, region: p.region, count: 0, billed: 0, paid: 0, unpaid: 0, status: "waiting" }),
-    id: p.id,
-    unitPrice: p.unitPrice || 0,
-  }));
+  // 청구=Σ매출건 · 입금=Σ입금내역 · 미수금=청구−입금 (store에서 직접 집계) [Phase4-5b]
+  const settleRows = partners.map((p) => {
+    const items = s.settlementItems.filter((i) => i.partner === p.name);
+    const billed = items.reduce((a, i) => a + i.amount, 0);
+    const paid = s.settlementDeposits.filter((d) => d.partner === p.name).reduce((a, d) => a + d.amount, 0);
+    return { partner: p.name, region: p.region, count: items.length, billed, paid, unpaid: billed - paid, status: billed - paid <= 0 ? "done" : "waiting", id: p.id, unitPrice: p.unitPrice || 0 };
+  });
   const total = settleRows.reduce((s, p) => s + p.billed, 0);
   const paid = settleRows.reduce((s, p) => s + p.paid, 0);
   const unpaid = settleRows.reduce((s, p) => s + p.unpaid, 0);

@@ -39,7 +39,7 @@ const CONTENT_KINDS = [
   { key: "audio", label: "음악", icon: Music, hint: "예: 잔잔한_피아노.mp3", metaPh: "3:45 · 128kbps" },
 ];
 function ContentUploadModal({ open, onClose, partners, defaultPartner }) {
-  const blank = { kind: "clip", scope: "partner", partner: defaultPartner, name: "", meta: "", size: "" };
+  const blank = { kind: "clip", scope: "partner", partner: defaultPartner, name: "", meta: "", size: "", file: null };
   const [f, setF] = useState(blank);
   useEffect(() => { if (open) setF({ ...blank, partner: defaultPartner }); /* eslint-disable-next-line */ }, [open, defaultPartner]);
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
@@ -49,7 +49,7 @@ function ContentUploadModal({ open, onClose, partners, defaultPartner }) {
   const canSubmit = !!f.name.trim() && (shared || !!f.partner);
   const submit = () => {
     if (!canSubmit) return;
-    const asset = { id: "ct-" + Date.now(), kind: f.kind, name: f.name.trim(), meta: f.meta.trim() || kindDef.metaPh, size: f.size.trim() };
+    const asset = { id: "ct-" + Date.now(), kind: f.kind, name: f.name.trim(), meta: f.meta.trim() || kindDef.metaPh, size: f.size.trim(), file: f.file };
     if (shared) asset.shared = true; else asset.partner = f.partner;
     actions.addContent(asset);
     onClose();
@@ -78,14 +78,16 @@ function ContentUploadModal({ open, onClose, partners, defaultPartner }) {
             })}
           </div>
         </div>
-        {/* 드롭존(목업) */}
-        <button onClick={() => !f.name && setF((s) => ({ ...s, name: kindDef.hint.replace("예: ", "") }))}
-          className="flex w-full flex-col items-center justify-center gap-1.5 py-6 outline-none transition hover:border-[#c9a86a]"
+        {/* 파일 선택 — 실제 업로드(memoria-content 버킷). 라이브에서만 실제 전송. */}
+        <label className="flex w-full cursor-pointer flex-col items-center justify-center gap-1.5 py-6 outline-none transition hover:border-[#c9a86a]"
           style={{ border: "1.5px dashed " + LINE2, borderRadius: RADIUS, background: "#faf8f3" }}>
+          <input type="file" className="hidden"
+            accept={f.kind === "photo" ? "image/*" : f.kind === "audio" ? "audio/*" : "video/*"}
+            onChange={(e) => { const file = e.target.files?.[0]; if (file) setF((s) => ({ ...s, file, name: s.name || file.name, size: (file.size / 1048576).toFixed(1) + "MB" })); }} />
           <Upload className="h-6 w-6" style={{ color: GOLD }} />
-          <span className="text-[12.5px] font-semibold" style={{ color: INK }}>파일 끌어다 놓기 또는 눌러서 선택</span>
-          <span className="text-[11px]" style={{ color: FAINT }}>{kindDef.hint}</span>
-        </button>
+          <span className="text-[12.5px] font-semibold" style={{ color: INK }}>{f.file ? f.file.name : "눌러서 파일 선택"}</span>
+          <span className="text-[11px]" style={{ color: FAINT }}>{f.file ? f.size : kindDef.hint}</span>
+        </label>
         {/* 귀속 — 음악은 공용 고정 */}
         {f.kind === "audio" ? (
           <div className="px-3 py-2 text-[12px]" style={{ background: "#e9eef5", borderRadius: RADIUS, color: "#3f5e87" }}>음악은 공용 BGM 라이브러리에 추가됩니다 (모든 파트너사 공통).</div>

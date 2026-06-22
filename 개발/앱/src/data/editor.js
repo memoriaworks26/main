@@ -10,12 +10,12 @@ export const EDITOR_RESERVATION = {
 };
 
 export const EDITOR_BLOCKS = [
-  { id: "blk-1", type: "title", label: "타이틀", source: "콩이 대표사진", detail: "GPT 이미지 + 추모 액자 오버레이", dur: 6, status: "done", provider: "OpenAI" },
-  { id: "blk-2", type: "clip", label: "오프닝 클립", source: "오프닝_무지개.mp4", detail: "콘텐츠 허브 · 영상", dur: 10, status: "done" },
-  { id: "blk-2b", type: "clip", label: "추모 액자", source: "추모액자_전통.png", detail: "콘텐츠 허브 · 이미지", dur: 5, status: "done" },
-  { id: "blk-3", type: "slide", label: "추억 슬라이드", source: "보호자 사진 8장", detail: "FFmpeg 합성", dur: 24, status: "rendering" },
-  { id: "blk-4", type: "ai", label: "추억 영상", source: "독사진 2장", detail: "Kling 이미지→영상", dur: 8, status: "done", provider: "Kling" },
-  { id: "blk-5", type: "letter", label: "편지", source: "보호자 작성 편지", detail: "FFmpeg + 텍스트 (배경음만)", dur: 18, status: "done" },
+  { id: "blk-1", type: "title", label: "타이틀", source: "콩이 독사진 → AI 초상화·톤변경", detail: "AI 초상화+자막 → 10초 톤변경 오버랩 → 페이드아웃", dur: 20, status: "done", provider: "OpenAI" },
+  { id: "blk-2", type: "ai", label: "AI 영상", source: "독사진 1장 → AI 영상", detail: "Kling 이미지→영상 (A · 추억 슬라이드 앞)", dur: 8, status: "done", provider: "Kling" },
+  { id: "blk-3", type: "slide", label: "추억 슬라이드", source: "보호자 사진 20장", detail: "FFmpeg 합성 (장당 7~10초, 총 2:30)", dur: 150, status: "rendering" },
+  { id: "blk-4", type: "video", label: "추억 영상", source: "보호자 영상 묶음", detail: "원본 사운드 · 최종 렌더 시 합성 (총 1:30)", dur: 90, status: "done" },
+  { id: "blk-5", type: "ai", label: "AI 영상", source: "독사진 1장 → AI 영상", detail: "Kling 이미지→영상 (B · 추억 영상 뒤)", dur: 8, status: "done", provider: "Kling" },
+  { id: "blk-6", type: "letter", label: "편지", source: "보호자 작성 편지", detail: "FFmpeg + 텍스트 (배경음만, 최대 3:30)", dur: 210, status: "done" },
 ];
 
 export const EDITOR_LETTER =

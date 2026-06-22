@@ -1,13 +1,13 @@
 // 편집기 — 오른쪽 속성 패널(PropPanel) + 보조(PromptPicker·PromptModal·GenHistory).
 // 선택(sel)에 따라 블록/전환/음악의 편집 컨트롤을 보여준다. 편집값은 상위(VideoEditor)의 edits로 컨트롤드.
 import React, { useState } from "react";
-import { Image as ImageIcon, Music, Upload, Plus, RefreshCw, Trash2, ArrowRightLeft, Check, Type, SlidersHorizontal, X } from "lucide-react";
+import { Image as ImageIcon, Music, Upload, Plus, RefreshCw, Trash2, ArrowRightLeft, Check, Type, SlidersHorizontal, X, Film } from "lucide-react";
 import { SERIF, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS } from "../theme.js";
 import { DateField, Modal } from "../ui.jsx";
 import { toast } from "../toast.jsx";
 import { genFrame } from "../lib/media.js";
 import * as D from "../data.js";
-import { BLOCK_ICON, KIND_LABEL, blockTrans, genDefault, exampleLetter, SLIDE_PHOTOS } from "./blocks.js";
+import { BLOCK_ICON, KIND_LABEL, blockTrans, genDefault, exampleLetter, SLIDE_PHOTOS, SLIDE_PER, TITLE_SYSTEM_TEXT } from "./blocks.js";
 
 // ── 오른쪽: 편집 패널 ──────────────────────────────────────────
 function L({ children }) { return <div className="mb-1.5 text-[12.5px] font-semibold" style={{ color: INK }}>{children}</div>; }
@@ -137,8 +137,8 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, reservation, 
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        {/* 소스 파일 — 타이틀·추억영상은 독사진(이미지)·클립/영상은 파일·슬라이드는 보호자 사진 자동 구성이라 미노출 */}
-        {(k === "video" || k === "clip" || k === "ai" || k === "title") && (() => {
+        {/* 소스 파일 — 타이틀·AI영상은 독사진(이미지)·클립은 파일. 추억 영상(유저 영상 묶음)·슬라이드는 별도 처리라 미노출 */}
+        {(k === "clip" || k === "ai" || k === "title") && (() => {
           const isPhoto = k === "title" || k === "ai"; // 독사진(이미지) 입력
           return (
             <Field label="지금 들어간 파일">
@@ -148,28 +148,43 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, reservation, 
           );
         })()}
 
-        {k === "title" && (
+        {k === "title" && (() => {
+          const prefix = item.prefix ?? TITLE_SYSTEM_TEXT;
+          const petName = item.text ?? name;
+          return (
           <>
-            <Field label="화면에 보일 글자"><input className={inputCls} style={{ ...inputStyle, fontFamily: SERIF }} value={item.text ?? name} onChange={(e) => onEdit(item.id, { text: e.target.value })} /></Field>
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="시스템 문구"><input className={inputCls} style={{ ...inputStyle, fontFamily: SERIF }} value={prefix} onChange={(e) => onEdit(item.id, { prefix: e.target.value })} /></Field>
+              <Field label="반려동물 이름"><input className={inputCls} style={{ ...inputStyle, fontFamily: SERIF }} value={petName} onChange={(e) => onEdit(item.id, { text: e.target.value })} /></Field>
+            </div>
+            <Field label="자막 미리보기 · 중앙 하단">
+              <div className="flex items-center justify-center px-3 py-4" style={{ background: "#1c232c", borderRadius: RADIUS }}>
+                <span style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: "#f3e9c8", textShadow: "0 2px 8px rgba(0,0,0,.6)" }}>{`${prefix} ${petName}`.trim()}</span>
+              </div>
+            </Field>
+            <div className="mb-4 px-3 py-2.5 text-[11.5px] leading-relaxed" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
+              ① <b style={{ color: INK }}>AI 초상화</b>(독사진→초상화)와 자막이 서서히 나타나고, <b style={{ color: INK }}>10초</b>에 ② <b style={{ color: INK }}>톤 변경 사진</b>이 오버랩되어 나타난 뒤 페이드아웃됩니다. (총 20초)
+            </div>
             <PromptPicker target="타이틀" onManage={() => setPromptModal(true)} />
             <button onClick={() => onGenerate(item.id)} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> AI로 만들기</button>
             <GenHistory kind="title" name={name} gen={gen} onSelect={(vid) => onSelectGen(item.id, vid)} onDelete={(vid) => onDeleteGen(item.id, vid)} />
           </>
-        )}
+          );
+        })()}
 
         {/* 클립: 보이는 시간 대신 소리 크기 조절 (슬라이드·추억영상은 보이는 시간 없음 · 타이틀만 유지) */}
         {k === "clip" && <SoundField label="클립 소리 크기" value={item.volume} onChange={(val) => onEdit(item.id, { volume: val })} />}
         {k === "slide" && (
           <>
-            <Field label={`사진 조합 · 사이 전환 (${SLIDE_PHOTOS.length}장)`}>
-              <div className="px-2.5 py-2.5" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS }}>
+            <Field label={`사진 조합 · 사이 전환 (${SLIDE_PHOTOS.length}장 · 장당 7~10초 · 총 2분30초 이내)`}>
+              <div className="max-h-[260px] overflow-y-auto px-2.5 py-2.5" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS }}>
                 {SLIDE_PHOTOS.map((src, i) => (
                   <React.Fragment key={i}>
                     {/* 사진 */}
                     <div className="flex items-center gap-2.5">
                       <img src={src} alt="" className="shrink-0" style={{ width: 64, aspectRatio: "16/9", objectFit: "cover", borderRadius: 4, border: "1px solid " + LINE2 }} />
                       <span className="text-[12px] font-semibold" style={{ color: INK }}>사진 {i + 1}</span>
-                      <span className="ml-auto text-[10.5px]" style={{ color: FAINT }}>2.5초</span>
+                      <span className="ml-auto text-[10.5px]" style={{ color: FAINT }}>{SLIDE_PER}초</span>
                     </div>
                     {/* 사진 사이 전환 */}
                     {i < SLIDE_PHOTOS.length - 1 && (
@@ -191,9 +206,10 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, reservation, 
             <button onClick={() => onGenerate(item.id)} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> 사진으로 만들기</button>
             <GenHistory kind="slide" name={name} gen={gen} onSelect={(vid) => onSelectGen(item.id, vid)} onDelete={(vid) => onDeleteGen(item.id, vid)} />
 
-            {/* 배경 음악 — 영상 전체 1트랙(추억 슬라이드에서만 설정) */}
+            {/* 배경 음악 — 추억 슬라이드(보호자 사진)에만 깔린다. 추억 영상(유저 영상)은 원본 사운드 유지. */}
             <div className="mt-5 border-t pt-4" style={{ borderColor: LINE }}>
-              <div className="mb-2 flex items-center gap-1.5 text-[12.5px] font-bold" style={{ color: INK }}><Music className="h-4 w-4" style={{ color: GOLD_D }} /> 배경 음악 <span className="font-normal" style={{ color: FAINT }}>· 영상 전체</span></div>
+              <div className="mb-2 flex items-center gap-1.5 text-[12.5px] font-bold" style={{ color: INK }}><Music className="h-4 w-4" style={{ color: GOLD_D }} /> 배경 음악 <span className="font-normal" style={{ color: FAINT }}>· 추억 슬라이드(사진)에만</span></div>
+              <p className="mb-2 text-[11px] leading-relaxed" style={{ color: FAINT }}>※ 추억 영상(보호자 영상)에는 BGM이 들어가지 않고 원본 사운드가 유지됩니다.</p>
               <Field label="지금 음악">
                 <div className="px-3 py-2.5 text-[12.5px]" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: INK }}>{bgmName}</div>
                 <button onClick={() => toast("음악 파일 선택 창을 엽니다")} className="mt-2 flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><Upload className="h-4 w-4" /> 다른 음악으로 바꾸기</button>
@@ -207,12 +223,40 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, reservation, 
           </>
         )}
 
+        {k === "video" && (() => {
+          // 추억 영상 — 보호자가 올린 영상 묶음(개수 제한 없음 · 총 1분30초 이내). 미리 렌더하지 않고 최종 렌더 때 합성.
+          const vids = (D.USER_UPLOADS || []).filter((u) => u.kind === "video");
+          return (
+          <>
+            <Field label={`보호자 영상 묶음 (${vids.length}개 · 총 1분30초 이내)`}>
+              <div className="space-y-1.5 px-2.5 py-2.5" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS }}>
+                {vids.length === 0
+                  ? <div className="py-2 text-center text-[11.5px]" style={{ color: FAINT }}>올라온 영상이 없습니다.</div>
+                  : vids.map((v, i) => (
+                    <div key={v.id} className="flex items-center gap-2">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold" style={{ background: "#e7e2d8", color: MUTE }}>{i + 1}</span>
+                      <Film className="h-3.5 w-3.5 shrink-0" style={{ color: GOLD_D }} />
+                      <span className="min-w-0 flex-1 truncate text-[12px] font-semibold" style={{ color: INK }}>{v.name}</span>
+                      <span className="shrink-0 text-[10.5px]" style={{ color: FAINT }}>{v.size}</span>
+                    </div>
+                  ))}
+              </div>
+              <p className="mt-2 text-[11px] leading-relaxed" style={{ color: FAINT }}>※ 추억 슬라이드(사진) 다음에 묶음으로 이어집니다. BGM 없이 원본 사운드가 유지되며, 미리 렌더하지 않고 최종 렌더 시 합성됩니다.</p>
+            </Field>
+            <SoundField label="원본 소리 크기" value={item.volume} onChange={(val) => onEdit(item.id, { volume: val })} />
+          </>
+          );
+        })()}
+
         {k === "ai" && (
           <>
             <PromptPicker target="AI영상" onManage={() => setPromptModal(true)} />
             <button onClick={() => onGenerate(item.id)} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> AI로 만들기</button>
             <GenHistory kind="ai" name={name} gen={gen} onSelect={(vid) => onSelectGen(item.id, vid)} onDelete={(vid) => onDeleteGen(item.id, vid)} />
-            <div className="mt-4"><SoundField label="추억영상 소리 크기" value={item.volume} onChange={(val) => onEdit(item.id, { volume: val })} /></div>
+            <div className="mt-3 px-3 py-2.5 text-[11.5px] leading-relaxed" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
+              독사진 1장 → AI 영상(약 8초). 추억 슬라이드 앞(A) · 추억 영상 뒤(B)로 유저 소스를 감쌉니다.
+            </div>
+            <div className="mt-4"><SoundField label="AI 영상 소리 크기" value={item.volume} onChange={(val) => onEdit(item.id, { volume: val })} /></div>
           </>
         )}
 
@@ -222,7 +266,7 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, reservation, 
             <Field label="우리 처음 만난 날"><DateField value={item.metDate ?? reservation?.metDate ?? ""} onChange={(d) => onEdit(item.id, { metDate: d })} /></Field>
             <Field label="무지개다리 건넌 날"><DateField value={item.partDate ?? reservation?.partDate ?? ""} onChange={(d) => onEdit(item.id, { partDate: d })} /></Field>
             <Field label="편지 내용"><textarea rows={7} value={item.text ?? exampleLetter(name)} onChange={(e) => onEdit(item.id, { text: e.target.value })} className="w-full resize-none p-3 text-[13.5px] leading-relaxed outline-none" style={{ ...inputStyle, height: "auto", fontFamily: SERIF }} /></Field>
-            <p className="text-[11.5px] leading-relaxed" style={{ color: FAINT }}>※ 보호자가 입력한 편지·날짜입니다. 두 날짜는 편지 마지막에 크게 표시됩니다.</p>
+            <p className="text-[11.5px] leading-relaxed" style={{ color: FAINT }}>※ 보호자가 입력한 편지·날짜입니다. 두 날짜는 편지 마지막에 크게 표시됩니다. 편지는 최대 3분30초로 구성됩니다.</p>
           </>
         )}
 

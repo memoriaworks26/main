@@ -3,13 +3,12 @@ import React, { useState, useEffect, useMemo } from "react";
 import {
   Search, Trash2, Download,
 } from "lucide-react";
-import { SERIF, SURFACE, LINE, GOLD_D, INK, MUTE, FAINT, RADIUS } from "../theme.js";
+import { SERIF, SURFACE, LINE, GOLD_D, INK, MUTE, FAINT, RADIUS, SUB_LABEL } from "../theme.js";
 import { Tag, Btn, Card, Table, PageHeader, CopyBtn, useTableSort } from "../ui.jsx";
-import { useStore, actions } from "../store.js";
+import { useStore, actions, submissionFor } from "../store.js";
 import { confirm } from "../confirm.jsx";
 import { toast } from "../toast.jsx";
 import { matchQuery } from "../lib/util.js";
-import * as D from "../data.js";
 import { SearchSelect } from "./shared.jsx";
 import { SlotText } from "../partner/shared.jsx";
 
@@ -74,13 +73,20 @@ export function MemorialVideoCard({ status, file, requestedAt }) {
 
 // ── 고객관리 상세 (예약 1건 드릴다운) — 파트너 예약상세와 동일한 레이아웃 ──
 function CustomerDetail({ rid, onBack }) {
-  const { reservations } = useStore();
+  const store = useStore();
+  const { reservations } = store;
   const r = reservations.find((x) => x.id === rid);
   if (!r) return null;
-  const link = D.LINKS.find((l) => l.deceased === r.deceased);
+  // [QA-P1] 발행 링크·영상 = 실제 submission(목업 제거). origin은 보호자 접속 도메인.
+  const sub = submissionFor(store, r.id);
+  const link = sub ? {
+    url: window.location.origin + "/u/" + sub.token,
+    status: sub.status,
+    issued: sub.createdAt ? String(sub.createdAt).slice(0, 10) : "—",
+    expires: sub.expiresAt ? String(sub.expiresAt).slice(0, 10) : "—",
+  } : null;
   // 최종 렌더본 파일명(발행 완료 건만 다운로드 — MemorialVideoCard에서 처리)
-  const fv = D.FINAL_VIDEOS.find((v) => v.deceased === r.deceased && v.partner === r.partner);
-  const file = fv ? D.videoFileName(fv) : `${r.deceased}_추모영상.mp4`;
+  const file = `${r.deceased}_추모영상.mp4`;
   return (
     <div>
       <PageHeader title={r.deceased} sub={r.partner + " · " + r.room + " · 보호자 " + r.chief} back={{ onClick: onBack, label: "뒤로" }}
@@ -113,7 +119,7 @@ function CustomerDetail({ rid, onBack }) {
               <div className="flex items-center gap-2">
                 <div className="flex-1 truncate px-3 py-2 text-[13px] tabular-nums" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: GOLD_D }}>{link.url}</div>
                 <CopyBtn text={link.url} />
-                <Tag s={link.status} />
+                <span className="shrink-0 px-2 py-1 text-[11px] font-semibold" style={{ background: "#f4ead7", borderRadius: RADIUS, color: "#9a6a1c" }}>{SUB_LABEL[link.status] || link.status}</span>
               </div>
               <div className="mt-2 flex items-center gap-4 text-[11px]" style={{ color: FAINT }}>
                 <span>발행일 <b style={{ color: MUTE }}>{link.issued}</b></span>

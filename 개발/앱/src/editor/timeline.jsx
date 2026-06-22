@@ -134,7 +134,9 @@ export function Timeline({ blocks, edits = {}, bgmName, subtitles = [], onSubCha
   const subEnd = subtitles.reduce((m, s) => Math.max(m, s.end || 0), 0);
   const tlMax = Math.max(total, subEnd);
   const innerW = Math.max(width, tlMax * SCALE);
-  const ticks = []; for (let s = 0; s <= tlMax; s += 10) ticks.push(s);
+  // 블록 길이가 분 단위라 눈금은 30초 간격 · mm:ss 표기
+  const mmss = (s) => Math.floor(s / 60) + ":" + String(Math.round(s % 60)).padStart(2, "0");
+  const ticks = []; for (let s = 0; s <= tlMax; s += 30) ticks.push(s);
 
   return (
     <div className="mt-5">
@@ -147,8 +149,8 @@ export function Timeline({ blocks, edits = {}, bgmName, subtitles = [], onSubCha
           <div className="mb-1 flex gap-2">
             <div className="w-16 shrink-0" />
             <div className="relative flex-1" style={{ height: 14 }}>
-              {ticks.map((s) => <span key={s} className="absolute text-[10px] tabular-nums" style={{ left: s * SCALE, color: FAINT }}>{s}s</span>)}
-              <span className="absolute right-0 text-[10.5px] font-semibold tabular-nums" style={{ color: MUTE }}>총 {total}초</span>
+              {ticks.map((s) => <span key={s} className="absolute text-[10px] tabular-nums" style={{ left: s * SCALE, color: FAINT }}>{mmss(s)}</span>)}
+              <span className="absolute right-0 text-[10.5px] font-semibold tabular-nums" style={{ color: MUTE }}>총 {mmss(total)}</span>
             </div>
           </div>
 
@@ -168,7 +170,7 @@ export function Timeline({ blocks, edits = {}, bgmName, subtitles = [], onSubCha
                       <Icon className="h-3 w-3 shrink-0" />
                       <span className="truncate text-[11px] font-bold">{b.label}</span>
                     </div>
-                    <span className="mt-0.5 truncate text-[10px] text-white" style={{ opacity: 0.85 }}>{b.source} · {b.dur}초</span>
+                    <span className="mt-0.5 truncate text-[10px] text-white" style={{ opacity: 0.85 }}>{b.source} · {b.dur >= 60 ? mmss(b.dur) : b.dur + "초"}</span>
                   </button>
                 );
               })}

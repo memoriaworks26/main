@@ -2,15 +2,16 @@ import React from "react";
 import { Printer, Mail } from "lucide-react";
 import { SURFACE, LINE, LINE2, INK, MUTE, FAINT, GOLD, GOLD_D, RADIUS } from "./theme.js";
 import { Btn } from "./ui.jsx";
-import * as D from "./data.js";
+import { useStore } from "./store.js";
 import { toast } from "./toast.jsx";
 import { comma as won } from "./lib/format.js";
 
 // 거래명세서 양식 (발행 시 동결 · 메일 발송) — 기획안 정산 §4 in-scope
 export function TradeStatement({ partner, items: itemsProp, period, issuedAt }) {
-  const items = itemsProp || D.SETTLEMENT_ITEMS.filter((i) => !partner || i.partner === partner);
-  const C = D.COMPANY;
-  const recv = D.PARTNERS.find((p) => p.name === partner);
+  const store = useStore();  // [QA-P1] 공급자·수신처·매출 = store(DB), 목업 제거
+  const items = itemsProp || store.settlementItems.filter((i) => !partner || i.partner === partner);
+  const C = store.company;
+  const recv = store.partners.find((p) => p.name === partner);
   const unit = recv ? recv.unitPrice : (items[0] ? items[0].amount : 0);
   const total = items.length * unit;          // 합계(VAT 포함)
   const supply = Math.round(total / 1.1);     // 공급가액

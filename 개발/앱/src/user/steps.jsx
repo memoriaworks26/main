@@ -11,9 +11,65 @@ import { Title, PhotoExampleGuide } from "./parts.jsx";
 
 const TRANSITIONS = D.USER_TRANSITIONS; // 전환 효과 명칭은 data.js에서 단일 관리
 
+// 소스 업로드 그리드 — 사진(슬라이드, 전환 선택) / 영상(추억 영상) 공용. withTrans면 카드마다 전환 선택 노출.
+function UploadGrid({ items, withTrans, st, onAdd, onFiles, inputRef, onRemove, onReorder, accept, addLabel, addHint }) {
+  const [dragId, setDragId] = useState(null);
+  const [overId, setOverId] = useState(null);
+  return (
+    <>
+      <input ref={inputRef} type="file" accept={accept} multiple className="hidden" onChange={onFiles} />
+      <button onClick={onAdd} className="mb-3 flex w-full cursor-pointer flex-col items-center justify-center gap-1.5 py-6 outline-none transition hover:border-[#c9a86a]" style={{ border: "1.5px dashed " + LINE2, borderRadius: RADIUS, background: "#faf8f3" }}>
+        <Upload className="h-5 w-5" style={{ color: GOLD }} />
+        <span className="text-[12.5px] font-semibold" style={{ color: INK }}>{addLabel}</span>
+        <span className="text-[11px]" style={{ color: FAINT }}>{addHint}</span>
+      </button>
+      {items.length === 0 ? null : (
+        <div className="grid grid-cols-4 gap-2">
+          {items.map((u, i) => (
+            <div key={u.id}
+              draggable
+              onDragStart={() => setDragId(u.id)}
+              onDragEnd={() => { setDragId(null); setOverId(null); }}
+              onDragOver={(e) => { e.preventDefault(); if (overId !== u.id) setOverId(u.id); }}
+              onDrop={(e) => { e.preventDefault(); onReorder(dragId, u.id); setOverId(null); }}
+              className="flex cursor-grab flex-col gap-1 p-1 transition active:cursor-grabbing"
+              style={{ background: SURFACE, border: "1px solid " + (overId === u.id && dragId !== u.id ? GOLD : LINE), borderRadius: RADIUS, opacity: dragId === u.id ? 0.45 : 1 }}>
+              <div className="relative overflow-hidden" style={{ aspectRatio: "1", borderRadius: 4, background: "linear-gradient(135deg,#f0ebe0,#e3d9c4)" }}>
+                {u.thumb ? (
+                  <img src={u.thumb} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                ) : (
+                  <span className="absolute inset-0 flex items-center justify-center">
+                    {u.kind === "photo"
+                      ? <Image className="h-4 w-4" style={{ color: GOLD_D, opacity: 0.55 }} />
+                      : <Film className="h-4 w-4" style={{ color: GOLD_D, opacity: 0.55 }} />}
+                  </span>
+                )}
+                <span className="absolute left-0.5 top-0.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full px-1 text-[9px] font-bold text-white" style={{ background: GOLD_D }}>{i + 1}</span>
+                {u.uploading && (
+                  <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,.35)" }}><Loader2 className="h-4 w-4 animate-spin text-white" /></div>
+                )}
+                <button onClick={() => onRemove(u.id)} className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full outline-none transition hover:opacity-80" style={{ background: "rgba(0,0,0,.5)", color: "#fff" }} aria-label="삭제"><X className="h-2.5 w-2.5" /></button>
+                {u.kind === "video" && u.dur != null && (
+                  <span className="absolute bottom-0.5 right-0.5 px-1 text-[8.5px] font-bold tabular-nums text-white" style={{ background: "rgba(0,0,0,.6)", borderRadius: 3 }}>
+                    {Math.floor(u.dur / 60)}:{String(Math.round(u.dur % 60)).padStart(2, "0")}
+                  </span>
+                )}
+              </div>
+              {withTrans && (
+                <select value={st.transMap[u.id] ?? st.trans} onChange={(e) => st.setItemTrans(u.id, +e.target.value)}
+                  className="w-full px-0.5 py-0.5 text-[9px] outline-none" style={{ background: "#f6f3ec", border: "1px solid " + LINE2, borderRadius: 4, color: INK }}>
+                  {TRANSITIONS.map((t, j) => <option key={j} value={j}>{t.ko}</option>)}
+                </select>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 export function StepBody({ step, st }) {
-  const [dragId, setDragId] = useState(null);   // 장면 전환 — 끌고 있는 소스 id
-  const [overId, setOverId] = useState(null);   // 현재 드롭 대상 소스 id
   // 배경 음악 미리듣기 — 실제 mp3 자산이 없는 목업이라 WebAudio로 잔잔한 톤을 합성해 소리가 나게 한다.
   // (본운영: b.src(실제 파일)로 <audio> 재생으로 교체)
   const [playingBgm, setPlayingBgm] = useState(null);
@@ -118,14 +174,14 @@ export function StepBody({ step, st }) {
         </div>
       </div>
     );
-  // 프로세스 3 — 소스 업로드 + 장면 전환 (한 화면에서 올리고·순서·전환까지)
+  // 프로세스 3 — 소스 업로드 (사진 슬라이드 · 추억 영상 분리) + 사진 장면 전환
   if (step === 2) {
     const pct = Math.min(100, (st.totalMB / 100) * 100);
     const warn = "#b06030";
     return (
       <div>
         <Title sub={st.T.sub2}>소스 업로드 · 장면 전환</Title>
-        <div className="mb-3">
+        <div className="mb-4">
           <div className="mb-1 flex justify-between text-[11px]" style={{ color: MUTE }}>
             <span>사용 용량</span>
             <span style={{ color: st.overLimit ? warn : INK, fontWeight: st.overLimit ? 700 : 400 }}>{st.totalMB.toFixed(1)} / 100 MB</span>
@@ -135,59 +191,50 @@ export function StepBody({ step, st }) {
           </div>
           {st.overLimit && <p className="mt-1 text-[11px] font-semibold" style={{ color: warn }}>100MB를 초과했습니다. 파일을 삭제해 주세요.</p>}
         </div>
-        <input ref={st.fileRef} type="file" accept="image/*,video/*" multiple className="hidden" onChange={st.onFiles} />
-        <button onClick={st.addUpload} className="mb-3 flex w-full cursor-pointer flex-col items-center justify-center gap-1.5 py-7 outline-none transition hover:border-[#c9a86a]" style={{ border: "1.5px dashed " + LINE2, borderRadius: RADIUS, background: "#faf8f3" }}>
-          <Upload className="h-6 w-6" style={{ color: GOLD }} />
-          <span className="text-[12.5px] font-semibold" style={{ color: INK }}>사진·영상 끌어다 놓기</span>
-          <span className="text-[11px]" style={{ color: FAINT }}>또는 눌러서 선택</span>
-        </button>
-        {st.uploads.length === 0 ? (
-          <div className="py-6 text-center text-[12.5px]" style={{ color: FAINT }}>아직 올린 파일이 없습니다. 사진·영상을 추가해 주세요.</div>
-        ) : (
-          <>
-            <div className="mb-1.5 flex items-center justify-between text-[11.5px]" style={{ color: MUTE }}>
-              <span>{st.uploads.length} / 20개 · <span style={{ color: FAINT }}>끌어서 순서 변경</span></span>
-              <button onClick={st.randomizeTrans}
-                className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold outline-none transition hover:opacity-75"
-                style={{ background: GOLD_SOFT, border: "1px solid " + LINE2, borderRadius: RADIUS, color: GOLD_D }}>
-                <Shuffle className="h-3 w-3" /> 전환 랜덤
-              </button>
+
+        {/* 추억 슬라이드 사진 — 최대 20장, 사진마다 전환 선택 */}
+        <div className="mb-2 flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-[12.5px] font-bold" style={{ color: INK }}>
+            <Image className="h-3.5 w-3.5" style={{ color: GOLD_D }} /> 추억 슬라이드 사진
+            <span className="font-normal" style={{ color: st.photoOver ? warn : FAINT }}>· {st.slidePhotos.length}/{st.PHOTO_MAX}장</span>
+          </div>
+          {st.slidePhotos.length > 0 && (
+            <button onClick={st.randomizeTrans}
+              className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold outline-none transition hover:opacity-75"
+              style={{ background: GOLD_SOFT, border: "1px solid " + LINE2, borderRadius: RADIUS, color: GOLD_D }}>
+              <Shuffle className="h-3 w-3" /> 전환 랜덤
+            </button>
+          )}
+        </div>
+        <p className="mb-2 text-[11px]" style={{ color: FAINT }}>최대 20장 · 장당 7~10초 · 끌어서 순서 변경 · 사진마다 전환 효과 선택</p>
+        <UploadGrid items={st.slidePhotos} withTrans st={st} onAdd={st.addPhoto} onFiles={st.onPhotoFiles} inputRef={st.photoRef} onRemove={st.removePhoto} onReorder={st.reorderPhotos} accept="image/*" addLabel="사진 추가" addHint={`사진만 · 최대 ${st.PHOTO_MAX}장`} />
+        {st.photoOver && <p className="mt-1 text-[11px] font-semibold" style={{ color: warn }}>사진은 최대 {st.PHOTO_MAX}장까지 올릴 수 있어요.</p>}
+
+        {/* 추억 영상 — 개수 제한 없으나 총 길이 1분30초 상한. 원본 사운드 유지(BGM 없음), 사진 슬라이드 뒤에 묶음으로 이어짐 */}
+        {(() => {
+          const sec = st.videoSecs || 0;
+          const cap = st.VIDEO_MAX_SEC;
+          const fmt = (s) => Math.floor(s / 60) + ":" + String(Math.round(s % 60)).padStart(2, "0");
+          const vpct = Math.min(100, (sec / cap) * 100);
+          return (
+            <div className="mt-6">
+              <div className="mb-2 flex items-center gap-1.5 text-[12.5px] font-bold" style={{ color: INK }}>
+                <Film className="h-3.5 w-3.5" style={{ color: GOLD_D }} /> 추억 영상
+                <span className="font-normal" style={{ color: FAINT }}>· {st.videos.length}개</span>
+                <span className="ml-auto text-[11.5px] font-bold tabular-nums" style={{ color: st.videoOver ? warn : st.videoMeasuring ? FAINT : INK }}>
+                  {st.videoMeasuring ? "길이 확인 중…" : `${fmt(sec)} / ${fmt(cap)}`}
+                </span>
+              </div>
+              {/* 총 길이 게이지 — 사진 용량 바와 별개로 영상은 '초'로 막는다 */}
+              <div className="mb-1" style={{ height: 5, background: LINE, borderRadius: 3, overflow: "hidden" }}>
+                <div style={{ height: "100%", width: vpct + "%", background: st.videoOver ? warn : GOLD, borderRadius: 3, transition: "width .3s ease" }} />
+              </div>
+              <p className="mb-2 text-[11px]" style={{ color: FAINT }}>개수 제한 없음 · 총 길이 1분30초 이내 · 사진 슬라이드 다음에 묶음으로 이어집니다 · 원본 소리 그대로(배경음악 없음)</p>
+              {st.videoOver && <p className="mb-2 text-[11px] font-semibold" style={{ color: warn }}>추억 영상 총 길이가 1분30초를 넘었습니다. 영상을 줄여 주세요.</p>}
+              <UploadGrid items={st.videos} st={st} onAdd={st.addVideo} onFiles={st.onVideoFiles} inputRef={st.videoRef} onRemove={st.removeVideo} onReorder={st.reorderVideos} accept="video/*" addLabel="영상 추가" addHint="영상만 · 총 1분30초 이내" />
             </div>
-            <div className="grid grid-cols-4 gap-2">
-              {st.uploads.map((u, i) => (
-                <div key={u.id}
-                  draggable
-                  onDragStart={() => setDragId(u.id)}
-                  onDragEnd={() => { setDragId(null); setOverId(null); }}
-                  onDragOver={(e) => { e.preventDefault(); if (overId !== u.id) setOverId(u.id); }}
-                  onDrop={(e) => { e.preventDefault(); st.reorderUploads(dragId, u.id); setOverId(null); }}
-                  className="flex cursor-grab flex-col gap-1 p-1 transition active:cursor-grabbing"
-                  style={{ background: SURFACE, border: "1px solid " + (overId === u.id && dragId !== u.id ? GOLD : LINE), borderRadius: RADIUS, opacity: dragId === u.id ? 0.45 : 1 }}>
-                  <div className="relative overflow-hidden" style={{ aspectRatio: "1", borderRadius: 4, background: "linear-gradient(135deg,#f0ebe0,#e3d9c4)" }}>
-                    {u.thumb ? (
-                      <img src={u.thumb} alt="" className="absolute inset-0 h-full w-full object-cover" />
-                    ) : (
-                      <span className="absolute inset-0 flex items-center justify-center">
-                        {u.kind === "photo"
-                          ? <Image className="h-4 w-4" style={{ color: GOLD_D, opacity: 0.55 }} />
-                          : <Film className="h-4 w-4" style={{ color: GOLD_D, opacity: 0.55 }} />}
-                      </span>
-                    )}
-                    <span className="absolute left-0.5 top-0.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full px-1 text-[9px] font-bold text-white" style={{ background: GOLD_D }}>{i + 1}</span>
-                    {u.uploading && (
-                      <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,.35)" }}><Loader2 className="h-4 w-4 animate-spin text-white" /></div>
-                    )}
-                    <button onClick={() => st.removeUpload(u.id)} className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full outline-none transition hover:opacity-80" style={{ background: "rgba(0,0,0,.5)", color: "#fff" }} aria-label="삭제"><X className="h-2.5 w-2.5" /></button>
-                  </div>
-                  <select value={st.transMap[u.id] ?? st.trans} onChange={(e) => st.setItemTrans(u.id, +e.target.value)}
-                    className="w-full px-0.5 py-0.5 text-[9px] outline-none" style={{ background: "#f6f3ec", border: "1px solid " + LINE2, borderRadius: 4, color: INK }}>
-                    {TRANSITIONS.map((t, j) => <option key={j} value={j}>{t.ko}</option>)}
-                  </select>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
+          );
+        })()}
       </div>
     );
   }
@@ -256,7 +303,7 @@ export function StepBody({ step, st }) {
           </p>
         )}
         <p className="mt-2 text-[10.5px] leading-relaxed" style={{ color: FAINT }}>
-          타이틀 1장 → 영정 타이틀 · 나머지 2장 → AI 추억 영상.
+          타이틀 1장 → AI 초상화 + 톤 변경(영정 타이틀) · 나머지 2장 → AI 영상(추억 슬라이드 앞·추억 영상 뒤).
         </p>
         <p className="mt-1.5 text-[10.5px] leading-relaxed" style={{ color: FAINT }}>
           ※ 사진만 올릴 수 있어요 (영상은 업로드 불가).
@@ -323,12 +370,13 @@ export function StepBody({ step, st }) {
           <span className="absolute bottom-2 left-2 px-1.5 py-[2px] text-[9px] font-bold tracking-wider text-white" style={{ background: "rgba(0,0,0,.4)", borderRadius: 2 }}>16:9 · 1080p</span>
         </div>
         <div className="mt-3 text-center" style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: INK }}>{st.petName || st.link.petName || "콩이"}</div>
-        <p className="mt-1 text-center text-[12px]" style={{ color: MUTE }}>타이틀 · 오프닝 · 추억 슬라이드 · AI 영상 · 편지</p>
+        <p className="mt-1 text-center text-[12px]" style={{ color: MUTE }}>타이틀 · AI 영상 · 추억 슬라이드 · 추억 영상 · 편지</p>
         {/* 유저가 고른 설정 요약 */}
         <div className="mt-3 space-y-1 px-3 py-2.5 text-[11.5px]" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
-          <div className="flex justify-between"><span>슬라이드 소스</span><span style={{ color: INK }}>{st.uploads.length}개</span></div>
+          <div className="flex justify-between"><span>추억 슬라이드 사진</span><span style={{ color: INK }}>{st.slidePhotos.length}장</span></div>
+          <div className="flex justify-between"><span>추억 영상</span><span style={{ color: INK }}>{st.videos.length}개</span></div>
           <div className="flex justify-between"><span>타이틀 사진</span><span style={{ color: INK }}>{st.titleSel + 1}번 선택</span></div>
-          <div className="flex justify-between"><span>AI 영상 변환</span><span style={{ color: INK }}>나머지 2장</span></div>
+          <div className="flex justify-between"><span>AI 영상 변환</span><span style={{ color: INK }}>나머지 2장 (앞·뒤)</span></div>
           <div className="flex justify-between"><span>장면 전환</span><span style={{ color: INK }}>{Object.keys(st.transMap).length > 0 ? "개별 설정" : TRANSITIONS[st.trans]?.ko}</span></div>
           <div className="flex justify-between"><span>배경 음악</span><span style={{ color: INK }}>{D.BGM[st.bgm].name}</span></div>
         </div>

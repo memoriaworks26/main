@@ -45,4 +45,7 @@ export const STATUS = {
   billed: { label: "청구완료", c: "#3f5e87", bg: "#e9eef5" },
 };
 
+// 보호자 제작링크(submission) 상태 라벨 — 고객상세·예약상세 공용(단일 정의).
+export const SUB_LABEL = { draft: "작성 대기", queued: "제작 대기", rendering: "제작 중", done: "완료", failed: "실패", expired: "만료" };
+
 export const RADIUS = 4;

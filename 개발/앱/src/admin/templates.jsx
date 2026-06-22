@@ -1,7 +1,7 @@
 // [추모영상 제작] 영상 템플릿 — 파트너별 BGM/요소 구성 편집.
 import React, { useState } from "react";
 import {
-  AlertTriangle, ChevronDown, ChevronRight, ChevronUp, Clapperboard, GripVertical, Image, LayoutTemplate, Mail, Music, Music2, Plus, Search, Sparkles, Trash2, Type, Upload,
+  AlertTriangle, ChevronDown, ChevronRight, ChevronUp, Clapperboard, Film, GripVertical, Image, LayoutTemplate, Mail, Music, Music2, Plus, Search, Sparkles, Trash2, Type, Upload,
 } from "lucide-react";
 import { SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, STATUS, RADIUS } from "../theme.js";
 import { Btn, PageHeader } from "../ui.jsx";
@@ -13,11 +13,14 @@ import { SaveBar, SearchSelect } from "./shared.jsx";
 
 const TPL_EL = {
   title: { icon: Type, color: GOLD },
-  slide: { icon: Image, color: "#2f4763" },
   ai: { icon: Sparkles, color: "#51607a" },
+  slide: { icon: Image, color: "#2f4763" },
+  video: { icon: Film, color: "#3a5a52" },
   letter: { icon: Mail, color: "#5a6470" },
   clip: { icon: Clapperboard, color: "#3f5e87" },
 };
+// 요소 길이가 분 단위라 mm:ss로 표기
+const mmss = (s) => Math.floor(s / 60) + ":" + String(Math.round(s % 60)).padStart(2, "0");
 
 // 섹션 소제목
 function SectionLabel({ icon: Icon, children, right }) {
@@ -135,7 +138,7 @@ export function Templates() {
 
   return (
     <div>
-      <PageHeader title="영상 템플릿" sub="파트너사별 요소 구성·순서 편집 · 기본 요소(타이틀·추억 슬라이드·추억 영상·편지)는 각 1개, 클립은 여러 개 · BGM·클립 콘텐츠 선택"
+      <PageHeader title="영상 템플릿" sub="파트너사별 요소 구성·순서 편집 · 기본 요소(타이틀·추억 슬라이드·추억 영상·편지)는 각 1개, AI 영상(앞·뒤)·클립은 여러 개 · BGM·클립 콘텐츠 선택"
         right={
           <div className="flex items-center gap-2">
             <div className="flex items-center px-3" style={{ height: 36, width: 220, background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS }}>
@@ -192,7 +195,7 @@ export function Templates() {
                   {p.isDefault && <span className="shrink-0 px-1.5 py-0.5 text-[10.5px] font-bold" style={{ borderRadius: RADIUS, background: GOLD_SOFT, color: GOLD_D }}>신규 파트너 기본값</span>}
                   {!p.isDefault && !bgm && <span className="flex shrink-0 items-center gap-1 text-[11px]" style={{ color: STATUS.review.c }}><AlertTriangle className="h-3 w-3" /> BGM 미지정</span>}
                 </span>
-                <span className="shrink-0 text-[11.5px] tabular-nums" style={{ color: FAINT }}>약 {total}초 · {blocks.length}요소{p.isDefault ? "" : ` · 클립 ${clipCount}개`}</span>
+                <span className="shrink-0 text-[11.5px] tabular-nums" style={{ color: FAINT }}>약 {mmss(total)} · {blocks.length}요소{p.isDefault ? "" : ` · 클립 ${clipCount}개`}</span>
               </button>
 
               {isOpen && (
@@ -260,7 +263,7 @@ export function Templates() {
                           </>
                           )
                         ) : (
-                          <span className="min-w-0 flex-1 truncate text-[11.5px]" style={{ color: FAINT }}>{def.source} · {def.dur}초</span>
+                          <span className="min-w-0 flex-1 truncate text-[11.5px]" style={{ color: FAINT }}>{def.source} · {def.dur >= 60 ? mmss(def.dur) : def.dur + "초"}</span>
                         )}
                         <div className="flex shrink-0 items-center gap-0.5">
                           <button onClick={() => move(b.id, -1)} disabled={i === 0} className="rounded p-1 disabled:opacity-25" style={{ color: MUTE }} title="위로"><ChevronUp className="h-3.5 w-3.5" /></button>

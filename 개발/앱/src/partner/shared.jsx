@@ -21,7 +21,11 @@ export const MINS = [0, 10, 20, 30, 40, 50];
 export { pad2 };
 export const minToStr = (m) => pad2(Math.floor(m / 60)) + ":" + pad2(m % 60); // 분 → "HH:MM" (intake·dashboard 공용)
 
-export const CASE_ROOMS = D.ROOMS.filter((r) => r.type === "case").map((r) => r.name);
+// 현재(파트너 세션) 호실 이름 목록 — store.rooms 기반(라이브=그 파트너 호실, 목업=D.ROOMS).
+export function useCaseRooms() {
+  const s = useStore();
+  return s.rooms.filter((r) => r.type === "case").map((r) => r.name);
+}
 
 export function parseSlot(slot) {
   if (!slot) return { start: 0, end: 0, startStr: "", endStr: "" };

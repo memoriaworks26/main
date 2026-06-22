@@ -44,7 +44,7 @@ export function Signage() {
 
 // canDelete=false: 삭제 비노출(읽기전용) · finalOnly=true: 최종본만(원본/혼합 대상 토글 숨김) — 협력파트너 다운로드 전용.
 function PeriodDownload({ canDelete = true, finalOnly = false }) {
-  const { partners } = useStore();
+  const { partners, videos } = useStore();  // [QA-P1] 발행 영상 = store(워커 산출물), 목업 제거
   const [from, setFrom] = useState("2026-04-01");
   const [to, setTo] = useState("2026-06-18");
   const [partner, setPartner] = useState("all");
@@ -53,9 +53,9 @@ function PeriodDownload({ canDelete = true, finalOnly = false }) {
   const [deleted, setDeleted] = useState(() => new Set()); // 삭제된 자산(목업 — 로컬 상태)
 
   const partnerOpts = [{ value: "all", label: "전체 파트너사" }, ...partners.map((p) => ({ value: p.id, label: p.name }))];
-  const rows = D.FINAL_VIDEOS
+  const rows = videos
     .filter((v) => !deleted.has(v.id) && (partner === "all" || v.partnerId === partner) && (!from || v.date >= from) && (!to || v.date <= to))
-    .sort((a, b) => b.datetime.localeCompare(a.datetime));
+    .sort((a, b) => String(b.datetime).localeCompare(String(a.datetime)));
 
   const ids = rows.map((r) => r.id);
   const allOn = ids.length > 0 && ids.every((id) => sel.has(id));
@@ -184,9 +184,11 @@ function PeriodDownload({ canDelete = true, finalOnly = false }) {
 }
 
 export function Storage() {
-  const { storageClasses: classes } = useStore();
-  const s = D.STORAGE;
-  const pct = Math.round((s.used / s.total) * 100);
+  const { storageClasses: classes, videos } = useStore();
+  // [QA-P1] 사용량 = 발행 영상(최종본+원본) 실측 합. 총량은 R2 소프트 캡(설정값).
+  const usedGB = +(videos.reduce((a, v) => a + (v.sizeMB || 0) + (v.srcMB || 0), 0) / 1024).toFixed(1);
+  const s = { used: usedGB, total: 1024, unit: "GB" };
+  const pct = s.total ? Math.min(100, Math.round((s.used / s.total) * 100)) : 0;
   const setRet = (key, retention) => actions.setRetention(key, retention);
 
   return (

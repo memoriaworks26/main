@@ -18,8 +18,19 @@ let _client = null;
 export function getClient() {
   if (!BACKEND_LIVE) return null;
   if (!_client) {
-    // 보호자 링크는 비로그인(익명 anon 키) — 토큰이 곧 접근 권한.
-    _client = createClient(URL, ANON, { auth: { persistSession: false } });
+    // 단일 클라이언트:
+    //  · 관리자·파트너 로그인은 세션 유지(persistSession·autoRefresh).
+    //  · 보호자 링크는 로그인하지 않고 anon 키로 RPC만 호출 → 세션 영향 없음.
+    //  · 운영 테이블은 memoria 스키마. 테이블 접근 시 .schema("memoria") 사용.
+    _client = createClient(URL, ANON, {
+      auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+    });
   }
   return _client;
+}
+
+// 운영 테이블(memoria 스키마) 접근용 헬퍼. 없으면 null(목업).
+export function db() {
+  const sb = getClient();
+  return sb ? sb.schema("memoria") : null;
 }

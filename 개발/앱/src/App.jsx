@@ -8,11 +8,14 @@ import VideoEditor from "./editor.jsx";
 import { ToastHost } from "./toast.jsx";
 import { ConfirmHost } from "./confirm.jsx";
 import { getToken } from "./lib/userLink.js";
+import { DEV_PREVIEW } from "./lib/auth.js";
+import AuthGate from "./auth/AuthGate.jsx";
 
 // ─────────────────────────────────────────────────────────────
-// Memoria Works — 통합 인터페이스 (목업 / 권한 전환)
-// 디자인: 디자인_가이드.md · IA: 메뉴구조_IA.md · 더미데이터
-// 따뜻한 아이보리 + 네이비/골드 · 반려동물 이름 명조 · 빨강 배제 · lucide
+// Memoria Works — 진입 분기
+//   1) /u/<token>  → 보호자 유저링크(비로그인)
+//   2) DEV_PREVIEW → 목업 권한전환(개발용, VITE_DEV_PREVIEW=1)
+//   3) 그 외(운영) → AuthGate(실제 Supabase Auth 로그인 → 신원별 콘솔)
 // ─────────────────────────────────────────────────────────────
 
 const MASTER_TABS = [
@@ -20,6 +23,26 @@ const MASTER_TABS = [
   { id: "partner", label: "파트너 권한", icon: Users },
   { id: "user", label: "유저 링크", icon: Link2 },
 ];
+
+// 전역 스타일(애니메이션·스크롤바) — 목업·운영 모두에서 주입.
+function AppStyles() {
+  return (
+    <style>{`
+      * { font-family: ${SANS}; }
+      .mw-track { height: 3px; background: rgba(63,94,135,.18); overflow: hidden; border-radius: 2px; }
+      .mw-fill { height: 100%; width: 40%; background: #3f5e87; animation: mw-move 1.4s ease-in-out infinite; }
+      @keyframes mw-move { 0% { transform: translateX(-110%) } 100% { transform: translateX(320%) } }
+      .mw-fade { animation: mw-fade .16s ease-out; }
+      .mw-pop { animation: mw-pop .18s cubic-bezier(.2,.7,.3,1); }
+      @keyframes mw-fade { from { opacity: 0 } to { opacity: 1 } }
+      @keyframes mw-pop { from { opacity: 0; transform: translateY(6px) scale(.985) } to { opacity: 1; transform: none } }
+      @keyframes mw-eq { from { transform: scaleY(.35) } to { transform: scaleY(1) } }
+      @media (prefers-reduced-motion: reduce) { .mw-fill { animation: none; width: 100% } .mw-fade, .mw-pop { animation: none } }
+      ::-webkit-scrollbar { width: 9px; height: 9px; }
+      ::-webkit-scrollbar-thumb { background: #cfc8bb; border-radius: 5px; }
+    `}</style>
+  );
+}
 
 function MasterNav({ view, setView }) {
   return (
@@ -48,15 +71,15 @@ function MasterNav({ view, setView }) {
   );
 }
 
-export default function App() {
+// 개발용 목업(권한 전환) — 기존 동작 보존. VITE_DEV_PREVIEW=1 일 때만.
+function MockupApp() {
   const [view, setView] = useState("admin");
-  const [editor, setEditor] = useState(null); // null | reservation/room 객체
-  const [asPartner, setAsPartner] = useState(null); // 관리자가 파트너로 접속 시 해당 파트너 객체
+  const [editor, setEditor] = useState(null);
+  const [asPartner, setAsPartner] = useState(null);
 
   const openEditor = (item) => setEditor(item || {});
   const closeEditor = () => setEditor(null);
 
-  // 편집기(오버레이)가 열려 있는 동안 뒤 배경(메인창) 스크롤 잠금 — 상단 틈으로 비치지 않게 최상단 고정.
   useEffect(() => {
     if (!editor) return;
     window.scrollTo(0, 0);
@@ -67,10 +90,27 @@ export default function App() {
   const switchView = (v) => { setAsPartner(null); setView(v); };
   const loginAsPartner = (partner) => { setAsPartner(partner); setView("partner"); };
 
-  // 보호자 토큰 링크(/u/<token> 또는 ?t=)로 진입하면 마스터 내비 없이 유저 페이지만 노출.
+  return (
+    <div className="min-w-[1080px]" style={{ background: BG, minHeight: "100vh", fontFamily: SANS, color: INK }}>
+      <MasterNav view={view} setView={switchView} />
+      {view === "admin" && <AdminConsole onOpenEditor={openEditor} onLoginAsPartner={loginAsPartner} />}
+      {view === "partner" && <PartnerConsole asPartner={asPartner} onBackToAdmin={asPartner ? () => switchView("admin") : null} />}
+      {view === "user" && <UserMobile />}
+      {editor && (
+        <div className="fixed inset-x-0 bottom-0" style={{ top: 44, zIndex: 40, background: BG }}>
+          <VideoEditor reservation={editor} onClose={closeEditor} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function App() {
+  // 1) 보호자 토큰 링크 — 비로그인 유저 페이지만.
   if (getToken()) {
     return (
       <div style={{ background: BG, minHeight: "100vh", fontFamily: SANS, color: INK }}>
+        <AppStyles />
         <UserMobile />
         <ToastHost />
         <ConfirmHost />
@@ -78,37 +118,26 @@ export default function App() {
     );
   }
 
+  // 2) 개발용 목업 미리보기.
+  if (DEV_PREVIEW) {
+    return (
+      <>
+        <AppStyles />
+        <MockupApp />
+        <ToastHost />
+        <ConfirmHost />
+      </>
+    );
+  }
+
+  // 3) 운영 — 실제 로그인. 경로로 관리자/파트너 구분.
+  const mode = typeof window !== "undefined" && window.location.pathname.startsWith("/partner") ? "partner" : "admin";
   return (
-    <div className="min-w-[1080px]" style={{ background: BG, minHeight: "100vh", fontFamily: SANS, color: INK }}>
-      <style>{`
-        * { font-family: ${SANS}; }
-        .mw-track { height: 3px; background: rgba(63,94,135,.18); overflow: hidden; border-radius: 2px; }
-        .mw-fill { height: 100%; width: 40%; background: #3f5e87; animation: mw-move 1.4s ease-in-out infinite; }
-        @keyframes mw-move { 0% { transform: translateX(-110%) } 100% { transform: translateX(320%) } }
-        .mw-fade { animation: mw-fade .16s ease-out; }
-        .mw-pop { animation: mw-pop .18s cubic-bezier(.2,.7,.3,1); }
-        @keyframes mw-fade { from { opacity: 0 } to { opacity: 1 } }
-        @keyframes mw-pop { from { opacity: 0; transform: translateY(6px) scale(.985) } to { opacity: 1; transform: none } }
-        @keyframes mw-eq { from { transform: scaleY(.35) } to { transform: scaleY(1) } }
-        @media (prefers-reduced-motion: reduce) { .mw-fill { animation: none; width: 100% } .mw-fade, .mw-pop { animation: none } }
-        ::-webkit-scrollbar { width: 9px; height: 9px; }
-        ::-webkit-scrollbar-thumb { background: #cfc8bb; border-radius: 5px; }
-      `}</style>
-
-      <MasterNav view={view} setView={switchView} />
-
-      {/* 콘솔은 항상 마운트 유지 — 편집기는 위에 오버레이로 띄워, 닫으면(발행·컨펌·뒤로가기) 직전 화면(큐 등)으로 복귀 */}
-      {view === "admin" && <AdminConsole onOpenEditor={openEditor} onLoginAsPartner={loginAsPartner} />}
-      {view === "partner" && <PartnerConsole asPartner={asPartner} onBackToAdmin={asPartner ? () => switchView("admin") : null} />}
-      {view === "user" && <UserMobile />}
-
-      {editor && (
-        <div className="fixed inset-x-0 bottom-0" style={{ top: 44, zIndex: 40, background: BG }}>
-          <VideoEditor reservation={editor} onClose={closeEditor} />
-        </div>
-      )}
+    <>
+      <AppStyles />
+      <AuthGate mode={mode} />
       <ToastHost />
       <ConfirmHost />
-    </div>
+    </>
   );
 }

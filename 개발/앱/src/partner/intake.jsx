@@ -5,10 +5,11 @@ import {
 } from "lucide-react";
 import { SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS } from "../theme.js";
 import { Btn, Card, PageHeader, DateField, CopyBtn } from "../ui.jsx";
-import { useStore } from "../store.js";
+import { useStore, actions } from "../store.js";
 import { confirm } from "../confirm.jsx";
+import { toast } from "../toast.jsx";
 import * as D from "../data.js";
-import { usePartner, usePartnerTerm, pad2, minToStr, parseSlot, overlaps, endDateFor, slotLabel, TIMELINE_START, TIMELINE_END } from "./shared.jsx";
+import { usePartner, usePartnerTerm, pad2, minToStr, useCaseRooms, parseSlot, overlaps, endDateFor, slotLabel, TIMELINE_START, TIMELINE_END } from "./shared.jsx";
 
 // 드래그 타임라인 — 막대를 클릭·드래그해 시간대 선택. 기존 예약(blocked)은 넘어가지 못하도록 제한.
 // 끝 손잡이를 24:00 너머로 끌면 종료가 00:00 쪽으로 감겨 자정 넘김(익일) 선택이 된다(endMin<startMin).
@@ -237,14 +238,21 @@ export function Intake({ prefill } = {}) {
   const PARTNER = usePartner();
   const tp = usePartnerTerm(); // 사업부별 파트너 용어
   const { reservations } = useStore();
-  const rooms = D.ROOMS.filter((r) => r.type === "case");
+  const rooms = useCaseRooms().map((n) => ({ name: n }));  // [Phase4-1b] 현재 파트너 호실
   // 호실 카드에서 들어온 경우 해당 호실·현재 시각을 시작값으로 프리필. 아니면 블락(빗금)이 보이는 기존 예약일을 기본으로.
   const [date, setDate] = useState(prefill?.date || "2026-06-15");
   const [room, setRoom] = useState(prefill?.room || rooms[0]?.name || "");
   const [sH, setSH] = useState(prefill?.sH ?? 9), [sM, setSM] = useState(prefill?.sM ?? 0);
   const [eH, setEH] = useState(prefill?.eH ?? 12), [eM, setEM] = useState(prefill?.eM ?? 0);
   const [manager, setManager] = useState(prefill?.manager || ""); // 예약 담당자명(필수)
+  // [QA-P0] 보호자/반려동물 정보 — 제어입력(예약접수 시 DB 저장)
+  const [chief, setChief] = useState("");     // 보호자 성함
+  const [phone, setPhone] = useState("");     // 보호자 연락처
+  const [petName, setPetName] = useState(""); // 반려동물 이름 → deceased
+  const [breed, setBreed] = useState("");     // 품종
+  const [age, setAge] = useState("");         // 나이
   const [result, setResult] = useState(null);
+  const [busy, setBusy] = useState(false);
 
   // 현재 입력 중인 슬롯
   const newSlot = pad2(sH) + ":" + pad2(sM) + "~" + pad2(eH) + ":" + pad2(eM);
@@ -260,7 +268,9 @@ export function Intake({ prefill } = {}) {
   );
   const currentConflict = slotConflict(room);
   const managerMissing = manager.trim().length === 0; // 담당자명 미입력
-  const canConfirm = !timeInvalid && !currentConflict && !managerMissing;
+  // [QA-P0] 필수 보호자/펫 정보 미입력 여부
+  const infoMissing = chief.trim().length === 0 || phone.trim().length === 0 || petName.trim().length === 0;
+  const canConfirm = !timeInvalid && !currentConflict && !managerMissing && !infoMissing && !busy;
 
   // 드래그 타임라인용 — 분 단위 범위 ↔ 시/분 상태 동기화 + 현재 호실의 기존 예약
   const startMin = sH * 60 + sM, endMin = eH * 60 + eM;
@@ -271,17 +281,33 @@ export function Intake({ prefill } = {}) {
   // 타임라인 빗금(blocked)은 하루(00:00~24:00) 뷰 — 같은 날짜·호실 예약만 분 범위로 표시
   const blocked = mine.filter((x) => x.room === room && x.date === date).map((x) => parseSlot(x.slot));
 
-  const field = (label, ph, req) => (
+  // [QA-P0] 제어입력 필드(value/onChange로 실제 수집)
+  const field = (label, ph, req, value, onChange) => (
     <label className="block">
       <span className="text-[12px] font-semibold" style={{ color: MUTE }}>{label}{req && <span style={{ color: GOLD }}> *</span>}</span>
-      <input placeholder={ph} className="mt-1 w-full bg-transparent px-3 text-[13px] outline-none" style={{ height: 36, background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS, color: INK }} />
+      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={ph} className="mt-1 w-full bg-transparent px-3 text-[13px] outline-none" style={{ height: 36, background: SURFACE, border: "1px solid " + (req && !value.trim() ? GOLD : LINE), borderRadius: RADIUS, color: INK }} />
     </label>
   );
   const summary = date + " · " + room + " · " + slotLabel(newSlot);
   const doConfirm = async () => {
     if (!canConfirm) return;
-    if (!(await confirm({ title: "예약 접수 확정", message: summary + "\n담당자 " + manager.trim() + "\n예약을 확정하고 보호자 영상제작 URL을 생성합니다." }))) return;
-    setResult({ url: "memoria.works/f/" + Math.random().toString(36).slice(2, 8) });
+    if (!(await confirm({ title: "예약 접수 확정", message: summary + "\n담당자 " + manager.trim() + "\n보호자 " + chief.trim() + " · " + tp("subject") + " " + petName.trim() + "\n예약을 확정하고 보호자 영상제작 URL을 생성합니다." }))) return;
+    setBusy(true);
+    try {
+      // 예약 생성 → 보호자 제작링크(토큰) 발급 → 실제 /u/<token> URL 표시
+      const r = await actions.addReservation({
+        partner: PARTNER.name, partnerId: PARTNER.id,
+        deceased: petName.trim(), chief: chief.trim(), phone: phone.trim(),
+        breed: breed.trim() || undefined, age: age.trim() || undefined,
+        room, date, endDate, slot: newSlot, assignee: manager.trim(),
+      });
+      const sub = await actions.issueSubmission(r);
+      setResult({ url: window.location.origin + "/u/" + sub.token });
+    } catch (e) {
+      toast("예약 접수 실패: " + (e?.message || e));
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -352,6 +378,10 @@ export function Intake({ prefill } = {}) {
               <div className="mt-4 flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold" style={{ background: "#ede9e1", borderRadius: RADIUS, color: MUTE }}>
                 담당자명을 입력해주세요.
               </div>
+            ) : infoMissing ? (
+              <div className="mt-4 flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold" style={{ background: "#ede9e1", borderRadius: RADIUS, color: MUTE }}>
+                {tp("guardian")} 성함·연락처와 {tp("subject")} 이름을 입력해주세요.
+              </div>
             ) : (
               <div className="mt-4 flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold tabular-nums" style={{ background: GOLD_SOFT, borderRadius: RADIUS, color: GOLD_D }}>
                 <Check className="h-3.5 w-3.5" /> {summary}
@@ -372,15 +402,15 @@ export function Intake({ prefill } = {}) {
           </Card>
           <Card title={tp("guardian") + " 정보"}>
             <div className="space-y-3">
-              {field("성함", "홍길동", true)}
-              {field("연락처", "010-0000-0000", true)}
+              {field("성함", "홍길동", true, chief, setChief)}
+              {field("연락처", "010-0000-0000", true, phone, setPhone)}
             </div>
           </Card>
           <Card title={tp("subject") + " 정보"}>
             <div className="space-y-3">
-              {field("이름", "초코", true)}
-              {field("품종", "골든리트리버", true)}
-              {field("나이", "15", false)}
+              {field("이름", "초코", true, petName, setPetName)}
+              {field("품종", "골든리트리버", false, breed, setBreed)}
+              {field("나이", "15", false, age, setAge)}
             </div>
           </Card>
         </div>
@@ -392,7 +422,7 @@ export function Intake({ prefill } = {}) {
           <div className="mt-2.5 flex items-center gap-2">
             <div className="flex-1 px-3 py-2 text-[13px] tabular-nums" style={{ background: "#fff", border: "1px solid " + LINE, borderRadius: RADIUS, color: GOLD_D }}>{result.url}</div>
             <CopyBtn text={result.url} />
-            <Btn size="sm" variant="neutral" onClick={() => setResult(null)}>새 예약</Btn>
+            <Btn size="sm" variant="neutral" onClick={() => { setResult(null); setChief(""); setPhone(""); setPetName(""); setBreed(""); setAge(""); setManager(""); }}>새 예약</Btn>
           </div>
           <p className="mt-2 text-[11px]" style={{ color: FAINT }}>※ 보호자에게 알림톡으로 자동 발송됩니다. (퇴실 시 자동 무효화)</p>
         </div>

@@ -167,6 +167,7 @@ function ConsentCard({ account }) {
 
 export function SettingsView({ account }) {
   const [pwOpen, setPwOpen] = useState(false);
+  const { company } = useStore();  // [QA-P1] 공급자·계좌 = store.company(DB 하이드레이트), 목업 제거
   return (
     <div>
       <PageHeader title="환경설정" sub="관리자 전용 — 회사 정보" />
@@ -176,17 +177,17 @@ export function SettingsView({ account }) {
       <div className="grid grid-cols-2 gap-4">
         <Card title="공급자 정보 (거래명세서 자동 삽입)">
           <div className="space-y-2 text-[13px]" style={{ color: INK }}>
-            <div className="flex justify-between"><span style={{ color: MUTE }}>상호</span><span className="font-semibold">{D.COMPANY.name}</span></div>
-            <div className="flex justify-between"><span style={{ color: MUTE }}>대표자</span><span>{D.COMPANY.ceo}</span></div>
-            <div className="flex justify-between"><span style={{ color: MUTE }}>사업자번호</span><span className="tabular-nums">{D.COMPANY.biz}</span></div>
-            <div className="flex justify-between"><span style={{ color: MUTE }}>업태/종목</span><span className="text-right">{D.COMPANY.type}</span></div>
+            <div className="flex justify-between"><span style={{ color: MUTE }}>상호</span><span className="font-semibold">{company.name || "—"}</span></div>
+            <div className="flex justify-between"><span style={{ color: MUTE }}>대표자</span><span>{company.ceo || "—"}</span></div>
+            <div className="flex justify-between"><span style={{ color: MUTE }}>사업자번호</span><span className="tabular-nums">{company.biz || "—"}</span></div>
+            <div className="flex justify-between"><span style={{ color: MUTE }}>업태/종목</span><span className="text-right">{company.type || "—"}</span></div>
           </div>
         </Card>
         <Card title="결제 계좌 · 도장">
           <div className="space-y-2 text-[13px]" style={{ color: INK }}>
-            <div className="flex justify-between"><span style={{ color: MUTE }}>은행</span><span>{D.COMPANY.bank}</span></div>
-            <div className="flex justify-between"><span style={{ color: MUTE }}>계좌</span><span className="tabular-nums">{D.COMPANY.account}</span></div>
-            <div className="flex justify-between"><span style={{ color: MUTE }}>예금주</span><span>{D.COMPANY.holder}</span></div>
+            <div className="flex justify-between"><span style={{ color: MUTE }}>은행</span><span>{company.bank || "—"}</span></div>
+            <div className="flex justify-between"><span style={{ color: MUTE }}>계좌</span><span className="tabular-nums">{company.account || "—"}</span></div>
+            <div className="flex justify-between"><span style={{ color: MUTE }}>예금주</span><span>{company.holder || "—"}</span></div>
             <div className="flex items-center justify-between"><span style={{ color: MUTE }}>도장 등록</span><Btn size="sm" variant="ghost" onClick={() => toast("도장 이미지가 업로드되었습니다")}><Plus className="h-3.5 w-3.5" /> 업로드</Btn></div>
           </div>
         </Card>
@@ -336,11 +337,13 @@ export function AccountsManage({ account }) {
   };
 
   const idTaken = accounts.some((a) => a.loginId === loginId.trim());
-  const canAdd = name.trim() && loginId.trim() && pw.trim() && !idTaken;
+  const idTooShort = loginId.trim().length > 0 && loginId.trim().length < 6;
+  // 임시 비밀번호 = 아이디(6자 이상). 비번 정책(최소 6자) 충족 위해 아이디도 6자 이상 강제.
+  const canAdd = name.trim() && loginId.trim().length >= 6 && !idTaken;
   const addWorker = async () => {
     if (!canAdd) return;
     const roleLabel = D.ADMIN_ROLES[role].label;
-    if (!(await confirmDialog({ title: "계정 발급", message: `${name.trim()}(${loginId.trim()}) ${roleLabel} 계정을 발급합니다.` }))) return;
+    if (!(await confirmDialog({ title: "계정 발급", message: `${name.trim()}(${loginId.trim()}) ${roleLabel} 계정을 발급합니다.\n초기 비밀번호는 아이디와 동일하며, 첫 로그인 후 변경합니다.` }))) return;
     // 협력파트너는 권한체계 무관(다운로드 전용) → perms 빈 배열. 작업자는 기본 권한으로 시작.
     actions.addAccount({ id: "u-" + Date.now(), name: name.trim(), role, loginId: loginId.trim(), email: "—", phone: phone.trim() || "—", status: "invited", lastLogin: "—", perms: role === "worker" ? [...D.DEFAULT_WORKER_PERMS] : [] });
     setName(""); setLoginId(""); setPhone(""); setPw(""); setRole("worker"); setAdding(false);
@@ -375,13 +378,13 @@ export function AccountsManage({ account }) {
             <label className="flex-1"><div className="mb-1 text-[12px] font-semibold" style={{ color: MUTE }}>이름</div>
               <input value={name} onChange={(e) => setName(e.target.value)} placeholder="작업자 이름" className="w-full px-3 text-[13px] outline-none" style={{ height: 36, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} /></label>
             <label className="flex-1"><div className="mb-1 text-[12px] font-semibold" style={{ color: MUTE }}>아이디</div>
-              <input value={loginId} onChange={(e) => setLoginId(e.target.value)} placeholder="로그인 아이디" className="w-full px-3 text-[13px] outline-none" style={{ height: 36, background: "#fff", border: "1px solid " + (idTaken ? "#8a4b1c" : LINE2), borderRadius: RADIUS, color: INK }} /></label>
+              <input value={loginId} onChange={(e) => setLoginId(e.target.value)} placeholder="6자 이상" className="w-full px-3 text-[13px] outline-none" style={{ height: 36, background: "#fff", border: "1px solid " + (idTaken || idTooShort ? "#8a4b1c" : LINE2), borderRadius: RADIUS, color: INK }} />
+              {(idTooShort || idTaken) && <div className="mt-1 text-[10.5px]" style={{ color: "#8a4b1c" }}>{idTaken ? "이미 사용 중인 아이디" : "아이디는 6자 이상"}</div>}</label>
             <label className="flex-1"><div className="mb-1 text-[12px] font-semibold" style={{ color: MUTE }}>전화번호</div>
               <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="010-0000-0000" inputMode="tel" className="w-full px-3 text-[13px] tabular-nums outline-none" style={{ height: 36, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} /></label>
             <label className="flex-1"><div className="mb-1 text-[12px] font-semibold" style={{ color: MUTE }}>초기 비밀번호</div>
-              <div className="flex items-center gap-1.5">
-                <input value={pw} onChange={(e) => setPw(e.target.value)} placeholder="초기 비밀번호" className="w-full px-3 text-[13px] outline-none" style={{ height: 36, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} />
-                <button type="button" onClick={genPw} title="자동생성" className="flex shrink-0 items-center justify-center" style={{ height: 36, width: 36, background: "#f6f3ec", border: "1px solid " + LINE2, borderRadius: RADIUS, color: GOLD_D }}><RefreshCw className="h-4 w-4" /></button>
+              <div className="flex items-center px-3 text-[12px]" style={{ height: 36, background: "#f6f3ec", border: "1px dashed " + LINE2, borderRadius: RADIUS, color: MUTE }}>
+                아이디와 동일 · 첫 로그인 후 변경
               </div></label>
             <label className="w-44"><div className="mb-1 text-[12px] font-semibold" style={{ color: MUTE }}>역할</div>
               <div className="flex items-center gap-1">

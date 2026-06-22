@@ -5,8 +5,7 @@ import {
 } from "lucide-react";
 import { SURFACE, LINE2, GOLD, GOLD_D, INK, FAINT } from "../theme.js";
 import { Btn, Card, MetricRow, PageHeader, Table } from "../ui.jsx";
-import { useStore, actions } from "../store.js";
-import * as D from "../data.js";
+import { useStore, actions, bizSettleTotals } from "../store.js";
 import { CUSTOMER_COLS, toCustomerRow, renderCustomerCell } from "./customers.jsx";
 import { man } from "../lib/format.js";
 
@@ -20,9 +19,8 @@ export function Dashboard({ go }) {
   const total = partners.length;
   const active = partners.filter((p) => p.active).length;
   const resv = partners.reduce((s, p) => s + p.reservThisMonth, 0);
-  // 정산 데이터는 사업부 태깅 전 → 파트너 없는(신규) 사업부는 0으로
-  const billed = total ? D.SETTLEMENT_PARTNERS.reduce((s, p) => s + p.billed, 0) : 0;
-  const unpaid = total ? D.SETTLEMENT_PARTNERS.reduce((s, p) => s + p.unpaid, 0) : 0;
+  // [QA-P1] 정산 합계 = store 매출건·입금에서 집계(목업 제거, 정산페이지와 동일 기준)
+  const { billed, unpaid } = bizSettleTotals(store);
   // 고객관리와 같은 리스트 · 최신순(예약일 내림차순) 상위 5건
   const recent = reservations.map(toCustomerRow)
     .sort((a, b) => String(b.date).localeCompare(String(a.date)))

@@ -7,6 +7,7 @@ import {
 import { NAVY, BG, LINE, LINE2, GOLD, GOLD_D, INK, MUTE, FAINT, NAV_LINE, RADIUS } from "../theme.js";
 import { Logo, Btn, Card, PageHeader, NavItem, NavSection, Modal, PwField } from "../ui.jsx";
 import { toast } from "../toast.jsx";
+import { signOut } from "../lib/auth.js";
 import { useStore, actions } from "../store.js";
 import * as D from "../data.js";
 import { PartnerCtx, ICON } from "./shared.jsx";
@@ -92,8 +93,9 @@ function PartnerCsCard({ partnerId }) {
   );
 }
 
-export default function PartnerConsole({ asPartner, onBackToAdmin }) {
-  const partner = asPartner || D.PARTNERS[0];
+export default function PartnerConsole({ asPartner, onBackToAdmin, sessionPartner }) {
+  const live = !!sessionPartner;                       // 실로그인 파트너 세션(운영) 여부
+  const partner = sessionPartner || asPartner || D.PARTNERS[0];
   const [page, setPage] = useState("dashboard");
   const [detail, setDetail] = useState(null);
   const [intakePrefill, setIntakePrefill] = useState(null); // 호실 카드 신규예약 프리필(호실·현재 시각)
@@ -140,7 +142,7 @@ export default function PartnerConsole({ asPartner, onBackToAdmin }) {
           <NavItem icon={<Settings className={ICON} strokeWidth={1.9} />} label="설정" active={page === "settings"} onClick={() => go("settings")} />
         </nav>
         <div className="px-2.5 pb-2 pt-2" style={{ borderTop: "1px solid " + NAV_LINE }}>
-          <button onClick={() => toast("로그아웃되었습니다")} className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-[12.5px] font-semibold outline-none focus-visible:ring-1" style={{ color: "#9aa6b6" }}>
+          <button onClick={() => live ? signOut() : toast("로그아웃되었습니다")} className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-[12.5px] font-semibold outline-none focus-visible:ring-1" style={{ color: "#9aa6b6" }}>
             <LogOut className={ICON} strokeWidth={1.9} /> 로그아웃
           </button>
         </div>

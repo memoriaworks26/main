@@ -46,9 +46,8 @@ function ConfirmCell({ item, onReview }) {
 
 // 검수 창 — 최종 렌더링된 결과물을 보고 확인·컨펌(발행) 또는 재제작(작업 중으로 반려)
 function ReviewModal({ r, reason, onConfirm, onRemake, onClose }) {
-  const fv = D.FINAL_VIDEOS.find((v) => v.deceased === r.deceased && v.partner === r.partner);
-  const file = fv ? D.videoFileName(fv) : `${r.deceased}_추모영상.mp4`;
-  const sizeMB = fv ? fv.sizeMB : 142;
+  const file = `${r.deceased}_추모영상.mp4`;  // [QA-P1] 파일명 규칙(목업 제거; 실제 메타는 렌더 산출물에서)
+  const sizeMB = 142;
   const doneAt = new Date().toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
   const meta = [["해상도", "1920 × 1080 (FHD)"], ["길이", "01:32"], ["용량", sizeMB + " MB"], ["렌더 완료", doneAt]];
   return (
@@ -103,8 +102,29 @@ const PROD_TABS = [
   { key: "published", label: "발행 완료", match: (s) => s === "published" },
 ];
 
+// [Phase9] 편집기 열기 버튼 — 다른 작업자가 잠금 중이면 비활성 + "OOO 편집 중"(+master 강제해제).
+function EditorOpenBtn({ kind, id, account, editLocks, onOpen, label = "편집기 열기" }) {
+  const lock = (editLocks || []).find((l) => l.targetKind === kind && l.targetId === id);
+  const mine = lock && account && lock.lockedBy === account.id;
+  if (lock && !mine) {
+    return (
+      <span className="inline-flex items-center gap-2">
+        <span className="inline-flex items-center gap-1 text-[12px] font-semibold" style={{ color: MUTE }}>🔒 {lock.lockedByName || "다른 작업자"} 편집 중</span>
+        {account?.role === "master" && <Btn size="sm" variant="ghost" onClick={() => actions.forceReleaseEditLock(kind, id)}>강제해제</Btn>}
+      </span>
+    );
+  }
+  return <Btn size="sm" variant="ghost" onClick={onOpen}>{label} <ChevronRight className="h-3.5 w-3.5" /></Btn>;
+}
+
+// 편집기 잠금 현황 주기 폴링(라이브). 다른 작업자 잠금이 화면에 반영되도록.
+function useLockPoll() {
+  useEffect(() => { actions.refreshLocks(); const t = setInterval(() => actions.refreshLocks(), 15000); return () => clearInterval(t); }, []);
+}
+
 export function Production({ onOpenEditor, account }) {
   const s = useStore(); // 목 DB — 상태·담당자 전 화면 공유
+  useLockPoll();
   const reservations = bizReservations(s); // 현재 사업부 예약만
   const partners = bizPartners(s);
   const [tab, setTab] = useState("review");
@@ -186,9 +206,7 @@ export function Production({ onOpenEditor, account }) {
                 {cur === "confirm" ? (
                   <ConfirmCell item={r} onReview={() => setReview(r)} />
                 ) : cur !== "review" && (
-                  <Btn size="sm" variant="ghost" onClick={() => onOpenEditor(r)}>
-                    편집기 열기 <ChevronRight className="h-3.5 w-3.5" />
-                  </Btn>
+                  <EditorOpenBtn kind="reservation" id={r.id} account={account} editLocks={s.editLocks} onOpen={() => onOpenEditor(r)} />
                 )}
                 {who ? (
                   <span className="inline-flex items-center gap-1.5 group" title={mine ? "내가 받음 — 클릭 시 해제" : "담당: " + who}>
@@ -231,6 +249,7 @@ const SE_TABS = [
 
 export function SecondEdit({ onOpenEditor, account }) {
   const s = useStore(); // 목 DB — 1차 발행 건이 후보로 전파
+  useLockPoll();
   const reservations = bizReservations(s); // 현재 사업부 예약만
   const partners = bizPartners(s);
   const resvIds = new Set(reservations.map((r) => r.id));
@@ -354,7 +373,7 @@ export function SecondEdit({ onOpenEditor, account }) {
                     {j.status === "confirm" ? (
                       <ConfirmCell item={j} onReview={() => setReview({ r, job: j })} />
                     ) : (
-                      <Btn size="sm" variant="ghost" onClick={() => onOpenEditor({ ...r, secondJobId: j.id, secondJobStatus: j.status })}>편집기 열기 <ChevronRight className="h-3.5 w-3.5" /></Btn>
+                      <EditorOpenBtn kind="second" id={j.id} account={account} editLocks={s.editLocks} onOpen={() => onOpenEditor({ ...r, secondJobId: j.id, secondJobStatus: j.status })} />
                     )}
                     {j.assignee && (
                       <span className="inline-flex items-center gap-1.5 group" title={mine ? "내가 받음 — 클릭 시 해제" : "담당: " + j.assignee}>

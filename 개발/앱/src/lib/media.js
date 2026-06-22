@@ -42,6 +42,22 @@ export const genFrame = (kind, i = 0, name = "추모") => {
   return photoThumb(i); // slide
 };
 
+// 영상 파일의 재생 길이(초)를 읽어 반환 (Promise). 메타데이터만 로드.
+// 코덱·CORS 제약으로 실패하면 0 → 호출부에서 길이 합산에서 제외.
+export const grabVideoDuration = (file) =>
+  new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const v = document.createElement("video");
+    v.preload = "metadata";
+    v.src = url;
+    v.onloadedmetadata = () => {
+      const d = Number.isFinite(v.duration) ? v.duration : 0;
+      URL.revokeObjectURL(url);
+      resolve(d);
+    };
+    v.onerror = () => { URL.revokeObjectURL(url); resolve(0); };
+  });
+
 // 영상 파일의 첫 프레임을 캡처해 JPEG data URL로 반환 (Promise).
 // 코덱·CORS 제약으로 실패하면 null → 호출부에서 아이콘 폴백 유지.
 export const grabVideoFrame = (file) =>

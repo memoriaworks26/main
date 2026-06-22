@@ -9,7 +9,7 @@ import { RoomCard } from "../roomcard.jsx";
 import { useStore, actions } from "../store.js";
 import { confirm } from "../confirm.jsx";
 import { CUSTOMER_COLS, customerSortValue, toCustomerRow, renderCustomerCell } from "../admin/customers.jsx";
-import { usePartner, usePartnerTerm, pad2, minToStr, CASE_ROOMS, parseSlot, TIMELINE_START, TIMELINE_END, BLOCK_COLOR, hasRoomConflict, endDateFor, isOvernight, slotLabel, SlotText } from "./shared.jsx";
+import { usePartner, usePartnerTerm, pad2, minToStr, useCaseRooms, parseSlot, TIMELINE_START, TIMELINE_END, BLOCK_COLOR, hasRoomConflict, endDateFor, isOvernight, slotLabel, SlotText } from "./shared.jsx";
 import { TimeStepper } from "./intake.jsx";
 
 function SlotEditCell({ r, rows }) {
@@ -67,6 +67,7 @@ function SlotEditCell({ r, rows }) {
   );
 }
 function RoomSelect({ value, rows, slot, id, date, onChange }) {
+  const CASE_ROOMS = useCaseRooms();
   return (
     <select value={value} onChange={(e) => onChange(e.target.value)}
       className="cursor-pointer px-2 py-1 text-[12px] font-semibold tabular-nums outline-none transition hover:bg-black/[.03]"
@@ -96,6 +97,7 @@ function TimeInput({ value, onChange }) {
 
 function TodayTimeline({ rows, onDetail }) {
   const tp = usePartnerTerm(); // 사업부별 파트너 용어
+  const CASE_ROOMS = useCaseRooms();
   const [openId, setOpenId] = useState(null);
   const [timeEdit, setTimeEdit] = useState({ startStr: "", endStr: "" });
   const [drag, setDrag] = useState(null); // { id, mode:"move"|"start"|"end", room, origStart, origEnd, startX, trackW, moved, preview:{start,end} }

@@ -3,14 +3,13 @@ import React, { useState } from "react";
 import {
   Check, Download, Pencil, Plus, Search, Send,
 } from "lucide-react";
-import { SERIF, SURFACE, LINE, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS } from "../theme.js";
+import { SERIF, SURFACE, LINE, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS, SUB_LABEL } from "../theme.js";
 import { Tag, Btn, Card, Table, PageHeader, CopyBtn, DateField, useTableSort } from "../ui.jsx";
 import { useStore, actions } from "../store.js";
 import { confirm } from "../confirm.jsx";
-import * as D from "../data.js";
 import { CUSTOMER_COLS, customerSortValue, toCustomerRow, renderCustomerCell, MemorialVideoCard } from "../admin/customers.jsx";
 import { matchQuery } from "../lib/util.js";
-import { usePartner, usePartnerTerm, pad2, CASE_ROOMS, parseSlot, overlaps, endDateFor, isOvernight, SlotText } from "./shared.jsx";
+import { usePartner, usePartnerTerm, pad2, useCaseRooms, parseSlot, overlaps, endDateFor, isOvernight, SlotText } from "./shared.jsx";
 import { TimeStepper, DragTimeline } from "./intake.jsx";
 
 export function PList({ onDetail, onNew }) {
@@ -86,13 +85,27 @@ export function PList({ onDetail, onNew }) {
 
 // 예약 상세 — 수정은 모달 없이 이 페이지 인라인으로 진행
 export function ReservDetail({ reserv, onBack }) {
-  const { reservations } = useStore();
+  const { reservations, submissions } = useStore();
   const tp = usePartnerTerm(); // 사업부별 파트너 용어
-  const r = reservations.find((x) => x.id === (reserv && reserv.id)) || reserv || reservations[1];
-  const d = D.RESERV_DETAIL;
-  // 발행 최종본 파일명 — 발행 데이터와 매칭, 없으면 파일명 규칙으로 대체 표기
-  const fv = D.FINAL_VIDEOS.find((v) => v.deceased === r.deceased && v.partner === r.partner);
-  const videoFile = fv ? D.videoFileName(fv) : `${r.deceased}_추모영상.mp4`;
+  const CASE_ROOMS = useCaseRooms();
+  const r = reservations.find((x) => x.id === (reserv && reserv.id)) || reserv;
+  if (!r) return null;
+  // [Phase5] 보호자 제작링크 — 예약에 발급된 submission 토큰. 없으면 생성 버튼.
+  const sub = submissions.find((x) => x.reservationId === r.id);
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const guardianLink = sub ? `${origin}/u/${sub.token}` : "";
+  const [issuing, setIssuing] = useState(false);
+  const issueLink = async () => { setIssuing(true); try { await actions.issueSubmission(r); } catch { /* 실패 토스트는 액션에서 */ } finally { setIssuing(false); } };
+  // [QA-P1] 접수 정보(보호자·반려동물) — 예약접수에서 캡처한 실데이터(목업 제거)
+  const guardianInfo = [
+    { label: tp("subject") + " 이름", value: r.deceased || "—" },
+    { label: "품종", value: r.breed || "—" },
+    { label: "나이", value: r.age || "—" },
+    { label: tp("guardian") + " 성함", value: r.chief || "—" },
+    { label: "연락처", value: r.phone || "—" },
+  ];
+  // 발행 최종본 파일명 — 파일명 규칙으로 표기
+  const videoFile = `${r.deceased}_추모영상.mp4`;
   const [sent, setSent] = useState(false);
   const [editing, setEditing] = useState(false);
   const seed = () => ({ deceased: r.deceased || "", chief: r.chief || "", phone: r.phone || "", room: r.room || "", date: r.date || "", slot: r.slot || "", assignee: r.assignee || "" });
@@ -219,30 +232,38 @@ export function ReservDetail({ reserv, onBack }) {
 
       <div className="mt-4">
         <Card title="🔗 보호자 영상제작 URL">
-          <div className="flex items-center gap-2">
-            <div className="flex-1 px-3 py-2 text-[13px] tabular-nums" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: GOLD_D }}>{d.formUrl}</div>
-            <CopyBtn text={d.formUrl} />
-            <Btn size="sm" onClick={resend}>{sent ? <><Check className="h-3.5 w-3.5" /> 발송됨</> : <><Send className="h-3.5 w-3.5" /> 문자 재발송</>}</Btn>
-          </div>
-          <div className="mt-2 flex items-center gap-4 text-[11px]" style={{ color: FAINT }}>
-            <span>URL 코드: <b style={{ color: MUTE }}>{d.code}</b></span>
-            <span>최근 발송: {d.smsSentAt}</span>
-            <span>퇴실 시 자동 무효화</span>
-          </div>
+          {sub ? (
+            <>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 px-3 py-2 text-[13px] tabular-nums" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: GOLD_D }}>{guardianLink}</div>
+                <CopyBtn text={guardianLink} />
+                <Btn size="sm" onClick={resend}>{sent ? <><Check className="h-3.5 w-3.5" /> 발송됨</> : <><Send className="h-3.5 w-3.5" /> 문자 발송</>}</Btn>
+              </div>
+              <div className="mt-2 flex items-center gap-4 text-[11px]" style={{ color: FAINT }}>
+                <span>상태: <b style={{ color: MUTE }}>{SUB_LABEL[sub.status] || sub.status}</b></span>
+                <span>퇴실 시 자동 무효화</span>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center justify-between">
+              <span className="text-[12.5px]" style={{ color: MUTE }}>아직 보호자 제작 링크가 발급되지 않았습니다.</span>
+              <Btn size="sm" onClick={issueLink} disabled={issuing}>{issuing ? "생성 중…" : <><Send className="h-3.5 w-3.5" /> 제작 링크 생성</>}</Btn>
+            </div>
+          )}
         </Card>
       </div>
 
       <div className="mt-4">
-        <Card title="📝 보호자 입력 정보 (유저 입력 폼 수신)">
+        <Card title="📝 접수 정보 (보호자 · 반려동물)">
           <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-[13px]" style={{ color: INK }}>
-            {d.form.map((item, i) => (
+            {guardianInfo.map((item, i) => (
               <div key={i} className="flex gap-2" style={{ gridColumn: item.value && item.value.length > 18 ? "span 2" : undefined }}>
                 <span className="shrink-0" style={{ color: MUTE }}>{item.label}</span>
                 <span>{item.value}</span>
               </div>
             ))}
           </div>
-          <p className="mt-3 text-[11px]" style={{ color: FAINT }}>※ 보호자가 URL에서 직접 입력한 정보입니다.</p>
+          <p className="mt-3 text-[11px]" style={{ color: FAINT }}>※ 예약 접수 시 입력된 정보입니다. 보호자가 제작 URL에서 추가 입력한 편지·사진은 편집기에서 확인됩니다.</p>
         </Card>
       </div>
     </div>

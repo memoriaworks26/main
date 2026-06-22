@@ -7,6 +7,7 @@ import {
 import { NAVY, BG, SURFACE, LINE, LINE2, GOLD, GOLD_SOFT, GOLD_D, INK, MUTE, FAINT, NAV_LINE } from "../theme.js";
 import { Logo, NavItem, NavSection } from "../ui.jsx";
 import { toast } from "../toast.jsx";
+import { signOut } from "../lib/auth.js";
 import { useStore, actions } from "../store.js";
 import * as D from "../data.js";
 import { Dashboard } from "./overview.jsx";
@@ -104,10 +105,14 @@ function BizUnitPicker() {
   );
 }
 
-export default function AdminConsole({ onOpenEditor, onLoginAsPartner }) {
+export default function AdminConsole({ onOpenEditor, onLoginAsPartner, sessionAccount }) {
   const { accounts } = useStore();
-  const [accountId, setAccountId] = useState(D.ADMIN_ACCOUNTS[0].id); // 기본: 마스터 관리자
-  const account = accounts.find((a) => a.id === accountId) || accounts[0];
+  const live = !!sessionAccount;                              // 실로그인 세션(운영) 여부
+  const [accountId, setAccountId] = useState(D.ADMIN_ACCOUNTS[0].id); // 목업: 기본 마스터
+  // 운영이면 로그인한 staff 신원 고정, 개발 목업이면 드롭다운 선택 계정.
+  const account = sessionAccount || accounts.find((a) => a.id === accountId) || accounts[0];
+  // 운영에선 파트너 위임 비활성(파트너 세션 발급은 별도). 목업에선 기존 위임.
+  const loginAsPartner = onLoginAsPartner || (() => toast("운영 모드에서는 파트너 위임이 비활성화됩니다."));
   const [page, setPage] = useState("overview");
   const [focus, setFocus] = useState(null); // 페이지 이동 시 특정 항목 포커스(예: 대시보드 최근예약 → 고객 상세)
   const go = (p, f = null) => { setPage(p); setFocus(f); };
@@ -131,7 +136,9 @@ export default function AdminConsole({ onOpenEditor, onLoginAsPartner }) {
           </div>
         </div>
         <BizUnitPicker />
-        <UserChip account={account} accounts={accounts} onSwitch={switchAccount} />
+        {live
+          ? <div className="px-4 pb-3 pt-3.5"><div className="text-[13.5px] font-bold" style={{ color: "#eef0f3" }}>{account.name}</div><div className="text-[11px]" style={{ color: "#828c9b" }}>{account.role === "master" ? "마스터 관리자" : account.role === "collab" ? "협력파트너" : "작업자"}</div></div>
+          : <UserChip account={account} accounts={accounts} onSwitch={switchAccount} />}
         <nav className="flex-1 overflow-y-auto px-2.5 pb-4">
           {can("downloads") && <>
             <NavSection>협력파트너</NavSection>
@@ -168,7 +175,7 @@ export default function AdminConsole({ onOpenEditor, onLoginAsPartner }) {
           </>}
         </nav>
         <div className="px-2.5 pb-4 pt-2" style={{ borderTop: "1px solid " + NAV_LINE }}>
-          <button onClick={() => toast("로그아웃되었습니다")} className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-[12.5px] font-semibold outline-none focus-visible:ring-1" style={{ color: "#9aa6b6" }}>
+          <button onClick={() => live ? signOut() : toast("로그아웃되었습니다")} className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-[12.5px] font-semibold outline-none focus-visible:ring-1" style={{ color: "#9aa6b6" }}>
             <LogOut className={ICON.size} strokeWidth={ICON.sw} /> 로그아웃
           </button>
         </div>
@@ -178,7 +185,7 @@ export default function AdminConsole({ onOpenEditor, onLoginAsPartner }) {
         <main className="flex-1 px-3 py-4" style={{ maxWidth: 1000 }}>
           {activePage === "downloads" && <Downloads />}
           {activePage === "overview" && <Dashboard go={go} />}
-          {activePage === "partners" && <PartnersManage go={go} onLoginAsPartner={onLoginAsPartner} />}
+          {activePage === "partners" && <PartnersManage go={go} onLoginAsPartner={loginAsPartner} />}
           {activePage === "customers" && <Customers initialSel={focus} account={account} />}
           {activePage === "production" && <Production onOpenEditor={onOpenEditor} account={account} />}
           {activePage === "secondedit" && <SecondEdit onOpenEditor={onOpenEditor} account={account} />}
