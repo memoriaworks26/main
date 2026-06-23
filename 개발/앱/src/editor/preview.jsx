@@ -1,4 +1,4 @@
-// 편집기 — 가운데 미리보기(원본 vs 작업본 2분할) + 실시간 자막 오버레이.
+// 편집기 — 가운데 미리보기(원본 vs 작업본 2분할) + 실제 보호자 미디어 + 실시간 자막 오버레이.
 import React, { useRef, useState, useEffect } from "react";
 import { Play, SplitSquareHorizontal } from "lucide-react";
 import { SERIF, NAVY, INK, MUTE, FAINT, GOLD_D, GOLD_SOFT } from "../theme.js";
@@ -14,7 +14,7 @@ function subPos(s) {
 // 영상 위 실시간 자막 — currentTime에 활성인 자막 + 선택 자막을 표시, 드래그로 위치 세팅.
 function SubtitleLayer({ boxRef, subs, time, selSubId, onSubEdit, onSelSub }) {
   const [boxW, setBoxW] = useState(360);
-  const [drag, setDrag] = useState(null); // { id, xPct, yPct }
+  const [drag, setDrag] = useState(null);
   useEffect(() => {
     const el = boxRef.current; if (!el) return;
     const ro = new ResizeObserver(() => setBoxW(el.clientWidth || 360));
@@ -34,8 +34,6 @@ function SubtitleLayer({ boxRef, subs, time, selSubId, onSubEdit, onSelSub }) {
     window.addEventListener("pointerup", up, { once: true });
     return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
   }, [drag, boxRef, onSubEdit]);
-
-  // 표시 대상: 현재시간에 활성 + 선택 자막(시간 무관 — 위치 잡기용)
   const shown = subs.filter((s) => (time >= s.start && time <= s.end) || s.id === selSubId);
   return (
     <>
@@ -49,7 +47,7 @@ function SubtitleLayer({ boxRef, subs, time, selSubId, onSubEdit, onSelSub }) {
             className="absolute select-none px-1 text-center leading-snug"
             style={{
               left: p.xPct + "%", top: p.yPct + "%", transform: "translate(-50%,-50%)",
-              maxWidth: "92%", cursor: "move", whiteSpace: "pre-wrap",
+              maxWidth: "92%", cursor: "move", whiteSpace: "pre-wrap", zIndex: 20,
               fontFamily: s.font || "serif", fontSize: fontPx, color: s.color || "#f3e9c8",
               textShadow: "0 2px 8px rgba(0,0,0,.85), 0 0 2px rgba(0,0,0,.9)",
               outline: sel ? "1px dashed rgba(212,175,90,.9)" : "none", borderRadius: 3,
@@ -62,10 +60,52 @@ function SubtitleLayer({ boxRef, subs, time, selSubId, onSubEdit, onSelSub }) {
   );
 }
 
-function PreviewBox({ label, badge, badgeColor, big, name, src, videoSrc, subs, selSubId, onSubEdit, onSelSub }) {
+// 블록별 실제 보호자 미디어 — 사진(타이틀/AI소스)·슬라이드(자동순환)·영상(재생)·편지(텍스트).
+function MediaView({ media, onTime }) {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    if (media?.kind !== "images" || media.urls.length < 2) return;
+    const t = setInterval(() => setIdx((i) => (i + 1) % media.urls.length), 2200);
+    return () => clearInterval(t);
+  }, [media]);
+  if (!media) return null;
+  if (media.kind === "image")
+    return <img src={media.url} alt="" className="absolute inset-0 h-full w-full object-contain" style={{ background: "#000" }} />;
+  if (media.kind === "images")
+    return <img src={media.urls[idx % media.urls.length]} alt="" className="absolute inset-0 h-full w-full object-contain" style={{ background: "#000" }} />;
+  if (media.kind === "videos")
+    return <video src={media.urls[0]} controls playsInline className="absolute inset-0 h-full w-full" style={{ background: "#000" }} onTimeUpdate={onTime} />;
+  if (media.kind === "letter") {
+    // 아래 → 위 크레딧 스크롤. 끝에 처음 만난 날 / 무지개다리 건넌 날을 크게.
+    const dur = Math.max(14, Math.round((media.text || "").length / 12) + 12); // 글 길이에 비례
+    return (
+      <div className="absolute inset-0 overflow-hidden" style={{ background: "#161310" }}>
+        <div style={{ position: "absolute", left: 0, right: 0, top: 0, padding: "0 11%", animation: `mw-letter-scroll ${dur}s linear infinite` }}>
+          <p style={{ fontFamily: SERIF, fontSize: 13, lineHeight: 1.95, color: "#f3e9c8", whiteSpace: "pre-wrap", textAlign: "center", margin: 0 }}>{media.text}</p>
+          {(media.metDate || media.partDate) && (
+            <div style={{ marginTop: 34, textAlign: "center" }}>
+              {media.metDate && (<div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 10.5, letterSpacing: 1, color: "#bda77f" }}>우리 처음 만난 날</div>
+                <div style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: "#f6ecd2" }}>{media.metDate}</div>
+              </div>)}
+              {media.partDate && (<div>
+                <div style={{ fontSize: 10.5, letterSpacing: 1, color: "#bda77f" }}>무지개다리 건넌 날</div>
+                <div style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: "#f6ecd2" }}>{media.partDate}</div>
+              </div>)}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
+
+function PreviewBox({ label, badge, badgeColor, big, name, src, videoSrc, media, subs, selSubId, onSubEdit, onSelSub }) {
   const boxRef = useRef(null);
   const [time, setTime] = useState(0);
   const overlay = subs && subs.length > 0;
+  const hasReal = !!media;
   return (
     <div className="flex flex-col">
       <div className="mb-1.5 flex items-center gap-2">
@@ -73,7 +113,9 @@ function PreviewBox({ label, badge, badgeColor, big, name, src, videoSrc, subs, 
         {badge && <span className="px-2 py-[2px] text-[10.5px] font-bold" style={{ background: badgeColor.bg, color: badgeColor.c, borderRadius: 3 }}>{badge}</span>}
       </div>
       <div ref={boxRef} className="relative w-full" style={{ aspectRatio: "16/9", background: "#1c232c", borderRadius: 6, overflow: "hidden" }}>
-        {videoSrc ? (
+        {hasReal ? (
+          <MediaView media={media} onTime={(e) => setTime(e.currentTarget.currentTime)} />
+        ) : videoSrc ? (
           <video src={videoSrc} controls playsInline preload="metadata" className="absolute inset-0 h-full w-full" style={{ background: "#000" }}
             onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)} />
         ) : (
@@ -92,21 +134,25 @@ function PreviewBox({ label, badge, badgeColor, big, name, src, videoSrc, subs, 
             </div>
           </>
         )}
-        {/* 실시간 자막 오버레이 — 영상 위, 드래그로 위치 세팅 */}
-        {overlay && <SubtitleLayer boxRef={boxRef} subs={subs} time={videoSrc ? time : 0} selSubId={selSubId} onSubEdit={onSubEdit} onSelSub={onSelSub} />}
+        {/* 실제 미디어 라벨 배지 */}
+        {hasReal && media.label && (
+          <span className="absolute left-2 top-2 z-10 px-1.5 py-[2px] text-[10px] font-semibold" style={{ background: "rgba(0,0,0,.5)", color: "#e8ecf1", borderRadius: 3 }}>{media.label}</span>
+        )}
+        {/* 실시간 자막 오버레이 */}
+        {overlay && <SubtitleLayer boxRef={boxRef} subs={subs} time={(media?.kind === "videos" || videoSrc) ? time : 0} selSubId={selSubId} onSubEdit={onSubEdit} onSelSub={onSelSub} />}
       </div>
     </div>
   );
 }
 
-export function Preview({ sel, blocks, gens, name, sourceVideoUrl, subtitles = [], onSubEdit, onSelSub }) {
-  // 선택한 블록(없으면 첫 블록) 기준 — 원본=자동본(v0), 작업본=선택한 결과물 버전
+export function Preview({ sel, blocks, gens, name, sourceVideoUrl, blockMedia = {}, subtitles = [], onSubEdit, onSelSub }) {
   const block = (sel.scope === "block" ? blocks.find((b) => b.id === sel.id) : null) || blocks[0] || null;
   const gen = block ? gens[block.id] : null;
   const origSrc = blockFrame(block, gen, name, true);
   const editedSrc = blockFrame(block, gen, name, false);
   const label = block ? (KIND_LABEL[block.type] || "") : "";
   const selSubId = sel.scope === "subtitle" ? sel.id : null;
+  const realMedia = block ? blockMedia[block.id] : null;   // 선택 블록의 실제 보호자 미디어
   return (
     <div>
       <div className="mb-2 flex items-center gap-2">
@@ -115,17 +161,18 @@ export function Preview({ sel, blocks, gens, name, sourceVideoUrl, subtitles = [
         {label && <span className="text-[11.5px]" style={{ color: FAINT }}>· 지금 보는 블록: <b style={{ color: MUTE }}>{label}</b></span>}
       </div>
       <div className="grid grid-cols-2 gap-4">
-        {/* 원본 = 보호자가 완성한 실제 추모영상(있으면 재생) + 실시간 자막 오버레이 */}
-        <PreviewBox label="유저가 만든 원본" badge={sourceVideoUrl ? "완성본 · 재생" : "원본 · 수정불가"} badgeColor={{ bg: "rgba(90,100,112,.15)", c: "#5a6470" }} name={name} src={origSrc} videoSrc={sourceVideoUrl}
+        {/* 원본 = 보호자가 올린 실제 소스(사진·영상·편지). 없으면 완성영상(있으면)·목업 폴백. */}
+        <PreviewBox label="유저가 만든 원본" badge={realMedia ? "보호자 원본" : sourceVideoUrl ? "완성본 · 재생" : "원본 · 수정불가"} badgeColor={{ bg: "rgba(90,100,112,.15)", c: "#5a6470" }}
+          name={name} src={origSrc} videoSrc={sourceVideoUrl} media={realMedia}
           subs={subtitles} selSubId={selSubId} onSubEdit={onSubEdit} onSelSub={onSelSub} />
-        <PreviewBox label="내가 편집 중" badge="작업본" badgeColor={{ bg: GOLD_SOFT, c: GOLD_D }} big name={name} src={editedSrc} />
+        <PreviewBox label="내가 편집 중" badge={realMedia ? "작업본 · 생성 전" : "작업본"} badgeColor={{ bg: GOLD_SOFT, c: GOLD_D }} big name={name} src={editedSrc} media={realMedia} />
       </div>
       <div className="mt-1.5 text-[11.5px]" style={{ color: FAINT }}>
         {subtitles.length
           ? "자막을 끌어 위치를 잡으세요. 영상 재생 시 설정한 시간 구간에만 표시됩니다(최종 렌더에 그대로 반영)."
-          : sourceVideoUrl
-          ? "왼쪽은 보호자가 완성한 실제 영상(재생 가능), 오른쪽은 선택한 블록의 편집 미리보기입니다. 자막은 타임라인에서 「자막 추가」."
-          : "선택한 블록의 결과물을 보여줍니다. 왼쪽에서 블록을, 오른쪽 ‘결과물’에서 버전을 고르면 작업본이 바뀝니다."}
+          : realMedia
+          ? "왼쪽은 보호자가 올린 실제 소스입니다. AI 영상·타이틀은 생성 후 결과물로 바뀝니다. 자막은 타임라인 「자막 추가」."
+          : "선택한 블록의 결과물을 보여줍니다. 왼쪽에서 블록을 고르면 보호자 원본이 표시됩니다."}
       </div>
     </div>
   );

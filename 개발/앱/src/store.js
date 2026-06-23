@@ -47,6 +47,8 @@ let state = {
   currentPartnerId: null,                 // [Phase4-6] 파트너 세션의 partner_id(소스·알림 쓰기용)
   editLocks: [],                          // [Phase9] 편집기 동시편집 잠금 현황
   submissions: [],                        // [Phase5] 보호자 제작링크(예약↔submission)
+  reservationMedia: {},                   // 예약별 보호자 업로드 자산(서명URL) — 편집기 미리보기용
+
   videos: LIVE ? [] : D.FINAL_VIDEOS.map((v) => ({ ...v })),  // [QA-P1] 발행 영상(워커 렌더 산출물)
   secondJobs: LIVE ? [] : D.SECOND_EDIT_JOBS.map((j) => ({ ...j })),  // [Phase4-3 배선]
   storageClasses: LIVE ? [] : D.STORAGE.classes.map((c) => ({ ...c })),  // [Phase4-8 배선]
@@ -141,6 +143,13 @@ export const actions = {
   hydrateRooms: (rooms) => set({ rooms }),
   // [Phase5] 보호자 제작링크 적재 + 발급(예약→토큰). 반환: 발급된 submission(토큰 포함).
   hydrateSubmissions: (submissions) => set({ submissions }),
+  // 편집기용 보호자 자산(서명URL) — 예약별 캐시. 편집기 진입 시 로드.
+  loadReservationMedia: (reservationId) => {
+    if (!LIVE || !reservationId) return;
+    subs.fetchReservationMedia(reservationId)
+      .then((m) => set((s) => ({ reservationMedia: { ...s.reservationMedia, [reservationId]: m } })))
+      .catch(() => {});
+  },
   // [QA-P1] 발행 영상 적재(staff/collab — 기간별 다운로드·용량).
   hydrateVideos: (videos) => set({ videos }),
   issueSubmission: (reservation) => {

@@ -52,6 +52,29 @@ export default function VideoEditor({ reservation, onClose }) {
   // 유저(보호자)가 완성한 실제 추모영상 — 워커가 적재한 최종본 서명URL. 미리보기 「원본」에서 재생.
   const sourceVideoUrl = (reservation?.id && submissionFor(store, reservation.id)?.videoUrl) || null;
 
+  // 보호자 업로드 실제 자산(강아지 사진·영상·편지) 로드 → 블록별 실제 미리보기. 편집기 진입 시 1회.
+  useEffect(() => { if (reservation?.id) actions.loadReservationMedia(reservation.id); }, [reservation?.id]);
+  const media = store.reservationMedia?.[reservation?.id];
+  // 블록 id → 실제 미디어({kind:image|images|videos|text, ...}). 역할별로 매핑(타이틀/AI영상 A·B/슬라이드/추억영상/편지).
+  const blockMedia = useMemo(() => {
+    const m = {};
+    if (!media) return m;
+    const a = media.assets || [];
+    const titleA = a.find((x) => x.role === "title" && x.url);
+    const aiA = a.filter((x) => x.role === "ai_video" && x.url);
+    const slideA = a.filter((x) => x.role === "slide_photo" && x.url).map((x) => x.url);
+    const vidA = a.filter((x) => (x.role === "memory_video" || x.kind === "video") && x.url).map((x) => x.url);
+    editedBlocks.forEach((b) => {
+      if (b.type === "title" && titleA) m[b.id] = { kind: "image", url: titleA.url, label: "보호자 독사진(AI 생성 전)" };
+      else if (b.type === "ai") { const ph = aiA[(b.aiIndex || 1) - 1]; if (ph?.url) m[b.id] = { kind: "image", url: ph.url, label: "AI영상 소스(생성 전 원본)" }; }
+      else if (b.type === "slide" && slideA.length) m[b.id] = { kind: "images", urls: slideA, label: `보호자 사진 ${slideA.length}장` };
+      else if (b.type === "video" && vidA.length) m[b.id] = { kind: "videos", urls: vidA, label: `보호자 영상 ${vidA.length}개` };
+      else if (b.type === "letter" && (media.letter || b.text)) m[b.id] = { kind: "letter", text: media.letter || b.text || "",
+        metDate: b.metDate || media.metDate || null, partDate: b.partDate || media.partDate || null };
+    });
+    return m;
+  }, [media, editedBlocks]);
+
   // ── 블록 순서변경·미노출 ───────────────────────────────────────
   // 편집·컨펌(1차)·2차 가공 편집기 모두 블록 재구성 허용(실제 예약/잡을 연 경우).
   const secondMode = !!reservation?.secondJobId;             // 헤더 라벨 구분용(2차 가공 표기)
@@ -197,7 +220,7 @@ export default function VideoEditor({ reservation, onClose }) {
           <BlockList blocks={panelBlocks} sel={sel} onSel={setSel} arrange={canArrange} hidden={hidden} onMove={moveBlock} onToggleHide={toggleHide} />
         </aside>
         <div className="flex flex-1 flex-col overflow-y-auto px-6 py-5">
-          <Preview sel={sel} blocks={panelBlocks} gens={gens} name={name} sourceVideoUrl={sourceVideoUrl} subtitles={editedSubs} onSubEdit={setEdit} onSelSub={(id) => setSel({ scope: "subtitle", kind: "subtitle", id })} />
+          <Preview sel={sel} blocks={panelBlocks} gens={gens} name={name} sourceVideoUrl={sourceVideoUrl} blockMedia={blockMedia} subtitles={editedSubs} onSubEdit={setEdit} onSelSub={(id) => setSel({ scope: "subtitle", kind: "subtitle", id })} />
           <Timeline blocks={timelineBlocks} edits={edits} bgmName={bgmName} subtitles={editedSubs} onSubChange={setEdit} onAddSub={addSub} onPickBgm={selectSlide} sel={sel} onSel={setSel} />
         </div>
         <aside className="w-80 shrink-0 overflow-y-auto" style={{ background: SURFACE, borderLeft: "1px solid " + LINE }}>
