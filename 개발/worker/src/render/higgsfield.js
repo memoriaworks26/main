@@ -23,7 +23,7 @@ async function submit(path, params) {
   if (!cfg.higgsfield.key || !cfg.higgsfield.secret) throw new Error("HIGGSFIELD 키 미설정");
   const res = await fetch(`${BASE}${path}`, { method: "POST", headers: headers(), body: JSON.stringify({ params }) });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`higgsfield ${path} 실패(${res.status}): ${data.detail || JSON.stringify(data)}`);
+  if (!res.ok) { const det = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail ?? data); throw new Error(`higgsfield ${path} 실패(${res.status}): ${det}`); }
   const id = data.id;
   if (!id) throw new Error("higgsfield: job_set id 없음 — " + JSON.stringify(data).slice(0, 200));
   return id;
@@ -57,6 +57,7 @@ export async function generateTitleImage({ prompt, imageRefUrl, wh = "2048x1152"
 
 // 추억영상(DoP). imageUrls: 독사진 서명URL 배열. 반환: 영상 URL.
 export async function generateMemoryVideo({ prompt, imageUrls, model = "dop-turbo" }) {
-  const params = { model, prompt, input_images: imageUrls.map((u) => ({ type: "image_url", image_url: u })) };
+  // DoP(image2video)는 input_images 최대 1장 — 첫 독사진으로 생성(2장 보내면 422).
+  const params = { model, prompt, input_images: imageUrls.slice(0, 1).map((u) => ({ type: "image_url", image_url: u })) };
   return poll(await submit("/v1/image2video/dop", params));
 }
