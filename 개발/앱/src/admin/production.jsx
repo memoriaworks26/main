@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { SERIF, SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS, SUB_LABEL } from "../theme.js";
 import { Tag, Btn, PageHeader } from "../ui.jsx";
-import { useStore, actions, bizPartners, bizReservations, submissionFor } from "../store.js";
+import { useStore, actions, bizPartners, bizReservations, submissionFor, videoFor } from "../store.js";
 import { confirm } from "../confirm.jsx";
 import { matchQuery } from "../lib/util.js";
 import * as D from "../data.js";
@@ -44,12 +44,19 @@ function ConfirmCell({ item, onReview }) {
   );
 }
 
-// 검수 창 — 최종 렌더링된 결과물을 보고 확인·컨펌(발행) 또는 재제작(작업 중으로 반려)
-function ReviewModal({ r, reason, onConfirm, onRemake, onClose }) {
-  const file = `${r.deceased}_추모영상.mp4`;  // [QA-P1] 파일명 규칙(목업 제거; 실제 메타는 렌더 산출물에서)
-  const sizeMB = 142;
-  const doneAt = new Date().toLocaleString("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-  const meta = [["해상도", "1920 × 1080 (FHD)"], ["길이", "01:32"], ["용량", sizeMB + " MB"], ["렌더 완료", doneAt]];
+// 검수 창 — 최종 렌더링된 결과물(실제 영상)을 재생해 보고 확인·컨펌(발행) 또는 재제작(반려).
+//   videoUrl: 워커가 적재한 최종본 서명URL(submissions.video_url). 없으면 placeholder.
+//   readOnly: 이미 발행된 건(발행 완료 탭)에서 다시보기 — 컨펌/재제작 숨김, 닫기만.
+function ReviewModal({ r, reason, videoUrl, finalMB, readOnly, onConfirm, onRemake, onClose }) {
+  const file = `${r.deceased}_추모영상.mp4`;
+  const [dur, setDur] = useState(null);
+  const fmtDur = (s) => (s == null ? "—" : `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`);
+  const meta = [
+    ["해상도", "1920 × 1080 (FHD)"],
+    ["길이", fmtDur(dur)],
+    ["용량", finalMB != null ? `${finalMB} MB` : "—"],
+    ["상태", videoUrl ? "렌더 완료" : "준비 중"],
+  ];
   return (
     <div className="mw-fade fixed inset-0 z-[55] flex items-center justify-center p-4" style={{ background: "rgba(20,24,30,.55)" }} onClick={onClose}>
       <div className="mw-pop w-full overflow-hidden" style={{ maxWidth: 560, background: SURFACE, borderRadius: RADIUS, border: "1px solid " + LINE }} onClick={(e) => e.stopPropagation()}>
@@ -62,16 +69,19 @@ function ReviewModal({ r, reason, onConfirm, onRemake, onClose }) {
           </div>
           <button onClick={onClose} className="p-1" style={{ color: FAINT }}><X className="h-4 w-4" /></button>
         </div>
-        {/* 렌더 결과물 미리보기 */}
+        {/* 렌더 결과물 미리보기 — 실제 영상 재생 */}
         <div className="px-5 pt-4">
           <div className="relative flex items-center justify-center" style={{ aspectRatio: "16/9", background: "#1d242e", borderRadius: RADIUS, overflow: "hidden" }}>
-            <span className="absolute left-2.5 top-2.5 inline-flex items-center gap-1 px-2 py-[3px] text-[10.5px] font-semibold" style={{ background: "rgba(0,0,0,.45)", color: "#dfe4ea", borderRadius: 3 }}>
+            <span className="absolute left-2.5 top-2.5 z-10 inline-flex items-center gap-1 px-2 py-[3px] text-[10.5px] font-semibold" style={{ background: "rgba(0,0,0,.45)", color: "#dfe4ea", borderRadius: 3 }}>
               <Film className="h-3 w-3" /> 최종 렌더 결과물
             </span>
-            <button onClick={() => {}} className="flex h-14 w-14 items-center justify-center rounded-full transition hover:scale-105" style={{ background: "rgba(255,255,255,.92)" }} title="재생(미리보기)">
-              <PlayCircle className="h-8 w-8" style={{ color: "#1d242e" }} strokeWidth={1.6} />
-            </button>
-            <span className="absolute bottom-2.5 left-2.5 text-[11px] tabular-nums" style={{ color: "#aab2bf", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{file}</span>
+            {videoUrl ? (
+              <video src={videoUrl} controls playsInline preload="metadata"
+                className="absolute inset-0 h-full w-full" style={{ background: "#000" }}
+                onLoadedMetadata={(e) => setDur(e.currentTarget.duration)} />
+            ) : (
+              <span className="text-[12px]" style={{ color: "#aab2bf" }}>렌더 결과물이 아직 없습니다</span>
+            )}
           </div>
           {/* 메타 */}
           <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5">
@@ -81,14 +91,24 @@ function ReviewModal({ r, reason, onConfirm, onRemake, onClose }) {
               </div>
             ))}
           </div>
+          <div className="mt-1.5 truncate text-[11px]" style={{ color: FAINT, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{file}</div>
         </div>
         {/* 액션 */}
         <div className="mt-4 px-5 py-3" style={{ borderTop: "1px solid " + LINE, background: "#faf8f3" }}>
-          <p className="text-[11.5px]" style={{ color: FAINT }}>결과물을 확인하고 컨펌하거나, 수정이 필요하면 재제작으로 반려합니다.</p>
-          <div className="mt-2.5 flex items-center justify-end gap-2">
-            <Btn size="sm" variant="neutral" onClick={onRemake}><RefreshCw className="h-3.5 w-3.5" /> 재제작</Btn>
-            <Btn size="sm" onClick={onConfirm}><Check className="h-4 w-4" strokeWidth={2.4} /> 확인 · 컨펌(발행)</Btn>
-          </div>
+          {readOnly ? (
+            <div className="flex items-center justify-between">
+              <p className="text-[11.5px]" style={{ color: FAINT }}>이미 발행된 결과물입니다.</p>
+              <Btn size="sm" variant="neutral" onClick={onClose}>닫기</Btn>
+            </div>
+          ) : (
+            <>
+              <p className="text-[11.5px]" style={{ color: FAINT }}>결과물을 확인하고 컨펌하거나, 수정이 필요하면 재제작으로 반려합니다.</p>
+              <div className="mt-2.5 flex items-center justify-end gap-2">
+                <Btn size="sm" variant="neutral" onClick={onRemake}><RefreshCw className="h-3.5 w-3.5" /> 재제작</Btn>
+                <Btn size="sm" onClick={onConfirm}><Check className="h-4 w-4" strokeWidth={2.4} /> 확인 · 컨펌(발행)</Btn>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -122,9 +142,14 @@ function useLockPoll() {
   useEffect(() => { actions.refreshLocks(); const t = setInterval(() => actions.refreshLocks(), 15000); return () => clearInterval(t); }, []);
 }
 
+// 큐(예약·제출·영상) 주기 폴링 — 워커 렌더 완료가 컨펌 대기→발행/검수에 자동 반영되도록.
+function useProductionPoll() {
+  useEffect(() => { actions.refreshProduction(); const t = setInterval(() => actions.refreshProduction(), 12000); return () => clearInterval(t); }, []);
+}
+
 export function Production({ onOpenEditor, account }) {
   const s = useStore(); // 목 DB — 상태·담당자 전 화면 공유
-  useLockPoll();
+  useLockPoll(); useProductionPoll();
   const reservations = bizReservations(s); // 현재 사업부 예약만
   const partners = bizPartners(s);
   const [tab, setTab] = useState("review");
@@ -218,7 +243,12 @@ export function Production({ onOpenEditor, account }) {
                 {cur === "confirm" ? (
                   <ConfirmCell item={r} onReview={() => setReview(r)} />
                 ) : (
-                  <EditorOpenBtn kind="reservation" id={r.id} account={account} editLocks={s.editLocks} onOpen={() => onOpenEditor(r)} />
+                  <>
+                    {cur === "published" && submissionFor(s, r.id)?.videoUrl && (
+                      <Btn size="sm" variant="ghost" onClick={() => setReview(r)}><PlayCircle className="h-3.5 w-3.5" /> 미리보기</Btn>
+                    )}
+                    <EditorOpenBtn kind="reservation" id={r.id} account={account} editLocks={s.editLocks} onOpen={() => onOpenEditor(r)} />
+                  </>
                 )}
                 {who ? (
                   <span className="inline-flex items-center gap-1.5 group" title={mine ? "내가 받음 — 클릭 시 해제" : "담당: " + who}>
@@ -240,7 +270,8 @@ export function Production({ onOpenEditor, account }) {
         담당자 = 해당 건을 받은 작업자(미배정은 「받기」로 본인 배정 · 작업 중인 본인 건은 ✕로 해제). 누가 처리 중인지 한눈에 확인.
       </p>
 
-      {review && <ReviewModal r={review} onConfirm={() => doConfirm(review)} onRemake={() => doRemake(review)} onClose={() => setReview(null)} />}
+      {review && <ReviewModal r={review} videoUrl={submissionFor(s, review.id)?.videoUrl} finalMB={videoFor(s, review.id)?.finalMB}
+        readOnly={review.status === "published"} onConfirm={() => doConfirm(review)} onRemake={() => doRemake(review)} onClose={() => setReview(null)} />}
     </div>
   );
 }
@@ -261,7 +292,7 @@ const SE_TABS = [
 
 export function SecondEdit({ onOpenEditor, account }) {
   const s = useStore(); // 목 DB — 1차 발행 건이 후보로 전파
-  useLockPoll();
+  useLockPoll(); useProductionPoll();
   const reservations = bizReservations(s); // 현재 사업부 예약만
   const partners = bizPartners(s);
   const resvIds = new Set(reservations.map((r) => r.id));
@@ -405,7 +436,8 @@ export function SecondEdit({ onOpenEditor, account }) {
         ※ 2차 가공은 1차 컨펌·발행이 끝난 건을 「불러오기」로 큐에 올려, 2차 가공 대기 →「받기」작업 중 → 「최종 렌더·컨펌 요청」→ 컨펌 대기(렌더 진행률) → 「검수」로 결과물 확인 → 「확인·컨펌」발행 / 「재제작」 반려로 처리하는 별도 트랙입니다. 발행 시 기존 링크가 갱신됩니다.
       </p>
 
-      {review && <ReviewModal r={review.r} reason={review.job.reason} onConfirm={() => doConfirm(review.job)} onRemake={() => doRemake(review.job)} onClose={() => setReview(null)} />}
+      {review && <ReviewModal r={review.r} reason={review.job.reason} videoUrl={submissionFor(s, review.r.id)?.videoUrl} finalMB={videoFor(s, review.r.id)?.finalMB}
+        onConfirm={() => doConfirm(review.job)} onRemake={() => doRemake(review.job)} onClose={() => setReview(null)} />}
     </div>
   );
 }

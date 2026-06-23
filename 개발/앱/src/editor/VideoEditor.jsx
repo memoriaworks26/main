@@ -7,7 +7,7 @@ import { Btn } from "../ui.jsx";
 import { toast } from "../toast.jsx";
 import { confirm } from "../confirm.jsx";
 import * as D from "../data.js";
-import { useStore, actions } from "../store.js";
+import { useStore, actions, submissionFor } from "../store.js";
 import { buildBlocks, seedGens, genDefault } from "./blocks.js";
 import { BlockList, Timeline } from "./timeline.jsx";
 import { Preview } from "./preview.jsx";
@@ -48,6 +48,8 @@ export default function VideoEditor({ reservation, onClose }) {
   // 자막 트랙 — 편집값(텍스트·위치) 병합. 자막 id로 edits 보관(블록 id와 충돌 없음).
   const editedSubs = useMemo(() => (D.EDITOR_TIMELINE.subtitles || []).map((s) => ({ ...s, ...(edits[s.id] || {}) })), [edits]);
   const name = (reservation && (reservation.deceased || reservation.name)) || D.EDITOR_RESERVATION.deceased;
+  // 유저(보호자)가 완성한 실제 추모영상 — 워커가 적재한 최종본 서명URL. 미리보기 「원본」에서 재생.
+  const sourceVideoUrl = (reservation?.id && submissionFor(store, reservation.id)?.videoUrl) || null;
 
   // ── 블록 순서변경·미노출 ───────────────────────────────────────
   // 편집·컨펌(1차)·2차 가공 편집기 모두 블록 재구성 허용(실제 예약/잡을 연 경우).
@@ -180,7 +182,7 @@ export default function VideoEditor({ reservation, onClose }) {
           <BlockList blocks={panelBlocks} sel={sel} onSel={setSel} arrange={canArrange} hidden={hidden} onMove={moveBlock} onToggleHide={toggleHide} />
         </aside>
         <div className="flex flex-1 flex-col overflow-y-auto px-6 py-5">
-          <Preview sel={sel} blocks={panelBlocks} gens={gens} name={name} />
+          <Preview sel={sel} blocks={panelBlocks} gens={gens} name={name} sourceVideoUrl={sourceVideoUrl} />
           <Timeline blocks={timelineBlocks} edits={edits} bgmName={bgmName} subtitles={editedSubs} onSubChange={setEdit} onPickBgm={selectSlide} sel={sel} onSel={setSel} />
         </div>
         <aside className="w-80 shrink-0 overflow-y-auto" style={{ background: SURFACE, borderLeft: "1px solid " + LINE }}>

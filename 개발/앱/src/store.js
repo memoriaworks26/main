@@ -21,6 +21,7 @@ import * as roomsData from "./lib/data/rooms.js";
 import * as locksData from "./lib/data/locks.js";
 import * as storage from "./lib/storage.js";
 import * as subs from "./lib/data/submissions.js";
+import * as vids from "./lib/data/videos.js";
 import { toast } from "./toast.jsx";
 
 // 라이브(로그인+백엔드) = DB hydrate·write-through. DEV_PREVIEW = 기존 목업 시드.
@@ -155,6 +156,13 @@ export const actions = {
   // [Phase9] 편집기 잠금 현황 적재/갱신(라이브만) + master 강제해제.
   hydrateLocks: (editLocks) => set({ editLocks }),
   refreshLocks: () => { if (!LIVE) return; locksData.fetchLocks().then((l) => set({ editLocks: l })).catch(() => {}); },
+  // 편집·컨펌 큐 최신화 — 워커 렌더 진행/완료(submission·video·reservation)를 주기 폴링으로 반영.
+  refreshProduction: () => {
+    if (!LIVE) return;
+    Promise.all([resv.fetchReservations(), subs.fetchSubmissions(), vids.fetchVideos()])
+      .then(([reservations, submissions, videos]) => set({ reservations, submissions, videos }))
+      .catch(() => {});
+  },
   forceReleaseEditLock: (kind, id) => {
     if (!LIVE) { set((s) => ({ editLocks: s.editLocks.filter((l) => !(l.targetKind === kind && l.targetId === id)) })); return; }
     locksData.releaseLock(kind, id).then(() => actions.refreshLocks()).catch((e) => toast("강제 해제 실패: " + e.message));
