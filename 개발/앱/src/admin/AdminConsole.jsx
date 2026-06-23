@@ -200,7 +200,7 @@ export default function AdminConsole({ onOpenEditor, onLoginAsPartner, sessionAc
           {activePage === "signage" && <Signage />}
         </main>
         <footer className="px-3 py-3 text-[11px]" style={{ color: FAINT, borderTop: "1px solid " + LINE }}>
-          Memoriaworks · 관리자({D.ADMIN_ROLES[account.role].label}) · 목업 (실데이터 아님)
+          Memoriaworks · 관리자({D.ADMIN_ROLES[account.role].label}){live ? "" : " · 목업 (실데이터 아님)"}
         </footer>
       </div>
     </div>

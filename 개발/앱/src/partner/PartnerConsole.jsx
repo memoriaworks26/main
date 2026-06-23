@@ -190,7 +190,7 @@ export default function PartnerConsole({ asPartner, onBackToAdmin, sessionPartne
           </>}
         </main>
         <footer className="px-3 py-3 text-[11px]" style={{ color: FAINT, borderTop: "1px solid " + LINE }}>
-          Memoriaworks · 파트너 권한 · 목업 (실데이터 아님)
+          Memoriaworks · 파트너 권한{live ? "" : " · 목업 (실데이터 아님)"}
         </footer>
         <PwChangeModal open={pwOpen} onClose={() => setPwOpen(false)} />
       </div>
