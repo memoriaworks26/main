@@ -147,7 +147,7 @@ export function Production({ onOpenEditor, account }) {
   const rows = reservations
     .filter((r) => tabDef.match(r.status))
     .filter((r) => pf === "all" || r.partner === pf)
-    .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt)); // 먼저 요청된 순
+    .sort((a, b) => String(a.requestedAt ?? "").localeCompare(String(b.requestedAt ?? ""))); // 먼저 요청된 순(null 안전)
 
   const count = (t) => reservations.filter((r) => t.match(r.status)).length;
 

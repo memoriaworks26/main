@@ -68,7 +68,9 @@ export async function uploadAsset(token, file, { kind }) {
     return { storagePath: `demo/${file.name}`, name: file.name, sizeMB, kind };
   }
   const sb = getClient();
-  const path = `${token}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext(file.name)}`;
+  // 파일명 충돌 방지 — UUID(동시 다중선택 업로드 시 같은 ms+짧은랜덤 충돌로 400 나던 것 차단).
+  const uniq = (globalThis.crypto?.randomUUID?.() || (Date.now() + "-" + Math.random().toString(36).slice(2, 10)));
+  const path = `${token}/${uniq}.${ext(file.name)}`;
   const { error } = await sb.storage.from(UPLOAD_BUCKET).upload(path, file, {
     contentType: file.type || undefined, upsert: false,
   });

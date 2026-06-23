@@ -28,7 +28,7 @@ const SOURCE_KINDS = [
 function nextReservation(reservations, partnerName) {
   const mine = reservations
     .filter((r) => r.partner === partnerName && r.status !== "published")
-    .sort((a, b) => (a.date + a.slot).localeCompare(b.date + b.slot));
+    .sort((a, b) => String((a.date || "") + (a.slot || "")).localeCompare(String((b.date || "") + (b.slot || ""))));
   return mine[0] || null;
 }
 // 알림 문구 템플릿에 다음 예약값 치환
