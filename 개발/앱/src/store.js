@@ -509,6 +509,8 @@ export const actions = {
         .then(async (p) => {
           const def = state.templates[D.DEFAULT_TEMPLATE_ID] || { bgm: null, blocks: [] };
           const cloned = { bgm: def.bgm, blocks: def.blocks.map((b, i) => ({ ...b, id: "e-" + Date.now() + "-" + i })) };
+          // 로그인 계정 발급(임시비번=ID코드) — 등록 즉시 파트너가 로그인 가능하도록.
+          try { await accountsData.provisionPartner(p.id); } catch (e) { toast("로그인 계정 발급 실패(파트너 등록은 완료): " + e.message); }
           try { await tpl.upsertTemplate(p.id, cloned); } catch (e) { toast("템플릿 생성 실패: " + e.message); }
           try { await roomsData.createRoomsForPartner(p.id, partner.rooms); } catch (e) { toast("호실 생성 실패: " + e.message); }
           set((s) => ({ partners: [...s.partners, p], templates: { ...s.templates, [p.id]: cloned } }));
