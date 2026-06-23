@@ -7,6 +7,16 @@ import { db } from "../supabase.js";
 
 const need = () => { const d = db(); if (!d) throw new Error("백엔드 미연결"); return d; };
 
+// 요청시각 표시 포맷 — DB는 ISO(timestamptz). 화면은 짧게 "MM.DD HH:mm"(KST). 목업 짧은형식은 그대로.
+const fmtReqAt = (v) => {
+  if (!v) return "";
+  if (!String(v).includes("T")) return v;            // 이미 짧은 형식
+  const d = new Date(v); if (isNaN(d)) return String(v);
+  const k = new Date(d.getTime() + 9 * 3600 * 1000); // UTC→KST
+  const p = (n) => String(n).padStart(2, "0");
+  return `${p(k.getUTCMonth() + 1)}.${p(k.getUTCDate())} ${p(k.getUTCHours())}:${p(k.getUTCMinutes())}`;
+};
+
 const mapReserv = (r) => ({
   id: r.id,
   partnerId: r.partner_id,
@@ -15,7 +25,7 @@ const mapReserv = (r) => ({
   breed: r.breed, age: r.age,
   room: r.room_label,
   date: r.reserve_date, endDate: r.end_date, slot: r.slot,
-  requestedAt: r.requested_at,
+  requestedAt: fmtReqAt(r.requested_at),
   status: r.status,
   assignee: r.assignee_name,
   renderAt: r.render_at ? Date.parse(r.render_at) : undefined,

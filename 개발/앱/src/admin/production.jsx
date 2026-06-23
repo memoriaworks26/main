@@ -205,7 +205,7 @@ export function Production({ onOpenEditor, account }) {
                 <Tag s={cur} />
                 {cur === "confirm" ? (
                   <ConfirmCell item={r} onReview={() => setReview(r)} />
-                ) : cur !== "review" && (
+                ) : (
                   <EditorOpenBtn kind="reservation" id={r.id} account={account} editLocks={s.editLocks} onOpen={() => onOpenEditor(r)} />
                 )}
                 {who ? (
