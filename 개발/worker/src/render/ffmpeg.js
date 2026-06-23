@@ -64,13 +64,15 @@ function letterCaption(text, fontFile) {
 }
 const capFor = (cap, isLetter, fontFile) => (isLetter ? letterCaption(cap, fontFile) : caption(cap, fontFile));
 
+// 메모리/CPU 가볍게(작은 컨테이너 OOM 방지): ultrafast preset + threads 1.
+const ENC = ["-c:v", "libx264", "-preset", "ultrafast", "-threads", "1", "-pix_fmt", "yuv420p", "-an"];
 async function imageSegment(src, dur, out, cap, fontFile, isLetter) {
-  await ff(["-y", "-loop", "1", "-t", String(dur), "-i", src, "-vf", FIT + capFor(cap, isLetter, fontFile), "-r", String(FPS), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-an", out]);
+  await ff(["-y", "-loop", "1", "-t", String(dur), "-i", src, "-vf", FIT + capFor(cap, isLetter, fontFile), "-r", String(FPS), ...ENC, out]);
 }
 async function videoSegment(src, dur, out, cap, fontFile, isLetter) {
   const args = ["-y", "-i", src];
   if (dur) args.push("-t", String(dur));
-  args.push("-vf", FIT + capFor(cap, isLetter, fontFile), "-r", String(FPS), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-an", out);
+  args.push("-vf", FIT + capFor(cap, isLetter, fontFile), "-r", String(FPS), ...ENC, out);
   await ff(args);
 }
 
