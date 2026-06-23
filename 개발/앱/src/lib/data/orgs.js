@@ -34,6 +34,11 @@ const toPartnerRow = (p) => {
     memo: p.memo, email: p.email, logo: p.logo, address: p.address,
     ceo: p.ceo, biz_no: p.bizNo, biz_type: p.bizType, biz_item: p.bizItem,
   };
+  // 숫자·날짜 컬럼은 빈문자열("")→null (빈 선택필드 등록 시 date/int 파싱 400 방지)
+  for (const k of ["unit_price", "rooms", "contract_date"]) {
+    if (m[k] === "") m[k] = null;
+    else if ((k === "unit_price" || k === "rooms") && m[k] != null) m[k] = Number(m[k]);
+  }
   Object.keys(m).forEach((k) => m[k] === undefined && delete m[k]);
   return m;
 };
