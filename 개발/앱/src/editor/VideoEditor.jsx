@@ -224,7 +224,7 @@ export default function VideoEditor({ reservation, onClose }) {
           <Timeline blocks={timelineBlocks} edits={edits} bgmName={bgmName} subtitles={editedSubs} onSubChange={setEdit} onAddSub={addSub} onPickBgm={selectSlide} sel={sel} onSel={setSel} />
         </div>
         <aside className="w-80 shrink-0 overflow-y-auto" style={{ background: SURFACE, borderLeft: "1px solid " + LINE }}>
-          <PropPanel key={sel.scope + sel.id} blocks={panelBlocks} subtitles={editedSubs} edits={edits} onEdit={setEdit} onRemoveSub={removeSub} reservation={reservation} bgmName={bgmName} gens={gens} onGenerate={generate} onSelectGen={selectGen} onDeleteGen={deleteGen} sel={sel} />
+          <PropPanel key={sel.scope + sel.id} blocks={panelBlocks} subtitles={editedSubs} edits={edits} onEdit={setEdit} onRemoveSub={removeSub} reservation={reservation} bgmName={bgmName} media={media} blockMedia={blockMedia} gens={gens} onGenerate={generate} onSelectGen={selectGen} onDeleteGen={deleteGen} sel={sel} />
         </aside>
       </div>
 

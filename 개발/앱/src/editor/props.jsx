@@ -108,7 +108,7 @@ function GenHistory({ kind, name, gen, onSelect, onDelete }) {
   );
 }
 
-export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, reservation, bgmName, gens, onGenerate, onSelectGen, onDeleteGen, sel }) {
+export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, reservation, bgmName, media, gens, onGenerate, onSelectGen, onDeleteGen, sel }) {
   const [promptModal, setPromptModal] = useState(false); // AI 문구 관리 모달
   let item;
   if (sel.scope === "block") item = blocks.find((b) => b.id === sel.id);
@@ -116,6 +116,13 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
   else if (sel.scope === "subtitle") item = subtitles.find((s) => s.id === sel.id);
   const k = sel.kind;
   if (!item) return null;
+  // 실제 보호자 자산(서명URL) — 없으면(미로드·dev) 목업 폴백.
+  const _assets = media?.assets || [];
+  const _slidePhotos = _assets.filter((a) => a.role === "slide_photo" && a.url);
+  const _memoryVideos = _assets.filter((a) => (a.role === "memory_video" || a.kind === "video") && a.url);
+  const _titlePhoto = _assets.find((a) => a.role === "title");
+  const _aiPhotos = _assets.filter((a) => a.role === "ai_video");
+  const srcAsset = k === "title" ? _titlePhoto : k === "ai" ? _aiPhotos[(item.aiIndex || 1) - 1] : null; // 블록 소스 사진
   const gen = sel.scope === "block" ? (gens[item.id] || genDefault(item.id)) : null; // 타이틀·슬라이드·AI 결과물 히스토리
   const name = reservation?.deceased || D.EDITOR_RESERVATION.deceased;
   // 편집값(컨트롤드) — 전환은 "trans-"+id, 음악은 "audio" 키로 보관
@@ -123,8 +130,9 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
   const effect = (edits[transKey] && edits[transKey].effect) || blockTrans(sel.id);
   const au = edits.audio || {};                 // 배경 음악 편집값("audio" 키) — 추억 슬라이드에서 설정
   const audioItem = D.EDITOR_TIMELINE.audio[0];
-  // 추억 슬라이드 — 사진 조합 + 사진 사이 전환(기본 페이드). 편집값에 보관.
-  const slideTrans = item.slideTrans || SLIDE_PHOTOS.slice(1).map(() => "페이드");
+  // 추억 슬라이드 — 실제 보호자 사진(없으면 목업 폴백) + 사진 사이 전환(기본 페이드).
+  const slideSrcs = _slidePhotos.length ? _slidePhotos.map((a) => a.url) : SLIDE_PHOTOS;
+  const slideTrans = item.slideTrans || slideSrcs.slice(1).map(() => "페이드");
   const setSlideTrans = (i, v) => { const n = slideTrans.slice(); n[i] = v; onEdit(item.id, { slideTrans: n }); };
   const Icon = BLOCK_ICON[k] || (k === "transition" ? ArrowRightLeft : k === "subtitle" ? Type : ImageIcon);
 
@@ -140,10 +148,14 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
         {/* 소스 파일 — 타이틀·AI영상은 독사진(이미지)·클립은 파일. 추억 영상(유저 영상 묶음)·슬라이드는 별도 처리라 미노출 */}
         {(k === "clip" || k === "ai" || k === "title") && (() => {
           const isPhoto = k === "title" || k === "ai"; // 독사진(이미지) 입력
+          const fileName = srcAsset?.name || (item.file || item.source || "").split("/").pop() || "파일 없음";
           return (
-            <Field label="지금 들어간 파일">
-              <div className="px-3 py-2.5 text-[12.5px]" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: INK, wordBreak: "break-all" }}>{(item.file || item.source || "").split("/").pop()}</div>
-              <button onClick={() => toast(isPhoto ? "사진 선택 창을 엽니다" : "파일 선택 창을 엽니다")} className="mt-2 flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><Upload className="h-4 w-4" /> {isPhoto ? "사진 업로드" : "다른 파일로 바꾸기"}</button>
+            <Field label={isPhoto ? "보호자 독사진 (AI 변환 소스)" : "지금 들어간 파일"}>
+              {srcAsset?.url && (
+                <img src={srcAsset.url} alt="" className="mb-2 w-full" style={{ aspectRatio: "16/9", objectFit: "cover", borderRadius: RADIUS, border: "1px solid " + LINE2, background: "#000" }} />
+              )}
+              <div className="px-3 py-2.5 text-[12.5px]" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: INK, wordBreak: "break-all" }}>{fileName}</div>
+              <button onClick={() => toast(isPhoto ? "사진 선택 창을 엽니다" : "파일 선택 창을 엽니다")} className="mt-2 flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><Upload className="h-4 w-4" /> {isPhoto ? "사진 교체" : "다른 파일로 바꾸기"}</button>
             </Field>
           );
         })()}
@@ -176,9 +188,9 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
         {k === "clip" && <SoundField label="클립 소리 크기" value={item.volume} onChange={(val) => onEdit(item.id, { volume: val })} />}
         {k === "slide" && (
           <>
-            <Field label={`사진 조합 · 사이 전환 (${SLIDE_PHOTOS.length}장 · 장당 7~10초 · 총 2분30초 이내)`}>
+            <Field label={`사진 조합 · 사이 전환 (${slideSrcs.length}장 · 장당 7~10초 · 총 2분30초 이내)`}>
               <div className="max-h-[260px] overflow-y-auto px-2.5 py-2.5" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS }}>
-                {SLIDE_PHOTOS.map((src, i) => (
+                {slideSrcs.map((src, i) => (
                   <React.Fragment key={i}>
                     {/* 사진 */}
                     <div className="flex items-center gap-2.5">
@@ -187,7 +199,7 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
                       <span className="ml-auto text-[10.5px]" style={{ color: FAINT }}>{SLIDE_PER}초</span>
                     </div>
                     {/* 사진 사이 전환 */}
-                    {i < SLIDE_PHOTOS.length - 1 && (
+                    {i < slideSrcs.length - 1 && (
                       <div className="flex items-center gap-1.5 py-1" style={{ paddingLeft: 26 }}>
                         <span className="h-3.5 w-px" style={{ background: LINE2 }} />
                         <ArrowRightLeft className="h-3 w-3 shrink-0" style={{ color: GOLD_D }} />
@@ -224,24 +236,26 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
         )}
 
         {k === "video" && (() => {
-          // 추억 영상 — 보호자가 올린 영상 묶음(개수 제한 없음 · 총 1분30초 이내). 미리 렌더하지 않고 최종 렌더 때 합성.
-          const vids = (D.USER_UPLOADS || []).filter((u) => u.kind === "video");
+          // 추억 영상 — 보호자가 올린 실제 영상(없으면 목업 폴백). 슬라이드 뒤 개별 클립으로 이어붙임.
+          const vids = _memoryVideos.length ? _memoryVideos : (D.USER_UPLOADS || []).filter((u) => u.kind === "video");
           return (
           <>
-            <Field label={`보호자 영상 묶음 (${vids.length}개 · 총 1분30초 이내)`}>
-              <div className="space-y-1.5 px-2.5 py-2.5" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS }}>
+            <Field label={`보호자 영상 (${vids.length}개 · 슬라이드 뒤 개별 클립)`}>
+              <div className="space-y-2 px-2.5 py-2.5" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS }}>
                 {vids.length === 0
                   ? <div className="py-2 text-center text-[11.5px]" style={{ color: FAINT }}>올라온 영상이 없습니다.</div>
                   : vids.map((v, i) => (
-                    <div key={v.id} className="flex items-center gap-2">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold" style={{ background: "#e7e2d8", color: MUTE }}>{i + 1}</span>
-                      <Film className="h-3.5 w-3.5 shrink-0" style={{ color: GOLD_D }} />
-                      <span className="min-w-0 flex-1 truncate text-[12px] font-semibold" style={{ color: INK }}>{v.name}</span>
-                      <span className="shrink-0 text-[10.5px]" style={{ color: FAINT }}>{v.size}</span>
+                    <div key={v.id || i}>
+                      <div className="mb-1 flex items-center gap-2">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold" style={{ background: "#e7e2d8", color: MUTE }}>{i + 1}</span>
+                        <Film className="h-3.5 w-3.5 shrink-0" style={{ color: GOLD_D }} />
+                        <span className="min-w-0 flex-1 truncate text-[12px] font-semibold" style={{ color: INK }}>{v.name || `영상 ${i + 1}`}</span>
+                      </div>
+                      {v.url && <video src={v.url} controls playsInline preload="metadata" className="w-full" style={{ aspectRatio: "16/9", background: "#000", borderRadius: 4 }} />}
                     </div>
                   ))}
               </div>
-              <p className="mt-2 text-[11px] leading-relaxed" style={{ color: FAINT }}>※ 추억 슬라이드(사진) 다음에 묶음으로 이어집니다. BGM 없이 원본 사운드가 유지되며, 미리 렌더하지 않고 최종 렌더 시 합성됩니다.</p>
+              <p className="mt-2 text-[11px] leading-relaxed" style={{ color: FAINT }}>※ 추억 슬라이드(사진) 다음에 각 영상이 개별 클립으로 이어집니다. BGM 없이 원본 사운드 유지, 최종 렌더 시 합성됩니다.</p>
             </Field>
             <SoundField label="원본 소리 크기" value={item.volume} onChange={(val) => onEdit(item.id, { volume: val })} />
           </>
