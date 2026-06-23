@@ -35,12 +35,8 @@ export const EDITOR_TIMELINE = {
     { id: "s4", kind: "video", label: "영상", file: "users/user_001/산책영상.mp4", dur: 6, start: 9 },
     { id: "s5", kind: "ai", label: "AI 영상", file: "Kling · 독사진 2장", dur: 8, start: 15 },
   ],
-  // 자막 트랙
-  subtitles: [
-    { id: "sub1", text: "사랑하는 콩이에게", start: 2, end: 6, pos: "하단", font: "Nanum Myeongjo", size: 48, color: "#f3e9c8" },
-    { id: "sub2", text: "늘 곁에 있어줘서 고마웠어", start: 8, end: 14, pos: "하단", font: "Nanum Myeongjo", size: 48, color: "#f3e9c8" },
-    { id: "sub3", text: "무지개다리 너머에서 행복하길", start: 18, end: 24, pos: "하단", font: "Nanum Myeongjo", size: 48, color: "#f3e9c8" },
-  ],
+  // 자막 트랙 — 기본 없음. 편집기에서 「자막 추가」로 넣고 미리보기에서 실시간 배치.
+  subtitles: [],
   // 오디오(BGM) 트랙
   audio: [
     { id: "a1", file: "_shared/추모_잔잔한_피아노.mp3", start: 0, dur: 25, volume: 100, fadeIn: 1, fadeOut: 2 },

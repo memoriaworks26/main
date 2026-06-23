@@ -108,7 +108,7 @@ function GenHistory({ kind, name, gen, onSelect, onDelete }) {
   );
 }
 
-export function PropPanel({ blocks, subtitles = [], edits, onEdit, reservation, bgmName, gens, onGenerate, onSelectGen, onDeleteGen, sel }) {
+export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, reservation, bgmName, gens, onGenerate, onSelectGen, onDeleteGen, sel }) {
   const [promptModal, setPromptModal] = useState(false); // AI 문구 관리 모달
   let item;
   if (sel.scope === "block") item = blocks.find((b) => b.id === sel.id);
@@ -278,7 +278,7 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, reservation, 
             <Field label="자막 글자"><textarea rows={3} value={item.text ?? ""} onChange={(e) => onEdit(item.id, { text: e.target.value })} className="w-full resize-none p-3 text-[13.5px] leading-relaxed outline-none" style={{ ...inputStyle, height: "auto", fontFamily: fontVal }} /></Field>
             <div className="grid grid-cols-2 gap-2">
               <Field label="폰트"><select className={inputCls} style={inputStyle} value={fontVal} onChange={(e) => onEdit(item.id, { font: e.target.value })}>{D.SUBTITLE_FONTS.map((f) => <option key={f.name} value={f.css}>{f.name}</option>)}</select></Field>
-              <Field label="위치"><select className={inputCls} style={inputStyle} value={item.pos || "하단"} onChange={(e) => onEdit(item.id, { pos: e.target.value })}>{D.SUBTITLE_POS.map((p) => <option key={p}>{p}</option>)}</select></Field>
+              <Field label="위치"><select className={inputCls} style={inputStyle} value={item.xPct != null ? "직접배치" : (item.pos || "하단")} onChange={(e) => onEdit(item.id, { pos: e.target.value, xPct: null, yPct: null })}>{item.xPct != null && <option value="직접배치">직접배치(드래그)</option>}{D.SUBTITLE_POS.map((p) => <option key={p}>{p}</option>)}</select></Field>
             </div>
             <Field label={`글자 크기 (${size}px)`}>
               <div className="flex items-center gap-2">
@@ -292,7 +292,13 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, reservation, 
               </div>
             </Field>
             <Field label="보이는 구간"><div className="px-3 py-2.5 text-[12.5px] tabular-nums" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: INK }}>{item.start}초 ~ {item.end}초 <span style={{ color: FAINT }}>· 타임라인에서 끌어 옮기거나 양끝으로 길이 조절</span></div></Field>
-            <p className="text-[11.5px] leading-relaxed" style={{ color: FAINT }}>※ 자막은 영상 위에 표시됩니다. 글자·폰트·크기·위치를 바꿀 수 있어요.</p>
+            <p className="text-[11.5px] leading-relaxed" style={{ color: FAINT }}>※ 자막은 영상 위에 표시됩니다. 미리보기에서 끌어 위치를 직접 잡을 수 있어요.</p>
+            {onRemoveSub && (
+              <button type="button" onClick={() => onRemoveSub(item.id)} className="mt-1 flex items-center justify-center gap-1 rounded-md py-2 text-[12.5px] font-semibold outline-none"
+                style={{ color: "#a23b3b", background: "#f7ecec", border: "1px solid #e9d6d6" }}>
+                <Trash2 className="h-3.5 w-3.5" /> 자막 삭제
+              </button>
+            )}
           </>
           );
         })()}

@@ -1,7 +1,7 @@
 // 편집기 — 왼쪽 블록 목록(BlockList) + 가운데 블록 기준 타임라인(Timeline).
 // 블록이 곧 타임라인의 칸. 전환은 블록 경계에, 음악은 전체 1트랙.
 import React from "react";
-import { Music, ArrowRightLeft, Check, ArrowUp, ArrowDown, Eye, EyeOff } from "lucide-react";
+import { Music, ArrowRightLeft, Check, ArrowUp, ArrowDown, Eye, EyeOff, Plus } from "lucide-react";
 import { INK, MUTE, FAINT, GOLD, GOLD_D, GOLD_SOFT, SURFACE, LINE, STATUS } from "../theme.js";
 import { BLOCK_ICON, BLOCK_COLOR, SCALE, segments, blockTrans } from "./blocks.js";
 
@@ -126,7 +126,7 @@ function SubtitleTrack({ subtitles, tlMax, selId, onSel, onSubChange }) {
   );
 }
 
-export function Timeline({ blocks, edits = {}, bgmName, subtitles = [], onSubChange, onPickBgm, sel, onSel }) {
+export function Timeline({ blocks, edits = {}, bgmName, subtitles = [], onSubChange, onAddSub, onPickBgm, sel, onSel }) {
   const { segs, total, width } = segments(blocks);
   const on = (scope, id) => sel.scope === scope && sel.id === id;
   const transOf = (id) => edits["trans-" + id]?.effect || blockTrans(id);
@@ -142,6 +142,12 @@ export function Timeline({ blocks, edits = {}, bgmName, subtitles = [], onSubCha
     <div className="mt-5">
       <div className="mb-2 flex items-center justify-between">
         <div className="text-[13px] font-bold" style={{ color: INK }}>타임라인 <span className="font-normal" style={{ color: FAINT }}>· 블록·자막을 눌러 편집</span></div>
+        {onAddSub && (
+          <button type="button" onClick={onAddSub} className="flex items-center gap-1 px-2.5 py-1 text-[12px] font-semibold outline-none"
+            style={{ color: GOLD_D, background: GOLD_SOFT, borderRadius: 6 }}>
+            <Plus className="h-3.5 w-3.5" strokeWidth={2.4} /> 자막 추가
+          </button>
+        )}
       </div>
       <div className="overflow-x-auto pb-1">
         <div style={{ minWidth: innerW + 72 }}>

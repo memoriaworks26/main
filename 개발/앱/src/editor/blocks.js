@@ -20,6 +20,9 @@ export const blockTrans = (id) => BLOCK_TRANS_OVERRIDE[id] || "페이드";
 // 템플릿 blocks({ type, assetId? })를 elementDef(라벨·소스·길이) + clip은 콘텐츠 허브 자산명으로 보강.
 // (편집기가 EDITOR_BLOCKS 고정 더미 대신 이걸 쓰면 템플릿 수정이 제작에 즉시 반영된다)
 export function buildBlocks(tpl, content, reservation) {
+  // AI 영상이 2개 이상이면 A·B…로 구분 라벨(독사진 1장당 1영상 → 보통 A·B 2개).
+  const aiTotal = (tpl?.blocks || []).filter((b) => b.type === "ai").length;
+  let aiN = 0;
   return (tpl?.blocks || []).map((b) => {
     const def = D.elementDef(b.type) || {};
     if (b.type === "clip") {
@@ -31,12 +34,16 @@ export function buildBlocks(tpl, content, reservation) {
         dur: def.dur || 10, status: asset ? "done" : "standby",
       };
     }
+    let label = def.label;
+    if (b.type === "ai") { aiN += 1; label = aiTotal > 1 ? `AI 영상 ${String.fromCharCode(64 + aiN)}` : "AI 영상"; }
     return {
-      id: b.id, type: b.type, label: def.label, source: def.source, detail: def.source,
+      id: b.id, type: b.type, label, source: def.source, detail: def.source,
       dur: def.dur || 0, status: "done",
+      ...(b.type === "ai" ? { aiIndex: aiN } : {}),                 // 1=A, 2=B … (렌더에서 ai_video 사진 매핑)
       ...(b.type === "title" ? { text: reservation?.deceased, prefix: TITLE_SYSTEM_TEXT } : {}),
-      // 추억 영상(유저 영상 묶음) — BGM 없이 원본 사운드, 최종 렌더 시 합성
-      ...(b.type === "video" ? { detail: "보호자 영상 묶음 · 원본 사운드 · 최종 렌더 시 합성" } : {}),
+      // 추억 슬라이드 = 사진만 / 추억 영상 = 보호자 영상(슬라이드 뒤, 각 영상=개별 클립) · 원본 사운드 · 최종 렌더 시 합성
+      ...(b.type === "slide" ? { detail: "보호자 사진 (최대 20장)" } : {}),
+      ...(b.type === "video" ? { detail: "보호자 영상 · 슬라이드 뒤 개별 클립 · 원본 사운드" } : {}),
     };
   });
 }

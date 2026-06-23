@@ -32,7 +32,7 @@ export default function VideoEditor({ reservation, onClose }) {
   const [sel, setSel] = useState(firstBlockSel);
 
   // 편집 문서(편집값 edits + 결과물 gens) + 되돌리기/다시 히스토리(past/present/future)
-  const initialDoc = useMemo(() => ({ edits: {}, gens: seedGens(blocks) }), [blocks]);
+  const initialDoc = useMemo(() => ({ edits: {}, gens: seedGens(blocks), subs: [] }), [blocks]);
   const [hist, setHist] = useState(() => ({ past: [], present: initialDoc, future: [] }));
   const [savedDoc, setSavedDoc] = useState(initialDoc);
   const doc = hist.present;
@@ -45,8 +45,9 @@ export default function VideoEditor({ reservation, onClose }) {
   const setEdit = (id, patch) => commit({ ...doc, edits: { ...doc.edits, [id]: { ...doc.edits[id], ...patch } } });
   // 템플릿 블록에 편집값 병합 → 타임라인·미리보기·속성패널이 같은 편집본을 본다
   const editedBlocks = useMemo(() => blocks.map((b) => ({ ...b, ...(edits[b.id] || {}) })), [blocks, edits]);
-  // 자막 트랙 — 편집값(텍스트·위치) 병합. 자막 id로 edits 보관(블록 id와 충돌 없음).
-  const editedSubs = useMemo(() => (D.EDITOR_TIMELINE.subtitles || []).map((s) => ({ ...s, ...(edits[s.id] || {}) })), [edits]);
+  // 자막 트랙 — 기본 없음(doc.subs). 편집값(텍스트·시간·위치)은 edits[자막id]로 병합(블록 id와 충돌 없음).
+  const subsBase = doc.subs || EMPTY;
+  const editedSubs = useMemo(() => subsBase.map((s) => ({ ...s, ...(edits[s.id] || {}) })), [subsBase, edits]);
   const name = (reservation && (reservation.deceased || reservation.name)) || D.EDITOR_RESERVATION.deceased;
   // 유저(보호자)가 완성한 실제 추모영상 — 워커가 적재한 최종본 서명URL. 미리보기 「원본」에서 재생.
   const sourceVideoUrl = (reservation?.id && submissionFor(store, reservation.id)?.videoUrl) || null;
@@ -98,6 +99,20 @@ export default function VideoEditor({ reservation, onClose }) {
     const selId = cur.sel === vid ? list[list.length - 1].id : cur.sel;
     commit({ ...doc, gens: { ...gens, [blockId]: { list, sel: selId } } });
     toast("결과물을 삭제했습니다");
+  };
+  // 자막 추가/삭제 — 기본 없음에서 「자막 추가」로 넣고 미리보기/타임라인에서 배치. 텍스트·시간·위치는 edits로.
+  const addSub = () => {
+    const id = "sub-" + Date.now();
+    const s = { id, text: "자막을 입력하세요", start: 0, end: 3, pos: "하단", font: D.SUBTITLE_FONTS[0].css, size: 48, color: "#f3e9c8" };
+    commit({ ...doc, subs: [...subsBase, s] });
+    setSel({ scope: "subtitle", kind: "subtitle", id });
+    toast("자막을 추가했습니다 — 미리보기에서 위치를 잡으세요");
+  };
+  const removeSub = (id) => {
+    const nextEdits = { ...edits }; delete nextEdits[id];
+    commit({ ...doc, subs: subsBase.filter((s) => s.id !== id), edits: nextEdits });
+    if (sel.scope === "subtitle" && sel.id === id) setSel(firstBlockSel());
+    toast("자막을 삭제했습니다");
   };
   // 자동본으로 — 편집값 비우고 모든 결과물 선택을 자동본(v0)으로
   const resetAuto = async () => {
@@ -182,11 +197,11 @@ export default function VideoEditor({ reservation, onClose }) {
           <BlockList blocks={panelBlocks} sel={sel} onSel={setSel} arrange={canArrange} hidden={hidden} onMove={moveBlock} onToggleHide={toggleHide} />
         </aside>
         <div className="flex flex-1 flex-col overflow-y-auto px-6 py-5">
-          <Preview sel={sel} blocks={panelBlocks} gens={gens} name={name} sourceVideoUrl={sourceVideoUrl} />
-          <Timeline blocks={timelineBlocks} edits={edits} bgmName={bgmName} subtitles={editedSubs} onSubChange={setEdit} onPickBgm={selectSlide} sel={sel} onSel={setSel} />
+          <Preview sel={sel} blocks={panelBlocks} gens={gens} name={name} sourceVideoUrl={sourceVideoUrl} subtitles={editedSubs} onSubEdit={setEdit} onSelSub={(id) => setSel({ scope: "subtitle", kind: "subtitle", id })} />
+          <Timeline blocks={timelineBlocks} edits={edits} bgmName={bgmName} subtitles={editedSubs} onSubChange={setEdit} onAddSub={addSub} onPickBgm={selectSlide} sel={sel} onSel={setSel} />
         </div>
         <aside className="w-80 shrink-0 overflow-y-auto" style={{ background: SURFACE, borderLeft: "1px solid " + LINE }}>
-          <PropPanel key={sel.scope + sel.id} blocks={panelBlocks} subtitles={editedSubs} edits={edits} onEdit={setEdit} reservation={reservation} bgmName={bgmName} gens={gens} onGenerate={generate} onSelectGen={selectGen} onDeleteGen={deleteGen} sel={sel} />
+          <PropPanel key={sel.scope + sel.id} blocks={panelBlocks} subtitles={editedSubs} edits={edits} onEdit={setEdit} onRemoveSub={removeSub} reservation={reservation} bgmName={bgmName} gens={gens} onGenerate={generate} onSelectGen={selectGen} onDeleteGen={deleteGen} sel={sel} />
         </aside>
       </div>
 
