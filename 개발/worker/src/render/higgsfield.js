@@ -59,5 +59,7 @@ export async function generateTitleImage({ prompt, imageRefUrl, wh = "2048x1152"
 export async function generateMemoryVideo({ prompt, imageUrls, model = "dop-turbo" }) {
   // DoP(image2video)는 input_images 최대 1장 — 첫 독사진으로 생성(2장 보내면 422).
   const params = { model, prompt, input_images: imageUrls.slice(0, 1).map((u) => ({ type: "image_url", image_url: u })) };
-  return poll(await submit("/v1/image2video/dop", params));
+  // DoP 영상생성은 수 분 소요 — 폴링 타임아웃 길게(기본 12분, 리퍼 15분보다 짧게). env로 조정.
+  const timeoutMs = Number(process.env.HIGGSFIELD_POLL_MS) || 720000;
+  return poll(await submit("/v1/image2video/dop", params), { timeoutMs });
 }
