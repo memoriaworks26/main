@@ -7,8 +7,13 @@ import { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import ffmpegPath from "ffmpeg-static";
+import ffmpegStatic from "ffmpeg-static";
 import ffprobeStatic from "ffprobe-static";
+
+// 운영(Railway)은 apt ffmpeg(드로텍스트 포함)를 FFMPEG_PATH로 주입 — ffmpeg-static Linux엔 drawtext 없음.
+// 로컬은 ffmpeg-static 폴백.
+const ffmpegPath = process.env.FFMPEG_PATH || ffmpegStatic;
+const ffprobePath = process.env.FFPROBE_PATH || ffprobeStatic.path;
 
 const W = 1920, H = 1080, FPS = 30;
 const FIT = `scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1`;
@@ -104,7 +109,7 @@ export async function makeSolid(color, out) {
 
 export function durationOf(file) {
   return new Promise((res, rej) => {
-    const p = spawn(ffprobeStatic.path, ["-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", file]);
+    const p = spawn(ffprobePath, ["-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", file]);
     let o = ""; p.stdout.on("data", (d) => (o += d));
     p.on("error", rej);
     p.on("close", (c) => (c === 0 ? res(parseFloat(o)) : rej(new Error("ffprobe " + c))));
