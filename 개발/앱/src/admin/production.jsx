@@ -4,9 +4,9 @@ import {
   ChevronRight, Clock, FolderOpen, Plus, Search, UserPlus, X,
   Check, PlayCircle, RefreshCw, Film,
 } from "lucide-react";
-import { SERIF, SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS } from "../theme.js";
+import { SERIF, SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS, SUB_LABEL } from "../theme.js";
 import { Tag, Btn, PageHeader } from "../ui.jsx";
-import { useStore, actions, bizPartners, bizReservations } from "../store.js";
+import { useStore, actions, bizPartners, bizReservations, submissionFor } from "../store.js";
 import { confirm } from "../confirm.jsx";
 import { matchQuery } from "../lib/util.js";
 import * as D from "../data.js";
@@ -189,10 +189,22 @@ export function Production({ onOpenEditor, account }) {
                 <Clock className="h-3.5 w-3.5 shrink-0" style={{ color: FAINT }} strokeWidth={2} />
                 <span className="text-[12px] font-semibold tabular-nums" style={{ color: MUTE }}>{r.requestedAt}</span>
               </div>
-              {/* 반려동물 · 파트너/호실/보호자 */}
+              {/* 반려동물 · 파트너/호실/보호자 + 보호자 제출상태 */}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700, color: INK }}>{r.deceased}</span>
+                  {(() => {
+                    const sub = submissionFor(s, r.id);
+                    const done = sub?.status === "done";
+                    const submitted = sub && sub.status !== "draft";
+                    return (
+                      <span className="shrink-0 px-1.5 py-0.5 text-[10.5px] font-bold" style={{ borderRadius: RADIUS,
+                        background: done ? "#e9f1ee" : submitted ? "#e9eef5" : "#f4ead7",
+                        color: done ? "#3a7468" : submitted ? "#3f5e87" : "#9a6a1c" }}>
+                        보호자 {sub ? (SUB_LABEL[sub.status] || sub.status) : "미발급"}
+                      </span>
+                    );
+                  })()}
                 </div>
                 <div className="mt-0.5 truncate text-[11.5px]" style={{ color: MUTE }}>{r.partner} · {r.room} · 보호자 {r.chief}</div>
               </div>

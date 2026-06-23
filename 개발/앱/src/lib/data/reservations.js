@@ -27,7 +27,8 @@ const mapReserv = (r) => ({
   date: r.reserve_date, endDate: r.end_date, slot: r.slot,
   requestedAt: fmtReqAt(r.requested_at),
   status: r.status,
-  assignee: r.assignee_name,
+  assignee: r.assignee_name,          // HQ 작업자(편집·컨펌 받기)
+  intakeManager: r.intake_manager,    // 파트너 예약담당(접수자)
   renderAt: r.render_at ? Date.parse(r.render_at) : undefined,
   renderDur: r.render_dur ?? undefined,
 });
@@ -43,6 +44,7 @@ const toRow = (p) => {
     requested_at: p.requestedAt,
     status: p.status,
     assignee_name: p.assignee,
+    intake_manager: p.intakeManager,
     render_dur: p.renderDur,
     render_at: typeof p.renderAt === "number" ? new Date(p.renderAt).toISOString() : p.renderAt,
   };

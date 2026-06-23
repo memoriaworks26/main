@@ -299,7 +299,7 @@ export function Intake({ prefill } = {}) {
         partner: PARTNER.name, partnerId: PARTNER.id,
         deceased: petName.trim(), chief: chief.trim(), phone: phone.trim(),
         breed: breed.trim() || undefined, age: age.trim() || undefined,
-        room, date, endDate, slot: newSlot, assignee: manager.trim(),
+        room, date, endDate, slot: newSlot, intakeManager: manager.trim(),
       });
       const sub = await actions.issueSubmission(r);
       setResult({ url: window.location.origin + "/u/" + sub.token });

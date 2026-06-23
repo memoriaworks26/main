@@ -109,7 +109,7 @@ export function ReservDetail({ reserv, onBack }) {
   const videoFile = `${r.deceased}_추모영상.mp4`;
   const [sent, setSent] = useState(false);
   const [editing, setEditing] = useState(false);
-  const seed = () => ({ deceased: r.deceased || "", chief: r.chief || "", phone: r.phone || "", room: r.room || "", date: r.date || "", slot: r.slot || "", assignee: r.assignee || "" });
+  const seed = () => ({ deceased: r.deceased || "", chief: r.chief || "", phone: r.phone || "", room: r.room || "", date: r.date || "", slot: r.slot || "", intakeManager: r.intakeManager || "" });
   const [f, setF] = useState(seed);
   const startEdit = () => { setF(seed()); setEditing(true); };
   const cancelEdit = () => setEditing(false);
@@ -134,7 +134,7 @@ export function ReservDetail({ reserv, onBack }) {
   const save = async () => {
     if (!canSave) return;
     if (!(await confirm({ title: "예약 정보 저장", message: "변경한 예약 정보를 저장합니다." }))) return;
-    actions.updateReservation(r.id, { deceased: f.deceased.trim(), chief: f.chief.trim(), phone: f.phone.trim(), room: f.room, date: f.date, slot: f.slot.trim(), endDate: fEndDate, assignee: f.assignee.trim() });
+    actions.updateReservation(r.id, { deceased: f.deceased.trim(), chief: f.chief.trim(), phone: f.phone.trim(), room: f.room, date: f.date, slot: f.slot.trim(), endDate: fEndDate, intakeManager: f.intakeManager.trim() });
     setEditing(false);
   };
   const resend = () => { setSent(true); setTimeout(() => setSent(false), 1500); };
@@ -210,7 +210,7 @@ export function ReservDetail({ reserv, onBack }) {
               {overnight && !timeInvalid && (
                 <div className="text-right text-[11px]" style={{ color: MUTE }}>익일 {pad2(eH)}:{pad2(eM)} 종료 ({fEndDate})</div>
               )}
-              {inField("담당자", "assignee")}
+              {inField("담당자", "intakeManager")}
               <div className="flex items-center justify-between text-[13px]"><span style={{ color: MUTE }}>영상</span><Tag s={r.status} /></div>
             </div>
           ) : (
@@ -223,7 +223,7 @@ export function ReservDetail({ reserv, onBack }) {
               <div className="flex items-center gap-2"><span style={{ color: MUTE }}>퇴실</span><span className="inline-flex items-center tabular-nums">{isOvernight(r.slot) && "익일 "}{parseSlot(r.slot).endStr || "—"}</span>
                 <button onClick={checkout} className="ml-auto px-3 py-1 text-[12px] font-semibold outline-none transition hover:bg-black/[.03] focus-visible:ring-1" style={{ borderRadius: 4, border: "1px solid " + LINE, color: MUTE }}>퇴실 처리</button>
               </div>
-              <div className="flex gap-2"><span style={{ color: MUTE }}>담당자</span><span>{r.assignee || "미배정"}</span></div>
+              <div className="flex gap-2"><span style={{ color: MUTE }}>담당자</span><span>{r.intakeManager || "미배정"}</span></div>
               <div className="flex items-center gap-2"><span style={{ color: MUTE }}>영상</span><Tag s={r.status} /></div>
             </div>
           )}
