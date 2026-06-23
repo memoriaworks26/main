@@ -402,8 +402,10 @@ export function StepBody({ step, st }) {
           : <>올려주신 사진·영상으로 추모영상을 제작하고 있습니다.<br />완료되면 같은 링크에서 바로 보실 수 있습니다.</>}
       </p>
       <div className="mt-4 w-full">
-        <div className="relative flex flex-col items-center justify-center gap-2" style={{ aspectRatio: "16/9", background: "#2a323d", borderRadius: RADIUS }}>
-          {done ? (
+        <div className="relative flex flex-col items-center justify-center gap-2" style={{ aspectRatio: "16/9", background: "#2a323d", borderRadius: RADIUS, overflow: "hidden" }}>
+          {done && st.link?.videoUrl ? (
+            <video src={st.link.videoUrl} controls playsInline className="absolute inset-0 h-full w-full" style={{ background: "#000" }} />
+          ) : done ? (
             <Play className="h-10 w-10 text-white" fill="#fff" style={{ opacity: 0.9 }} />
           ) : (
             <>
