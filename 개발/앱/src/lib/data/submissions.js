@@ -20,9 +20,9 @@ export async function fetchSubmissions() {
 export async function fetchReservationMedia(reservationId) {
   const d = need();
   const { data: sub, error: se } = await d.from("submissions")
-    .select("id, letter, met_date, part_date, status, video_url").eq("reservation_id", reservationId).maybeSingle();
+    .select("id, token, letter, met_date, part_date, status, video_url").eq("reservation_id", reservationId).maybeSingle();
   if (se) throw new Error("제출 조회 실패: " + se.message);
-  if (!sub) return { assets: [], letter: null, metDate: null, partDate: null, status: null, videoUrl: null };
+  if (!sub) return { assets: [], submissionId: null, token: null, letter: null, metDate: null, partDate: null, status: null, videoUrl: null };
   const { data: rows, error: ae } = await d.from("submission_assets")
     .select("id,kind,role,name,storage_path,sort_order").eq("submission_id", sub.id).order("sort_order");
   if (ae) throw new Error("자산 조회 실패: " + ae.message);
@@ -35,7 +35,33 @@ export async function fetchReservationMedia(reservationId) {
     (signed || []).forEach((s, i) => { if (s && s.signedUrl) urls[paths[i]] = s.signedUrl; });
   }
   const assets = list.map((r) => ({ id: r.id, kind: r.kind, role: r.role, name: r.name, sortOrder: r.sort_order, url: urls[r.storage_path] || null }));
-  return { assets, letter: sub.letter, metDate: sub.met_date, partDate: sub.part_date, status: sub.status, videoUrl: sub.video_url };
+  return { assets, submissionId: sub.id, token: sub.token, letter: sub.letter, metDate: sub.met_date, partDate: sub.part_date, status: sub.status, videoUrl: sub.video_url };
+}
+
+const _ext = (n = "") => { const i = n.lastIndexOf("."); return i > 0 ? n.slice(i + 1) : "bin"; };
+const _uniq = () => globalThis.crypto?.randomUUID?.() || Date.now() + "-" + Math.random().toString(36).slice(2, 8);
+
+// 소스 자산 파일 교체(타이틀·AI 독사진 등) — 새 파일 업로드 후 storage_path 갱신(staff write RLS).
+export async function replaceAssetFile(assetId, token, file) {
+  const sbc = getClient();
+  const path = `${token}/replace/${_uniq()}.${_ext(file.name)}`;
+  const { error: ue } = await sbc.storage.from(UPLOAD_BUCKET).upload(path, file, { contentType: file.type || undefined });
+  if (ue) throw new Error("업로드 실패: " + ue.message);
+  const { error } = await need().from("submission_assets").update({ storage_path: path, name: file.name }).eq("id", assetId);
+  if (error) throw new Error(error.message);
+}
+
+// 추억 슬라이드 사진 추가.
+export async function addSlidePhoto(submissionId, token, file) {
+  const sbc = getClient();
+  const path = `${token}/slide/${_uniq()}.${_ext(file.name)}`;
+  const { error: ue } = await sbc.storage.from(UPLOAD_BUCKET).upload(path, file, { contentType: file.type || undefined });
+  if (ue) throw new Error("업로드 실패: " + ue.message);
+  const d = need();
+  const { data: cur } = await d.from("submission_assets").select("sort_order").eq("submission_id", submissionId).eq("role", "slide_photo").order("sort_order", { ascending: false }).limit(1);
+  const so = (cur?.[0]?.sort_order ?? -1) + 1;
+  const { error } = await d.from("submission_assets").insert({ submission_id: submissionId, kind: "photo", role: "slide_photo", name: file.name, storage_path: path, sort_order: so });
+  if (error) throw new Error(error.message);
 }
 
 // 단일 블록 AI 재생성 요청 — regen_target 지정 + status=queued(워커가 해당 블록만 재생성).

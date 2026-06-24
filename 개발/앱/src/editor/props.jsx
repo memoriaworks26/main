@@ -1,6 +1,6 @@
 // 편집기 — 오른쪽 속성 패널(PropPanel) + 보조(PromptPicker·PromptModal·GenHistory).
 // 선택(sel)에 따라 블록/전환/음악의 편집 컨트롤을 보여준다. 편집값은 상위(VideoEditor)의 edits로 컨트롤드.
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { Image as ImageIcon, Music, Upload, Plus, RefreshCw, Trash2, ArrowRightLeft, Check, Type, SlidersHorizontal, X, Film } from "lucide-react";
 import { SERIF, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS } from "../theme.js";
 import { DateField, Modal } from "../ui.jsx";
@@ -16,6 +16,16 @@ function L({ children }) { return <div className="mb-1.5 text-[12.5px] font-semi
 const inputCls = "w-full px-3 text-[13.5px] outline-none";
 const inputStyle = { height: 38, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK };
 function Field({ label, children }) { return <div className="mb-4"><L>{label}</L>{children}</div>; }
+// 파일 선택 버튼(숨김 input) — 소스 사진/영상 교체·추가용.
+function FileButton({ accept, onFile, className, style, children }) {
+  const ref = useRef(null);
+  return (
+    <>
+      <input ref={ref} type="file" accept={accept} className="hidden" onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) onFile(f); e.target.value = ""; }} />
+      <button type="button" onClick={() => ref.current && ref.current.click()} className={className} style={style}>{children}</button>
+    </>
+  );
+}
 // 소리 크기 슬라이더(0~100%) — 클립·추억영상 공용
 function SoundField({ label, value, onChange }) {
   const v = value != null ? value : 100;
@@ -173,7 +183,14 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
                 <img src={srcAsset.url} alt="" className="mb-2 w-full" style={{ aspectRatio: "16/9", objectFit: "cover", borderRadius: RADIUS, border: "1px solid " + LINE2, background: "#000" }} />
               )}
               <div className="px-3 py-2.5 text-[12.5px]" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: INK, wordBreak: "break-all" }}>{fileName}</div>
-              <button onClick={() => toast(isPhoto ? "사진 선택 창을 엽니다" : "파일 선택 창을 엽니다")} className="mt-2 flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><Upload className="h-4 w-4" /> {isPhoto ? "사진 교체" : "다른 파일로 바꾸기"}</button>
+              {srcAsset && reservation?.id && media?.token ? (
+                <FileButton accept={isPhoto ? "image/*" : "image/*,video/*"} onFile={(f) => actions.replaceAsset(reservation.id, srcAsset.id, media.token, f)}
+                  className="mt-2 flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}>
+                  <Upload className="h-4 w-4" /> {isPhoto ? "사진 교체" : "다른 파일로 바꾸기"}
+                </FileButton>
+              ) : (
+                <button onClick={() => toast("실제 예약에서만 교체할 수 있습니다")} className="mt-2 flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><Upload className="h-4 w-4" /> {isPhoto ? "사진 교체" : "다른 파일로 바꾸기"}</button>
+              )}
             </Field>
           );
         })()}
@@ -231,7 +248,14 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
                   </React.Fragment>
                 ))}
               </div>
-              <button onClick={() => toast("사진 추가/순서 변경은 유저 업로드 기준으로 구성됩니다")} className="mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-[12.5px] font-semibold" style={{ border: "1px dashed " + LINE2, borderRadius: RADIUS, color: GOLD_D }}><Plus className="h-3.5 w-3.5" /> 사진 추가 · 순서 변경</button>
+              {reservation?.id && media?.token && media?.submissionId ? (
+                <FileButton accept="image/*" onFile={(f) => actions.addSlidePhoto(reservation.id, media.submissionId, media.token, f)}
+                  className="mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-[12.5px] font-semibold" style={{ border: "1px dashed " + LINE2, borderRadius: RADIUS, color: GOLD_D }}>
+                  <Plus className="h-3.5 w-3.5" /> 슬라이드 사진 추가
+                </FileButton>
+              ) : (
+                <button onClick={() => toast("실제 예약에서만 추가할 수 있습니다")} className="mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-[12.5px] font-semibold" style={{ border: "1px dashed " + LINE2, borderRadius: RADIUS, color: GOLD_D }}><Plus className="h-3.5 w-3.5" /> 슬라이드 사진 추가</button>
+              )}
             </Field>
             <button onClick={() => onGenerate(item.id)} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> 사진으로 만들기</button>
             <GenHistory results={genResults} />
@@ -242,7 +266,14 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
               <p className="mb-2 text-[11px] leading-relaxed" style={{ color: FAINT }}>※ 추억 영상(보호자 영상)에는 BGM이 들어가지 않고 원본 사운드가 유지됩니다.</p>
               <Field label="지금 음악">
                 <div className="px-3 py-2.5 text-[12.5px]" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: INK }}>{bgmName}</div>
-                <button onClick={() => toast("음악 파일 선택 창을 엽니다")} className="mt-2 flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><Upload className="h-4 w-4" /> 다른 음악으로 바꾸기</button>
+                {reservation?.partnerId ? (
+                  <FileButton accept="audio/*" onFile={(f) => actions.uploadBgm(reservation.partnerId, f)}
+                    className="mt-2 flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}>
+                    <Upload className="h-4 w-4" /> 음악 파일 업로드
+                  </FileButton>
+                ) : (
+                  <button onClick={() => toast("실제 예약에서만 업로드할 수 있습니다")} className="mt-2 flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><Upload className="h-4 w-4" /> 음악 파일 업로드</button>
+                )}
               </Field>
               <SoundField label="소리 크기" value={au.volume != null ? au.volume : audioItem.volume} onChange={(val) => onEdit("audio", { volume: val })} />
               <div className="grid grid-cols-2 gap-2">

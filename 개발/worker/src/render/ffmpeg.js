@@ -93,7 +93,8 @@ export async function compose({ segments, bgmPath, fontFile, outPath }) {
     const concat = path.join(dir, "concat.mp4");
     await ff(["-y", "-f", "concat", "-safe", "0", "-i", list, "-c", "copy", concat]);
     if (bgmPath) {
-      await ff(["-y", "-i", concat, "-i", bgmPath, "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", outPath]);
+      // BGM 루프(-stream_loop) → 영상 길이에 맞춤(-shortest). 영상 트랙은 무손실 복사.
+      await ff(["-y", "-i", concat, "-stream_loop", "-1", "-i", bgmPath, "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", outPath]);
     } else {
       await fs.copyFile(concat, outPath);
     }
