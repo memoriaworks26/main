@@ -17,6 +17,7 @@ import { fetchRooms } from "../lib/data/rooms.js";
 import { fetchLocks, acquireLock, heartbeatLock, releaseLock } from "../lib/data/locks.js";
 import { fetchSubmissions } from "../lib/data/submissions.js";
 import { fetchVideos } from "../lib/data/videos.js";
+import { fetchPrompts } from "../lib/data/prompts.js";
 import { toast } from "../toast.jsx";
 import Login from "./Login.jsx";
 import AdminConsole from "../admin.jsx";
@@ -86,10 +87,11 @@ export default function AuthGate({ mode }) {
     const done = () => { if (alive) setHydrated(true); };
     const fail = (e) => { if (alive) { toast("데이터 로드 실패: " + e.message); setHydrated(true); } };
     if (profile.kind === "staff") {
-      Promise.all([fetchOrgs(), fetchReservations(), fetchSecondJobs(), fetchTemplates(), fetchSettlementItems(), fetchConfig(), fetchContent(), fetchStorageClasses(), fetchStaff(), fetchDevices(), fetchDeposits(), fetchStatements(), fetchLocks(), fetchSubmissions(), fetchVideos()])
-        .then(([o, reservations, secondJobs, templates, settlementItems, config, content, storageClasses, accounts, devices, deposits, statements, locks, submissions, videos]) => {
+      Promise.all([fetchOrgs(), fetchReservations(), fetchSecondJobs(), fetchTemplates(), fetchSettlementItems(), fetchConfig(), fetchContent(), fetchStorageClasses(), fetchStaff(), fetchDevices(), fetchDeposits(), fetchStatements(), fetchLocks(), fetchSubmissions(), fetchVideos(), fetchPrompts()])
+        .then(([o, reservations, secondJobs, templates, settlementItems, config, content, storageClasses, accounts, devices, deposits, statements, locks, submissions, videos, prompts]) => {
           if (!alive) return;
           actions.hydrateOrgs(o);
+          actions.hydratePrompts(prompts);
           actions.hydrateReservations(reservations);
           actions.hydrateSecondJobs(secondJobs);
           actions.hydrateTemplates(templates);

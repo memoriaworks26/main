@@ -6,7 +6,10 @@ import { SERIF, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS }
 import { DateField, Modal } from "../ui.jsx";
 import { toast } from "../toast.jsx";
 import * as D from "../data.js";
+import { useStore, actions } from "../store.js";
 import { BLOCK_ICON, KIND_LABEL, blockTrans, genDefault, exampleLetter, SLIDE_PHOTOS, SLIDE_PER, TITLE_SYSTEM_TEXT } from "./blocks.js";
+
+const PROMPT_TARGETS = ["타이틀", "AI영상"];
 
 // ── 오른쪽: 편집 패널 ──────────────────────────────────────────
 function L({ children }) { return <div className="mb-1.5 text-[12.5px] font-semibold" style={{ color: INK }}>{children}</div>; }
@@ -19,40 +22,44 @@ function SoundField({ label, value, onChange }) {
   return <Field label={`${label} (${v}%)`}><input type="range" min="0" max="100" value={v} onChange={(e) => onChange(+e.target.value)} className="w-full" style={{ accentColor: GOLD }} /></Field>;
 }
 
-// 프롬프트 카드 목록 — 관리 모달 본문
-function PromptCards() {
+// 프롬프트 카드(실데이터) — 이름·내용 편집 + 활성 지정 + 삭제. 생성 시 활성 프롬프트가 쓰임.
+function PromptCard({ p }) {
+  const [name, setName] = useState(p.name);
+  const [body, setBody] = useState(p.body || "");
+  const dirty = name !== p.name || body !== (p.body || "");
   return (
-    <div className="space-y-2">
-      {D.PROMPTS.map((p) => (
-        <div key={p.id} className="px-3 py-2.5" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS }}>
-          <div className="flex items-center gap-2">
-            <span className="px-1.5 py-[1px] text-[10.5px] font-bold" style={{ background: "#e9eef5", color: "#3f5e87", borderRadius: 3 }}>{p.target}</span>
-            <span className="text-[12.5px] font-semibold" style={{ color: INK }}>{p.name}</span>
-            <button onClick={() => toast(p.name + " 프롬프트를 편집합니다")} className="ml-auto text-[11.5px] font-semibold" style={{ color: GOLD }}>편집</button>
-          </div>
-          <div className="mt-1 text-[11.5px] leading-relaxed" style={{ color: MUTE }}>{p.body}</div>
-          <div className="mt-2 flex items-center gap-2 border-t pt-2" style={{ borderColor: LINE }}>
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center" style={{ background: "#fff", border: "1px dashed " + LINE2, borderRadius: RADIUS }}><ImageIcon className="h-4 w-4" style={{ color: FAINT }} /></span>
-            <button onClick={() => toast("사진 선택 창을 엽니다")} className="flex items-center gap-1 text-[11.5px] font-semibold" style={{ color: GOLD }}><Upload className="h-3.5 w-3.5" /> 사진 추가</button>
-            <span className="text-[10.5px]" style={{ color: FAINT }}>사진 + 문구를 함께 전송</span>
-          </div>
-        </div>
-      ))}
+    <div className="px-3 py-2.5" style={{ background: "#f6f3ec", border: "1px solid " + (p.active ? GOLD : LINE), borderRadius: RADIUS }}>
+      <div className="flex items-center gap-2">
+        <span className="px-1.5 py-[1px] text-[10.5px] font-bold" style={{ background: "#e9eef5", color: "#3f5e87", borderRadius: 3 }}>{p.target}</span>
+        <input value={name} onChange={(e) => setName(e.target.value)} className="min-w-0 flex-1 px-2 py-1 text-[12.5px] font-semibold outline-none" style={{ background: "#fff", border: "1px solid " + LINE2, borderRadius: 4, color: INK }} />
+        {p.active
+          ? <span className="px-1.5 py-[2px] text-[10.5px] font-bold" style={{ background: GOLD_SOFT, color: GOLD_D, borderRadius: 3 }}>활성</span>
+          : <button onClick={() => actions.setPromptActive(p.id, p.target)} className="text-[11px] font-semibold" style={{ color: GOLD_D }}>활성 지정</button>}
+        <button onClick={() => actions.removePrompt(p.id)} title="삭제" className="p-1" style={{ color: "#a23b3b" }}><Trash2 className="h-3.5 w-3.5" /></button>
+      </div>
+      <textarea rows={2} value={body} onChange={(e) => setBody(e.target.value)} placeholder="생성 프롬프트(영문 권장)" className="mt-2 w-full resize-none p-2 text-[11.5px] leading-relaxed outline-none" style={{ background: "#fff", border: "1px solid " + LINE2, borderRadius: 4, color: MUTE }} />
+      {dirty && <button onClick={() => actions.savePrompt({ id: p.id, target: p.target, name, body })} className="mt-1.5 flex items-center gap-1 text-[11.5px] font-bold" style={{ color: GOLD }}><Check className="h-3.5 w-3.5" /> 저장</button>}
     </div>
   );
 }
 
-// AI 문구(프롬프트) 관리 모달 — 타이틀·추억영상 블록의 "관리" 버튼에서 호출
+// AI 문구(프롬프트) 관리 모달 — 실데이터 CRUD.
 function PromptModal({ open, onClose }) {
+  const store = useStore();
+  const [addTarget, setAddTarget] = useState("타이틀");
   return (
-    <Modal open={open} onClose={onClose} width={460}>
+    <Modal open={open} onClose={onClose} width={480}>
       <div className="flex items-center justify-between px-4" style={{ height: 48, borderBottom: "1px solid " + LINE }}>
         <span className="text-[14px] font-bold" style={{ color: INK }}>프롬프트 관리</span>
-        <button onClick={() => toast("새 프롬프트를 추가합니다")} className="flex items-center gap-1 text-[12px] font-semibold" style={{ color: GOLD }}><Plus className="h-3.5 w-3.5" /> 새로 추가</button>
+        <div className="flex items-center gap-1.5">
+          <select value={addTarget} onChange={(e) => setAddTarget(e.target.value)} className="px-2 py-1 text-[11.5px] outline-none" style={{ background: "#fff", border: "1px solid " + LINE2, borderRadius: 4, color: INK }}>{PROMPT_TARGETS.map((t) => <option key={t}>{t}</option>)}</select>
+          <button onClick={() => actions.savePrompt({ target: addTarget, name: "새 프롬프트", body: "" })} className="flex items-center gap-1 text-[12px] font-semibold" style={{ color: GOLD }}><Plus className="h-3.5 w-3.5" /> 추가</button>
+        </div>
       </div>
-      <div className="max-h-[58vh] overflow-y-auto px-4 py-3">
-        <PromptCards />
-        <p className="mt-2 text-[11.5px] leading-relaxed" style={{ color: FAINT }}>프롬프트에 참고 사진을 함께 넣어 더 정확하게 생성합니다(사진·문구 둘 다 지원).</p>
+      <div className="max-h-[58vh] space-y-2 overflow-y-auto px-4 py-3">
+        {store.prompts.length === 0 && <div className="py-6 text-center text-[12px]" style={{ color: FAINT }}>프롬프트가 없습니다 — 위 「추가」로 만드세요.</div>}
+        {store.prompts.map((p) => <PromptCard key={p.id} p={p} />)}
+        <p className="mt-1 text-[11.5px] leading-relaxed" style={{ color: FAINT }}>※ 타깃별 「활성」 프롬프트가 실제 AI 생성(타이틀 Seedream·AI영상 Kling)에 사용됩니다.</p>
       </div>
       <div className="px-4 py-2.5" style={{ borderTop: "1px solid " + LINE }}>
         <button onClick={onClose} className="w-full py-2 text-[13px] font-bold" style={{ background: GOLD, color: "#fff", borderRadius: RADIUS }}>닫기</button>
@@ -61,15 +68,22 @@ function PromptModal({ open, onClose }) {
   );
 }
 
-// 프롬프트 드롭다운 + 위에 작은 "관리" 버튼(모달 열기) — 타이틀·추억영상 공용
+// 프롬프트 드롭다운(실데이터) + 「관리」. 선택 = 활성 지정(생성에 사용).
 function PromptPicker({ target, onManage }) {
+  const store = useStore();
+  const list = store.prompts.filter((p) => p.target === target);
+  const active = list.find((p) => p.active) || list[0];
   return (
     <div className="mb-4">
       <div className="mb-1.5 flex items-center justify-between">
         <span className="text-[12.5px] font-semibold" style={{ color: INK }}>프롬프트</span>
         <button onClick={onManage} className="flex items-center gap-1 text-[11.5px] font-semibold outline-none" style={{ color: GOLD_D }}><SlidersHorizontal className="h-3.5 w-3.5" /> 관리</button>
       </div>
-      <select className={inputCls} style={inputStyle}>{D.PROMPTS.filter((p) => p.target === target).map((p) => <option key={p.id}>{p.name}</option>)}</select>
+      <select className={inputCls} style={inputStyle} value={active?.id || ""} onChange={(e) => actions.setPromptActive(e.target.value, target)}>
+        {list.length === 0 && <option value="">프롬프트 없음 — 「관리」에서 추가</option>}
+        {list.map((p) => <option key={p.id} value={p.id}>{p.name}{p.active ? " ✓" : ""}</option>)}
+      </select>
+      {active?.body && <div className="mt-1.5 text-[11px] leading-relaxed" style={{ color: FAINT }}>{active.body}</div>}
     </div>
   );
 }

@@ -22,6 +22,7 @@ import * as locksData from "./lib/data/locks.js";
 import * as storage from "./lib/storage.js";
 import * as subs from "./lib/data/submissions.js";
 import * as vids from "./lib/data/videos.js";
+import * as promptsData from "./lib/data/prompts.js";
 import { toast } from "./toast.jsx";
 
 // 라이브(로그인+백엔드) = DB hydrate·write-through. DEV_PREVIEW = 기존 목업 시드.
@@ -48,6 +49,7 @@ let state = {
   editLocks: [],                          // [Phase9] 편집기 동시편집 잠금 현황
   submissions: [],                        // [Phase5] 보호자 제작링크(예약↔submission)
   reservationMedia: {},                   // 예약별 보호자 업로드 자산(서명URL) — 편집기 미리보기용
+  prompts: LIVE ? [] : (D.PROMPTS || []), // AI 프롬프트(ai_prompts) — 타이틀·AI영상 생성 문구
 
   videos: LIVE ? [] : D.FINAL_VIDEOS.map((v) => ({ ...v })),  // [QA-P1] 발행 영상(워커 렌더 산출물)
   secondJobs: LIVE ? [] : D.SECOND_EDIT_JOBS.map((j) => ({ ...j })),  // [Phase4-3 배선]
@@ -143,6 +145,22 @@ export const actions = {
   hydrateRooms: (rooms) => set({ rooms }),
   // [Phase5] 보호자 제작링크 적재 + 발급(예약→토큰). 반환: 발급된 submission(토큰 포함).
   hydrateSubmissions: (submissions) => set({ submissions }),
+  // AI 프롬프트 관리(ai_prompts) — 타깃별 목록·CRUD·활성 선택. 생성에 활성 프롬프트 사용.
+  hydratePrompts: (prompts) => set({ prompts }),
+  savePrompt: (p) => {
+    if (!LIVE) { set((s) => ({ prompts: p.id && s.prompts.some((x) => x.id === p.id) ? s.prompts.map((x) => x.id === p.id ? { ...x, ...p } : x) : [...s.prompts, { ...p, id: p.id || "pr-" + Date.now() }] })); return; }
+    promptsData.upsertPrompt(p)
+      .then((saved) => set((s) => ({ prompts: s.prompts.some((x) => x.id === saved.id) ? s.prompts.map((x) => x.id === saved.id ? saved : x) : [...s.prompts, saved] })))
+      .catch((e) => toast("프롬프트 저장 실패: " + e.message));
+  },
+  removePrompt: (id) => {
+    set((s) => ({ prompts: s.prompts.filter((x) => x.id !== id) }));
+    if (LIVE) promptsData.deletePrompt(id).catch((e) => toast("프롬프트 삭제 실패: " + e.message));
+  },
+  setPromptActive: (id, target) => {
+    set((s) => ({ prompts: s.prompts.map((x) => x.target === target ? { ...x, active: x.id === id } : x) }));
+    if (LIVE) promptsData.setActivePrompt(id, target).catch((e) => toast("활성 설정 실패: " + e.message));
+  },
   // 단일 블록 AI 재생성 — 워커가 해당 블록만 재생성(타이틀/AI영상).
   regenBlock: (reservationId, target) => {
     if (!LIVE || !reservationId) return;
