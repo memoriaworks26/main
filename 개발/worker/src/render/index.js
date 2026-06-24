@@ -18,6 +18,21 @@ import { compose, makeSolid } from "./ffmpeg.js";
 const cfg = loadConfig();
 const FONT = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../assets/NotoSansKR-Regular.otf");
 
+// 완성본 서명URL 만료 — 예약 종료일(end_date) 자정(KST)까지. 보호자 링크(submissions.expires_at)와 동일 시점으로 묶임.
+//   end_date 없으면 기본값, 임박/과거(재렌더 등)면 최소 floor로 보정해 즉시 만료 방지.
+const MIN_EXPIRY_SEC = Number(process.env.VIDEO_MIN_EXPIRY_SEC) || 60 * 60 * 24 * 3;        // 최소 3일(검수·발인 당일 여유)
+const DEFAULT_EXPIRY_SEC = Number(process.env.VIDEO_DEFAULT_EXPIRY_SEC) || 60 * 60 * 24 * 30; // end_date 없을 때 30일
+function expiryFor(endDate) {
+  const now = Date.now();
+  let sec = DEFAULT_EXPIRY_SEC;
+  if (endDate) {
+    const target = new Date(`${endDate}T23:59:59+09:00`).getTime(); // 종료일 자정(KST)
+    if (!Number.isNaN(target)) sec = Math.floor((target - now) / 1000);
+  }
+  if (sec < MIN_EXPIRY_SEC) sec = MIN_EXPIRY_SEC;
+  return { sec, at: new Date(now + sec * 1000).toISOString() };
+}
+
 export async function renderJob(job, assets, _ctx) {
   if (cfg.stub) {
     log.info(`  [stub] render job=${job.id} assets=${assets.length} bgm=${job.bgm_id || "-"} letter=${job.letter ? "Y" : "N"}`);
@@ -66,18 +81,85 @@ export async function renderJob(job, assets, _ctx) {
     await compose({ segments: segs, fontFile: FONT, outPath: out });
 
     // 5) 업로드(memoria-final) + 서명URL
-    let partnerId = null;
+    let partnerId = null, endDate = null;
     if (job.reservation_id) {
-      const { data: r } = await db.from("reservations").select("partner_id").eq("id", job.reservation_id).maybeSingle();
+      const { data: r } = await db.from("reservations").select("partner_id, end_date").eq("id", job.reservation_id).maybeSingle();
       partnerId = r?.partner_id || null;
+      endDate = r?.end_date || null;
     }
     const finalPath = `${partnerId || "unknown"}/${job.id}_final.mp4`;
     const buf = await fs.readFile(out);
     await st.uploadFinal(finalPath, buf, "video/mp4");
     const finalMB = +(buf.length / (1024 * 1024)).toFixed(1);
-    const videoUrl = await st.signedUrl(cfg.finalBucket, finalPath, 60 * 60 * 24 * 7); // 7일(추후 on-demand 서명 권장)
-    log.info(`  렌더 완료 job=${job.id} segs=${segs.length} ${finalMB}MB → ${finalPath}`);
-    return { videoUrl, finalPath, finalMB };
+    const exp = expiryFor(endDate);                                       // 예약 종료일(end_date)까지 — 최소 floor 보정
+    const videoUrl = await st.signedUrl(cfg.finalBucket, finalPath, exp.sec);
+    log.info(`  렌더 완료 job=${job.id} segs=${segs.length} ${finalMB}MB exp=${exp.at} → ${finalPath}`);
+    return { videoUrl, finalPath, finalMB, expiresAt: exp.at };
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+}
+
+// ── 2단계: 최종 합성 ──────────────────────────────────────────────
+// 저장된 블록 결과물(타이틀 Seedream·AI영상 Kling) + 보호자 소스(슬라이드·영상·편지)를 템플릿 순서로 합성.
+//   순서: 타이틀①② → AI영상 A → 추억 슬라이드(사진) → 추억 영상(개별) → AI영상 B → 편지(+날짜)
+const bySort = (p, q) => (p.sort_order ?? 0) - (q.sort_order ?? 0);
+const fmtDate = (d) => (d ? String(d) : "");
+export async function composeFinal(job, assets) {
+  if (cfg.stub) return { videoUrl: `stub://${job.id}`, finalPath: `stub/${job.id}.mp4`, finalMB: 0, expiresAt: null };
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mw-compose-"));
+  try {
+    const name = job.pet_name || "";
+    const pick = (role) => assets.filter((a) => a.role === role && a.storage_path).sort(bySort);
+    const titleRes = pick("title_result");        // 이미지 2장
+    const aiRes = pick("ai_video_result");          // 영상 A·B
+    const slidePhotos = pick("slide_photo");
+    const memVideos = pick("memory_video");
+    const sign = (a) => st.signedUrl(cfg.uploadBucket, a.storage_path, 3600);
+    const dl = async (a, fn) => st.downloadTo(await sign(a), path.join(dir, fn));
+
+    const segs = [];
+    // 타이틀 2장 — ①에 "사랑하는 {이름}" 캡션, ②는 화풍변경 오버랩(현재는 순차)
+    for (let i = 0; i < titleRes.length; i++) {
+      await dl(titleRes[i], `t${i}.png`);
+      segs.push({ type: "image", path: path.join(dir, `t${i}.png`), dur: i === 0 ? 6 : 4, caption: i === 0 ? `사랑하는 ${name}` : undefined });
+    }
+    // AI영상 A
+    if (aiRes[0]) { await dl(aiRes[0], "aiA.mp4"); segs.push({ type: "video", path: path.join(dir, "aiA.mp4") }); }
+    // 추억 슬라이드(사진)
+    for (let i = 0; i < slidePhotos.length; i++) { await dl(slidePhotos[i], `s${i}.img`); segs.push({ type: "image", path: path.join(dir, `s${i}.img`), dur: 4 }); }
+    // 추억 영상(개별 클립)
+    for (let i = 0; i < memVideos.length; i++) { await dl(memVideos[i], `m${i}.mp4`); segs.push({ type: "video", path: path.join(dir, `m${i}.mp4`) }); }
+    // AI영상 B
+    if (aiRes[1]) { await dl(aiRes[1], "aiB.mp4"); segs.push({ type: "video", path: path.join(dir, "aiB.mp4") }); }
+    // 편지(+ 끝에 날짜)
+    if (job.letter) {
+      const bg = await makeSolid("0x161310", path.join(dir, "lbg.png"));
+      segs.push({ type: "image", path: bg, dur: 18, caption: job.letter, letter: true });
+    }
+    if (job.met_date || job.part_date) {
+      const bg = await makeSolid("0x161310", path.join(dir, "dbg.png"));
+      const cap = [job.met_date ? `우리 처음 만난 날\n${fmtDate(job.met_date)}` : "", job.part_date ? `무지개다리 건넌 날\n${fmtDate(job.part_date)}` : ""].filter(Boolean).join("\n\n");
+      segs.push({ type: "image", path: bg, dur: 6, caption: cap, letter: true });
+    }
+    if (!segs.length) throw new Error("합성할 세그먼트 없음(블록 결과물·소스 부재)");
+
+    const out = path.join(dir, "final.mp4");
+    await compose({ segments: segs, fontFile: FONT, outPath: out });
+
+    let partnerId = null, endDate = null;
+    if (job.reservation_id) {
+      const { data: r } = await db.from("reservations").select("partner_id, end_date").eq("id", job.reservation_id).maybeSingle();
+      partnerId = r?.partner_id || null; endDate = r?.end_date || null;
+    }
+    const finalPath = `${partnerId || "unknown"}/${job.id}_final.mp4`;
+    const buf = await fs.readFile(out);
+    await st.uploadFinal(finalPath, buf, "video/mp4");
+    const finalMB = +(buf.length / (1024 * 1024)).toFixed(1);
+    const exp = expiryFor(endDate);
+    const videoUrl = await st.signedUrl(cfg.finalBucket, finalPath, exp.sec);
+    log.info(`  합성 완료 job=${job.id} segs=${segs.length} ${finalMB}MB exp=${exp.at} → ${finalPath}`);
+    return { videoUrl, finalPath, finalMB, expiresAt: exp.at };
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }

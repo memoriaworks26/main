@@ -3,8 +3,9 @@
 //   node src/index.js --once   1건만 처리하고 종료(테스트/CI)
 import { loadConfig } from "./config.js";
 import { log } from "./log.js";
-import { claimJob, fetchAssets, completeJob, failJob, requeueStale } from "./queue.js";
-import { renderJob } from "./render/index.js";
+import { claimJob, claimComposeJob, fetchAssets, completeJob, completeBlocks, failJob, failCompose, requeueStale } from "./queue.js";
+import { composeFinal } from "./render/index.js";
+import { generateBlocks } from "./render/blocks-gen.js";
 
 const cfg = loadConfig();
 const ONCE = process.argv.includes("--once");
@@ -14,21 +15,39 @@ let stopping = false;
 process.on("SIGINT", () => { log.warn("종료 요청(SIGINT) — 현재 작업 후 정지"); stopping = true; });
 process.on("SIGTERM", () => { stopping = true; });
 
-// 한 건 처리. 처리했으면 true, 큐 비었으면 false.
+// 한 건 처리(2단계). 1) 블록 생성(queued) 2) 합성(compose_queued). 처리했으면 true.
 async function processOne() {
-  const job = await claimJob();
-  if (!job) return false;
-  log.info(`claim job=${job.id} attempt=${job.render_attempts} reserv=${job.reservation_id || "-"}`);
-  try {
-    const assets = await fetchAssets(job);
-    const result = await renderJob(job, assets, cfg);
-    await completeJob(job, result);
-    log.info(`done  job=${job.id} → ${result.finalPath}`);
-  } catch (e) {
-    const status = await failJob(job, e);
-    log.error(`fail  job=${job.id} (${status}) ${e.message}`);
+  // 1단계: 블록 생성(Seedream 타이틀 + Kling AI영상) → blocks_ready
+  const genJob = await claimJob();
+  if (genJob) {
+    log.info(`gen   job=${genJob.id} attempt=${genJob.render_attempts} reserv=${genJob.reservation_id || "-"}`);
+    try {
+      const assets = await fetchAssets(genJob);
+      const res = await generateBlocks(genJob, assets);
+      await completeBlocks(genJob);
+      log.info(`blocks job=${genJob.id} count=${res.count} → blocks_ready`);
+    } catch (e) {
+      const status = await failJob(genJob, e);
+      log.error(`fail-gen job=${genJob.id} (${status}) ${e.message}`);
+    }
+    return true;
   }
-  return true;
+  // 2단계: 최종 합성(관리자 「최종 렌더」) → done
+  const cJob = await claimComposeJob();
+  if (cJob) {
+    log.info(`compose job=${cJob.id} reserv=${cJob.reservation_id || "-"}`);
+    try {
+      const assets = await fetchAssets(cJob);
+      const result = await composeFinal(cJob, assets);
+      await completeJob(cJob, result);
+      log.info(`done  job=${cJob.id} → ${result.finalPath}`);
+    } catch (e) {
+      await failCompose(cJob, e);
+      log.error(`fail-compose job=${cJob.id} ${e.message}`);
+    }
+    return true;
+  }
+  return false;
 }
 
 // 워커 루프 1가닥 — 큐가 비면 pollMs 쉬고 다시 시도. concurrency 만큼 병렬 실행.

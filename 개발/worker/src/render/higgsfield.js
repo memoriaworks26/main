@@ -47,19 +47,21 @@ async function poll(id, { timeoutMs = 300000, intervalMs = 5000 } = {}) {
   throw new Error("higgsfield 폴링 타임아웃");
 }
 
-// 타이틀 이미지(Soul). imageRefUrl: 원본 독사진 서명URL(있으면 레퍼런스). 반환: 이미지 URL.
-export async function generateTitleImage({ prompt, imageRefUrl, wh = "2048x1152", quality = "1080p", seed }) {
-  const params = { prompt, width_and_height: wh, quality, enhance_prompt: true };
-  if (imageRefUrl) params.image_reference = { type: "image_url", image_url: imageRefUrl };
-  if (seed != null) params.seed = seed;
-  return poll(await submit("/v1/text2image/soul", params));
+// 타이틀 이미지(Seedream i2i). imageRefUrl: 원본 독사진 서명URL → 영정 초상으로 변환. 반환: 이미지 URL.
+//   /v1/text2image/seedream { params:{ prompt, input_images:[{type:"image_url",image_url}] } } (실측 검증).
+export async function generateTitleImage({ prompt, imageRefUrl }) {
+  if (!imageRefUrl) throw new Error("Seedream: 입력 사진(독사진) 필요");
+  const params = { prompt, input_images: [{ type: "image_url", image_url: imageRefUrl }] };
+  return poll(await submit("/v1/text2image/seedream", params));
 }
 
-// 추억영상(DoP). imageUrls: 독사진 서명URL 배열. 반환: 영상 URL.
-export async function generateMemoryVideo({ prompt, imageUrls, model = "dop-turbo" }) {
-  // DoP(image2video)는 input_images 최대 1장 — 첫 독사진으로 생성(2장 보내면 422).
-  const params = { model, prompt, input_images: imageUrls.slice(0, 1).map((u) => ({ type: "image_url", image_url: u })) };
-  // DoP 영상생성은 수 분 소요 — 폴링 타임아웃 길게(기본 12분, 리퍼 15분보다 짧게). env로 조정.
+// AI영상(Kling i2v). imageUrl: 독사진 1장 서명URL → 영상. 반환: 영상 URL.
+//   /v1/image2video/kling { params:{ prompt, input_image:{type:"image_url",image_url} } } (실측 검증, input_image 단수).
+export async function generateMemoryVideo({ prompt, imageUrl, imageUrls }) {
+  const url = imageUrl || (imageUrls && imageUrls[0]);
+  if (!url) throw new Error("Kling: 입력 사진(독사진) 필요");
+  const params = { prompt, input_image: { type: "image_url", image_url: url } };
+  // Kling 영상생성은 수 분 소요 — 폴링 타임아웃 길게(기본 12분, 리퍼 15분보다 짧게). env로 조정.
   const timeoutMs = Number(process.env.HIGGSFIELD_POLL_MS) || 720000;
-  return poll(await submit("/v1/image2video/dop", params), { timeoutMs });
+  return poll(await submit("/v1/image2video/kling", params), { timeoutMs });
 }

@@ -3,3 +3,8 @@ node_modules
 *.log
 tmp
 out
+
+# 로컬 테스트·탐침 스크립트(미커밋)
+probe-hf.mjs
+run-gen.mjs
+seed-test.mjs
