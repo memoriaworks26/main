@@ -52,8 +52,13 @@ export default function VideoEditor({ reservation, onClose }) {
   // 유저(보호자)가 완성한 실제 추모영상 — 워커가 적재한 최종본 서명URL. 미리보기 「원본」에서 재생.
   const sourceVideoUrl = (reservation?.id && submissionFor(store, reservation.id)?.videoUrl) || null;
 
-  // 보호자 업로드 실제 자산(강아지 사진·영상·편지) 로드 → 블록별 실제 미리보기. 편집기 진입 시 1회.
-  useEffect(() => { if (reservation?.id) actions.loadReservationMedia(reservation.id); }, [reservation?.id]);
+  // 보호자 업로드 실제 자산(강아지 사진·영상·편지) 로드 → 블록별 실제 미리보기. 진입 시 + 주기 폴링(AI 재생성 결과 자동 반영).
+  useEffect(() => {
+    if (!reservation?.id) return;
+    actions.loadReservationMedia(reservation.id);
+    const t = setInterval(() => actions.loadReservationMedia(reservation.id), 12000);
+    return () => clearInterval(t);
+  }, [reservation?.id]);
   const media = store.reservationMedia?.[reservation?.id];
   // 블록 id → { source(보호자 원본), result(AI 생성 결과) }. 미리보기 좌=원본 / 우=작업본.
   const blockMedia = useMemo(() => {
@@ -120,12 +125,17 @@ export default function VideoEditor({ reservation, onClose }) {
   // 타임라인 음악 트랙 클릭 → 추억 슬라이드 블록 선택(거기서 BGM 편집)
   const selectSlide = () => { const s = editedBlocks.find((b) => b.type === "slide"); if (s) setSel({ scope: "block", kind: "slide", id: s.id }); };
 
-  // "만들기" → 새 결과물 추가(최신 선택) · 썸네일은 버튼 하단 히스토리에 누적
+  // 「AI로 만들기」 → 해당 블록만 실제 재생성(타이틀 Seedream / AI영상 Kling). 워커가 처리 후 미디어 폴링으로 갱신.
   const generate = (blockId) => {
-    const cur = gens[blockId] || genDefault(blockId);
-    const v = { id: blockId + "-v" + Date.now() };
-    commit({ ...doc, gens: { ...gens, [blockId]: { list: [...cur.list, v], sel: v.id } } });
-    toast("새 결과물을 만들었습니다");
+    const blk = editedBlocks.find((b) => b.id === blockId);
+    if (!blk) return;
+    let target = null;
+    if (blk.type === "title") target = "title";
+    else if (blk.type === "ai") target = "ai:" + ((blk.aiIndex || 1) - 1);
+    else { toast("슬라이드·편지는 최종 렌더에서 구성됩니다(AI 생성 대상 아님)"); return; }
+    if (!reservation?.id) { toast("실제 예약에서만 AI 생성이 동작합니다"); return; }
+    actions.regenBlock(reservation.id, target);
+    toast("AI 재생성을 요청했습니다 — 1~2분 후 결과가 자동 갱신됩니다");
   };
   const selectGen = (blockId, vid) => commit({ ...doc, gens: { ...gens, [blockId]: { ...(gens[blockId] || genDefault(blockId)), sel: vid } } });
   // 만든 결과물 삭제 — 자동본은 제외. 선택본을 지우면 마지막 남은 버전으로 선택 이동.

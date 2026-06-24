@@ -21,7 +21,7 @@ export async function claimComposeJob() {
 // 블록 생성 성공 → blocks_ready(편집 대기). 전체 합성은 관리자 「최종 렌더」에서.
 export async function completeBlocks(job) {
   const { error } = await db.from("submissions")
-    .update({ status: "blocks_ready", render_error: null }).eq("id", job.id);
+    .update({ status: "blocks_ready", render_error: null, regen_target: null }).eq("id", job.id);
   if (error) throw new Error("blocks 완료 기록 실패: " + error.message);
 }
 

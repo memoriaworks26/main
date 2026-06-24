@@ -38,6 +38,14 @@ export async function fetchReservationMedia(reservationId) {
   return { assets, letter: sub.letter, metDate: sub.met_date, partDate: sub.part_date, status: sub.status, videoUrl: sub.video_url };
 }
 
+// 단일 블록 AI 재생성 요청 — regen_target 지정 + status=queued(워커가 해당 블록만 재생성).
+//   target: "title" | "ai:0" | "ai:1" (null이면 전체).
+export async function regenBlock(reservationId, target) {
+  const d = need();
+  const { error } = await d.from("submissions").update({ regen_target: target, status: "queued" }).eq("reservation_id", reservationId);
+  if (error) throw new Error(error.message);
+}
+
 // 최종 합성 요청 — 예약의 제출물을 compose_queued로(워커가 블록 결과물로 최종 영상 합성).
 export async function requestCompose(reservationId) {
   const d = need();

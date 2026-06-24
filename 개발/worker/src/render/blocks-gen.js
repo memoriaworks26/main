@@ -17,47 +17,54 @@ const aiPrompt = "잔잔하고 따뜻한 추억의 흐름, 부드럽고 느린 �
 
 export async function generateBlocks(job, assets) {
   if (cfg.stub) {
-    log.info(`  [stub] generate-blocks job=${job.id}`);
+    log.info(`  [stub] generate-blocks job=${job.id} target=${job.regen_target || "all"}`);
     return { count: 0 };
   }
   const token = job.token;
+  const name = job.pet_name || "";
   const photos = assets.filter((a) => a.kind === "photo" && a.storage_path);
   const titleA = photos.find((a) => a.role === "title") || photos[0];
   const aiPhotos = photos.filter((a) => a.role === "ai_video");
   const sign = (a) => st.signedUrl(cfg.uploadBucket, a.storage_path, 3600);
+  const del = (role, sort) => { let q = db.from("submission_assets").delete().eq("submission_id", job.id).eq("role", role); if (sort != null) q = q.eq("sort_order", sort); return q; };
+  const ins = (row) => db.from("submission_assets").insert(row);
 
-  // 재생성 대비 기존 결과물 제거
-  await db.from("submission_assets").delete().eq("submission_id", job.id)
-    .in("role", ["title_result", "ai_video_result", "slide_video"]);
-
-  const rows = [];
-  // 타이틀 2장(Seedream i2i): ① 독사진→영정, ② ①→화풍·배경 변경(오버랩용)
-  if (titleA) {
-    const name = job.pet_name || "";
+  // 타이틀 2장(Seedream): ① 독사진→영정, ② ①→화풍·배경 변경(오버랩용)
+  async function genTitle() {
+    if (!titleA) return 0;
+    await del("title_result");
     const ref = await sign(titleA);
     const url1 = await generateTitleImage({ prompt: titlePrompt1(name), imageRefUrl: ref });
     const p1 = `${token}/results/title_0.png`;
     await st.uploadFromUrl(cfg.uploadBucket, p1, url1, "image/png");
-    rows.push({ submission_id: job.id, kind: "photo", role: "title_result", name: "title_0.png", storage_path: p1, sort_order: 0 });
-    log.info(`  타이틀① 생성(Seedream) → ${p1}`);
-    const url2 = await generateTitleImage({ prompt: titlePrompt2(name), imageRefUrl: url1 }); // ①을 레퍼런스로 화풍 변경
+    await ins({ submission_id: job.id, kind: "photo", role: "title_result", name: "title_0.png", storage_path: p1, sort_order: 0 });
+    const url2 = await generateTitleImage({ prompt: titlePrompt2(name), imageRefUrl: url1 });
     const p2 = `${token}/results/title_1.png`;
     await st.uploadFromUrl(cfg.uploadBucket, p2, url2, "image/png");
-    rows.push({ submission_id: job.id, kind: "photo", role: "title_result", name: "title_1.png", storage_path: p2, sort_order: 1 });
-    log.info(`  타이틀② 생성(Seedream, 화풍변경) → ${p2}`);
+    await ins({ submission_id: job.id, kind: "photo", role: "title_result", name: "title_1.png", storage_path: p2, sort_order: 1 });
+    log.info(`  타이틀 2장 생성(Seedream)`);
+    return 2;
   }
-  // AI영상(Kling) — 독사진 1장당 1영상(A·B)
-  for (let i = 0; i < aiPhotos.length; i++) {
+  // AI영상 i번(Kling) — 해당 독사진 1장 → 영상
+  async function genAi(i) {
+    if (!aiPhotos[i]) return 0;
+    await del("ai_video_result", i);
     const ref = await sign(aiPhotos[i]);
     const vurl = await generateMemoryVideo({ prompt: aiPrompt, imageUrl: ref });
     const path = `${token}/results/ai_${i}.mp4`;
     await st.uploadFromUrl(cfg.uploadBucket, path, vurl, "video/mp4");
-    rows.push({ submission_id: job.id, kind: "video", role: "ai_video_result", name: `ai_${i}.mp4`, storage_path: path, sort_order: i });
-    log.info(`  AI영상 ${String.fromCharCode(65 + i)} 생성(Kling) → ${path}`);
+    await ins({ submission_id: job.id, kind: "video", role: "ai_video_result", name: `ai_${i}.mp4`, storage_path: path, sort_order: i });
+    log.info(`  AI영상 ${String.fromCharCode(65 + i)} 생성(Kling)`);
+    return 1;
   }
-  if (rows.length) {
-    const { error } = await db.from("submission_assets").insert(rows);
-    if (error) throw new Error("결과물 저장 실패: " + error.message);
+
+  const target = job.regen_target; // null=전체 / "title" / "ai:i"
+  let count = 0;
+  if (target === "title") count += await genTitle();
+  else if (target && target.startsWith("ai:")) count += await genAi(Number(target.slice(3)));
+  else {
+    count += await genTitle();
+    for (let i = 0; i < aiPhotos.length; i++) count += await genAi(i);
   }
-  return { count: rows.length };
+  return { count };
 }

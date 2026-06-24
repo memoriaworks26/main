@@ -143,6 +143,11 @@ export const actions = {
   hydrateRooms: (rooms) => set({ rooms }),
   // [Phase5] 보호자 제작링크 적재 + 발급(예약→토큰). 반환: 발급된 submission(토큰 포함).
   hydrateSubmissions: (submissions) => set({ submissions }),
+  // 단일 블록 AI 재생성 — 워커가 해당 블록만 재생성(타이틀/AI영상).
+  regenBlock: (reservationId, target) => {
+    if (!LIVE || !reservationId) return;
+    subs.regenBlock(reservationId, target).catch((e) => toast("재생성 요청 실패: " + e.message));
+  },
   // 최종 합성 요청 — 워커가 블록 결과물로 최종 영상 합성(관리자 「최종 렌더」).
   requestCompose: (reservationId) => {
     if (!LIVE || !reservationId) return;
