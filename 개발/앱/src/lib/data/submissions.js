@@ -38,6 +38,13 @@ export async function fetchReservationMedia(reservationId) {
   return { assets, letter: sub.letter, metDate: sub.met_date, partDate: sub.part_date, status: sub.status, videoUrl: sub.video_url };
 }
 
+// 최종 합성 요청 — 예약의 제출물을 compose_queued로(워커가 블록 결과물로 최종 영상 합성).
+export async function requestCompose(reservationId) {
+  const d = need();
+  const { error } = await d.from("submissions").update({ status: "compose_queued" }).eq("reservation_id", reservationId);
+  if (error) throw new Error(error.message);
+}
+
 // 예약에 대한 보호자 제작링크 발급(토큰 자동). 예약당 1건(unique).
 export async function issueSubmission({ reservationId, petName, partnerName }) {
   const d = need();

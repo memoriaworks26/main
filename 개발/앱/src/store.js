@@ -143,6 +143,11 @@ export const actions = {
   hydrateRooms: (rooms) => set({ rooms }),
   // [Phase5] 보호자 제작링크 적재 + 발급(예약→토큰). 반환: 발급된 submission(토큰 포함).
   hydrateSubmissions: (submissions) => set({ submissions }),
+  // 최종 합성 요청 — 워커가 블록 결과물로 최종 영상 합성(관리자 「최종 렌더」).
+  requestCompose: (reservationId) => {
+    if (!LIVE || !reservationId) return;
+    subs.requestCompose(reservationId).catch((e) => toast("합성 요청 실패: " + e.message));
+  },
   // 편집기용 보호자 자산(서명URL) — 예약별 캐시. 편집기 진입 시 로드.
   loadReservationMedia: (reservationId) => {
     if (!LIVE || !reservationId) return;

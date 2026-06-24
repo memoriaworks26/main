@@ -180,7 +180,7 @@ export default function VideoEditor({ reservation, onClose }) {
     if (!(await confirm({ title: "최종 렌더 · 컨펌 요청", message: "최종 렌더링을 시작하고 컨펌 대기로 보냅니다.\n렌더 완료 후 검수 → 확인·컨펌하면 발행됩니다." }))) return;
     const patch = { status: "confirm", renderAt: Date.now(), renderDur: 90 + Math.floor(Math.random() * 120) }; // 렌더 예상 90~210초
     if (seJob) actions.updateSecondJob(seJob, patch);
-    else if (reservation && reservation.id) actions.updateReservation(reservation.id, patch);
+    else if (reservation && reservation.id) { actions.updateReservation(reservation.id, patch); actions.requestCompose(reservation.id); } // 워커 합성 트리거
     toast("최종 렌더링을 시작했습니다 — 컨펌 대기");
     setTimeout(() => onClose && onClose(), 1000);
   };
