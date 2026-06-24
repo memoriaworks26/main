@@ -103,6 +103,37 @@ export async function compose({ segments, bgmPath, fontFile, outPath }) {
   }
 }
 
+// 타이틀 영상(20초) — ① 페이드인 + "사랑하는 X" 자막 페이드인(~10초) → ② 오버랩(크로스페이드) → 끝.
+//   img1/img2: 타이틀 결과 이미지 2장(Seedream). caption: 자막(없으면 생략).
+export async function makeTitleVideo(img1, img2, caption, fontFile, out) {
+  const dir = path.dirname(out);
+  const font = fontFile ? `fontfile='${fontFile}':` : "";
+  const seg1 = path.join(dir, "_tt1.mp4"), seg2 = path.join(dir, "_tt2.mp4");
+  // 자막: 2초까지 투명 → 3.5초까지 서서히 → 유지. border가 text alpha와 함께 페이드(box 대신).
+  const cap = caption
+    ? `,drawtext=${font}text='${escText(caption)}':fontcolor=white:fontsize=64:borderw=3:bordercolor=black:x=(w-text_w)/2:y=h-200:alpha='if(lt(t,2),0,if(lt(t,3.5),(t-2)/1.5,1))'`
+    : "";
+  await ff(["-y", "-loop", "1", "-t", "11", "-i", img1, "-vf", `${FIT},fade=t=in:st=0:d=1.5${cap}`, "-r", String(FPS), ...ENC, seg1]);
+  await ff(["-y", "-loop", "1", "-t", "10", "-i", img2, "-vf", FIT, "-r", String(FPS), ...ENC, seg2]);
+  // 10초 지점에서 ②로 크로스페이드(1.5초) → 총 ~19.5초
+  await ff(["-y", "-i", seg1, "-i", seg2, "-filter_complex", "[0][1]xfade=transition=fade:duration=1.5:offset=10,format=yuv420p", "-r", String(FPS), ...ENC, out]);
+  return out;
+}
+
+// 편지 영상 — 텍스트가 아래 → 위로 흐르는 크레딧 스크롤(편집기 미리보기와 동일 연출).
+export async function letterScrollSegment(text, fontFile, out) {
+  const font = fontFile ? `fontfile='${fontFile}':` : "";
+  const wrapped = wrapText(text, 28);
+  const lines = wrapped.split("\n").length;
+  const fontsize = 40, lineh = fontsize + 16, TH = lines * lineh;
+  const dur = Math.min(40, Math.max(12, Math.round((H + TH) / 55))); // 읽기 속도 ~55px/s
+  const y = `(h-(h+${TH})*t/${dur})`;                                 // h(아래) → -TH(위)
+  await ff(["-y", "-f", "lavfi", "-i", `color=c=0x161310:s=${W}x${H}:d=${dur}`,
+    "-vf", `drawtext=${font}text='${escText(wrapped)}':fontcolor=0xf3e9c8:fontsize=${fontsize}:line_spacing=16:x=(w-text_w)/2:y=${y}`,
+    "-r", String(FPS), ...ENC, out]);
+  return { path: out, dur };
+}
+
 // 단색 배경 이미지(편지 장면 등) 1920x1080.
 export async function makeSolid(color, out) {
   await ff(["-y", "-f", "lavfi", "-i", `color=c=${color}:s=${W}x${H}`, "-frames:v", "1", out]);

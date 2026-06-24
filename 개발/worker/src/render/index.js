@@ -13,7 +13,7 @@ import { log } from "../log.js";
 import { db } from "../supabase.js";
 import * as st from "../storage.js";
 import { generateTitleImage, generateMemoryVideo } from "./higgsfield.js";
-import { compose, makeSolid } from "./ffmpeg.js";
+import { compose, makeSolid, makeTitleVideo, letterScrollSegment } from "./ffmpeg.js";
 
 const cfg = loadConfig();
 const FONT = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../assets/NotoSansKR-Regular.otf");
@@ -119,10 +119,15 @@ export async function composeFinal(job, assets) {
     const dl = async (a, fn) => st.downloadTo(await sign(a), path.join(dir, fn));
 
     const segs = [];
-    // 타이틀 2장 — ①에 "사랑하는 {이름}" 캡션, ②는 화풍변경 오버랩(현재는 순차)
-    for (let i = 0; i < titleRes.length; i++) {
-      await dl(titleRes[i], `t${i}.png`);
-      segs.push({ type: "image", path: path.join(dir, `t${i}.png`), dur: i === 0 ? 6 : 4, caption: i === 0 ? `사랑하는 ${name}` : undefined });
+    // 타이틀 — 2장이면 영상화(①페이드+자막 → ②오버랩 20초), 1장이면 정적
+    if (titleRes.length >= 2) {
+      await dl(titleRes[0], "t0.png"); await dl(titleRes[1], "t1.png");
+      const tv = path.join(dir, "title.mp4");
+      await makeTitleVideo(path.join(dir, "t0.png"), path.join(dir, "t1.png"), `사랑하는 ${name}`, FONT, tv);
+      segs.push({ type: "video", path: tv });
+    } else if (titleRes.length === 1) {
+      await dl(titleRes[0], "t0.png");
+      segs.push({ type: "image", path: path.join(dir, "t0.png"), dur: 8, caption: `사랑하는 ${name}` });
     }
     // AI영상 A
     if (aiRes[0]) { await dl(aiRes[0], "aiA.mp4"); segs.push({ type: "video", path: path.join(dir, "aiA.mp4") }); }
@@ -132,10 +137,11 @@ export async function composeFinal(job, assets) {
     for (let i = 0; i < memVideos.length; i++) { await dl(memVideos[i], `m${i}.mp4`); segs.push({ type: "video", path: path.join(dir, `m${i}.mp4`) }); }
     // AI영상 B
     if (aiRes[1]) { await dl(aiRes[1], "aiB.mp4"); segs.push({ type: "video", path: path.join(dir, "aiB.mp4") }); }
-    // 편지(+ 끝에 날짜)
+    // 편지 — 아래→위 스크롤 영상(편집기 미리보기와 동일)
     if (job.letter) {
-      const bg = await makeSolid("0x161310", path.join(dir, "lbg.png"));
-      segs.push({ type: "image", path: bg, dur: 18, caption: job.letter, letter: true });
+      const lv = path.join(dir, "letter.mp4");
+      await letterScrollSegment(job.letter, FONT, lv);
+      segs.push({ type: "video", path: lv });
     }
     if (job.met_date || job.part_date) {
       const bg = await makeSolid("0x161310", path.join(dir, "dbg.png"));
