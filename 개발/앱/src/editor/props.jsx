@@ -5,7 +5,6 @@ import { Image as ImageIcon, Music, Upload, Plus, RefreshCw, Trash2, ArrowRightL
 import { SERIF, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS } from "../theme.js";
 import { DateField, Modal } from "../ui.jsx";
 import { toast } from "../toast.jsx";
-import { genFrame } from "../lib/media.js";
 import * as D from "../data.js";
 import { BLOCK_ICON, KIND_LABEL, blockTrans, genDefault, exampleLetter, SLIDE_PHOTOS, SLIDE_PER, TITLE_SYSTEM_TEXT } from "./blocks.js";
 
@@ -75,34 +74,27 @@ function PromptPicker({ target, onManage }) {
   );
 }
 
-// 만든 결과물 누적 — 선택한 버전이 영상에 들어간다. "만들기"를 누를 때마다 아래에 쌓임.
-// 자동본(v0)은 기준이라 유지, 만든 버전은 X로 삭제 가능.
-function GenHistory({ kind, name, gen, onSelect, onDelete }) {
+// AI 생성 결과물 — 실제 산출물(타이틀 Seedream 이미지·AI영상 Kling 영상)을 표시. 없으면 '생성 전' 안내.
+function GenHistory({ results = [] }) {
+  if (!results.length) {
+    return (
+      <div className="mt-3 px-3 py-3 text-center text-[11.5px]" style={{ background: "#f6f3ec", border: "1px dashed " + LINE2, borderRadius: RADIUS, color: FAINT }}>
+        아직 AI 생성 전입니다 — 「AI로 만들기」를 누르면 결과가 여기에 표시됩니다.
+      </div>
+    );
+  }
   return (
     <div className="mt-3">
-      <div className="mb-1.5 text-[11.5px] font-semibold" style={{ color: MUTE }}>
-        만든 결과물 <span className="font-normal" style={{ color: FAINT }}>· 선택한 버전이 영상에 들어갑니다 ({gen.list.length})</span>
-      </div>
-      <div className="grid grid-cols-3 gap-2">
-        {gen.list.map((v, i) => {
-          const on = v.id === gen.sel;
-          return (
-            <div key={v.id} className="relative overflow-hidden" style={{ borderRadius: 6, border: "2px solid " + (on ? GOLD : LINE2) }}>
-              <button onClick={() => onSelect(v.id)} className="block w-full text-left outline-none transition focus-visible:ring-1" title={on ? "영상에 적용됨" : "이 버전을 적용"}>
-                <img src={genFrame(kind, i, name)} alt="" className="block w-full" style={{ aspectRatio: "16/9", objectFit: "cover" }} />
-                <div className="px-1.5 py-1 text-[10.5px] font-semibold" style={{ color: on ? GOLD_D : MUTE, background: on ? GOLD_SOFT : "#faf8f3" }}>{v.auto ? "자동본" : "버전 " + i}</div>
-              </button>
-              {on && <span className="pointer-events-none absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full" style={{ background: GOLD }}><Check className="h-2.5 w-2.5 text-white" strokeWidth={3} /></span>}
-              {!v.auto && onDelete && (
-                <button onClick={() => onDelete(v.id)} title="이 결과물 삭제" aria-label="이 결과물 삭제"
-                  className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full outline-none transition hover:opacity-85"
-                  style={{ background: "rgba(0,0,0,.5)", color: "#fff" }}>
-                  <X className="h-3 w-3" strokeWidth={2.5} />
-                </button>
-              )}
-            </div>
-          );
-        })}
+      <div className="mb-1.5 text-[11.5px] font-semibold" style={{ color: MUTE }}>AI 생성 결과 <span className="font-normal" style={{ color: FAINT }}>({results.length})</span></div>
+      <div className="grid grid-cols-2 gap-2">
+        {results.map((r, i) => (
+          <div key={i} className="overflow-hidden" style={{ borderRadius: 6, border: "2px solid " + GOLD }}>
+            {r.kind === "video"
+              ? <video src={r.url} controls playsInline preload="metadata" className="block w-full" style={{ aspectRatio: "16/9", background: "#000" }} />
+              : <img src={r.url} alt="" className="block w-full" style={{ aspectRatio: "16/9", objectFit: "cover", background: "#000" }} />}
+            <div className="px-1.5 py-1 text-[10.5px] font-semibold" style={{ color: GOLD_D, background: GOLD_SOFT }}>{r.label || `결과 ${i + 1}`}</div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -119,10 +111,22 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
   // 실제 보호자 자산(서명URL) — 없으면(미로드·dev) 목업 폴백.
   const _assets = media?.assets || [];
   const _slidePhotos = _assets.filter((a) => a.role === "slide_photo" && a.url);
-  const _memoryVideos = _assets.filter((a) => (a.role === "memory_video" || a.kind === "video") && a.url);
+  const _memoryVideos = _assets.filter((a) => a.role === "memory_video" && a.url);
   const _titlePhoto = _assets.find((a) => a.role === "title");
   const _aiPhotos = _assets.filter((a) => a.role === "ai_video");
   const srcAsset = k === "title" ? _titlePhoto : k === "ai" ? _aiPhotos[(item.aiIndex || 1) - 1] : null; // 블록 소스 사진
+  // AI 생성 결과물(실데이터) — GenHistory에 실제로 표시.
+  const _bySort = (p, q) => (p.sort_order ?? p.sortOrder ?? 0) - (q.sort_order ?? q.sortOrder ?? 0);
+  const _titleResults = _assets.filter((a) => a.role === "title_result" && a.url).sort(_bySort);
+  const _aiResults = _assets.filter((a) => a.role === "ai_video_result" && a.url).sort(_bySort);
+  const _slideResult = _assets.find((a) => a.role === "slide_video" && a.url);
+  const genResults = k === "title"
+    ? _titleResults.map((a, i) => ({ kind: "image", url: a.url, label: i === 0 ? "① 영정" : i === 1 ? "② 화풍변경" : `장면 ${i + 1}` }))
+    : k === "ai"
+    ? (_aiResults[(item.aiIndex || 1) - 1] ? [{ kind: "video", url: _aiResults[(item.aiIndex || 1) - 1].url, label: "Kling AI영상" }] : [])
+    : k === "slide"
+    ? (_slideResult ? [{ kind: "video", url: _slideResult.url, label: "슬라이드 영상" }] : [])
+    : [];
   const gen = sel.scope === "block" ? (gens[item.id] || genDefault(item.id)) : null; // 타이틀·슬라이드·AI 결과물 히스토리
   const name = reservation?.deceased || D.EDITOR_RESERVATION.deceased;
   // 편집값(컨트롤드) — 전환은 "trans-"+id, 음악은 "audio" 키로 보관
@@ -179,7 +183,7 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
             </div>
             <PromptPicker target="타이틀" onManage={() => setPromptModal(true)} />
             <button onClick={() => onGenerate(item.id)} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> AI로 만들기</button>
-            <GenHistory kind="title" name={name} gen={gen} onSelect={(vid) => onSelectGen(item.id, vid)} onDelete={(vid) => onDeleteGen(item.id, vid)} />
+            <GenHistory results={genResults} />
           </>
           );
         })()}
@@ -216,7 +220,7 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
               <button onClick={() => toast("사진 추가/순서 변경은 유저 업로드 기준으로 구성됩니다")} className="mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-[12.5px] font-semibold" style={{ border: "1px dashed " + LINE2, borderRadius: RADIUS, color: GOLD_D }}><Plus className="h-3.5 w-3.5" /> 사진 추가 · 순서 변경</button>
             </Field>
             <button onClick={() => onGenerate(item.id)} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> 사진으로 만들기</button>
-            <GenHistory kind="slide" name={name} gen={gen} onSelect={(vid) => onSelectGen(item.id, vid)} onDelete={(vid) => onDeleteGen(item.id, vid)} />
+            <GenHistory results={genResults} />
 
             {/* 배경 음악 — 추억 슬라이드(보호자 사진)에만 깔린다. 추억 영상(유저 영상)은 원본 사운드 유지. */}
             <div className="mt-5 border-t pt-4" style={{ borderColor: LINE }}>
@@ -266,7 +270,7 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
           <>
             <PromptPicker target="AI영상" onManage={() => setPromptModal(true)} />
             <button onClick={() => onGenerate(item.id)} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> AI로 만들기</button>
-            <GenHistory kind="ai" name={name} gen={gen} onSelect={(vid) => onSelectGen(item.id, vid)} onDelete={(vid) => onDeleteGen(item.id, vid)} />
+            <GenHistory results={genResults} />
             <div className="mt-3 px-3 py-2.5 text-[11.5px] leading-relaxed" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
               독사진 1장 → AI 영상(약 8초). 추억 슬라이드 앞(A) · 추억 영상 뒤(B)로 유저 소스를 감쌉니다.
             </div>
@@ -276,11 +280,11 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
 
         {k === "letter" && (
           <>
-            {/* 보호자(유저) 입력과 동일 — 날짜 2개 + 편지 본문 */}
-            <Field label="우리 처음 만난 날"><DateField value={item.metDate ?? reservation?.metDate ?? ""} onChange={(d) => onEdit(item.id, { metDate: d })} /></Field>
-            <Field label="무지개다리 건넌 날"><DateField value={item.partDate ?? reservation?.partDate ?? ""} onChange={(d) => onEdit(item.id, { partDate: d })} /></Field>
-            <Field label="편지 내용"><textarea rows={7} value={item.text ?? exampleLetter(name)} onChange={(e) => onEdit(item.id, { text: e.target.value })} className="w-full resize-none p-3 text-[13.5px] leading-relaxed outline-none" style={{ ...inputStyle, height: "auto", fontFamily: SERIF }} /></Field>
-            <p className="text-[11.5px] leading-relaxed" style={{ color: FAINT }}>※ 보호자가 입력한 편지·날짜입니다. 두 날짜는 편지 마지막에 크게 표시됩니다. 편지는 최대 3분30초로 구성됩니다.</p>
+            {/* 보호자(유저) 입력을 기본값으로 — 편집하면 그 값이 실시간으로 미리보기에 반영 */}
+            <Field label="우리 처음 만난 날"><DateField value={item.metDate ?? media?.metDate ?? reservation?.metDate ?? ""} onChange={(d) => onEdit(item.id, { metDate: d })} /></Field>
+            <Field label="무지개다리 건넌 날"><DateField value={item.partDate ?? media?.partDate ?? reservation?.partDate ?? ""} onChange={(d) => onEdit(item.id, { partDate: d })} /></Field>
+            <Field label="편지 내용"><textarea rows={7} value={item.text ?? media?.letter ?? exampleLetter(name)} onChange={(e) => onEdit(item.id, { text: e.target.value })} className="w-full resize-none p-3 text-[13.5px] leading-relaxed outline-none" style={{ ...inputStyle, height: "auto", fontFamily: SERIF }} /></Field>
+            <p className="text-[11.5px] leading-relaxed" style={{ color: FAINT }}>※ 보호자가 입력한 편지·날짜입니다. 수정하면 왼쪽 미리보기에 실시간 반영되고, 두 날짜는 편지 마지막에 크게 표시됩니다.</p>
           </>
         )}
 

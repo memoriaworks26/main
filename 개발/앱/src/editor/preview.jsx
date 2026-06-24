@@ -152,7 +152,9 @@ export function Preview({ sel, blocks, gens, name, sourceVideoUrl, blockMedia = 
   const editedSrc = blockFrame(block, gen, name, false);
   const label = block ? (KIND_LABEL[block.type] || "") : "";
   const selSubId = sel.scope === "subtitle" ? sel.id : null;
-  const realMedia = block ? blockMedia[block.id] : null;   // 선택 블록의 실제 보호자 미디어
+  const bm = block ? blockMedia[block.id] : null;          // { source, result }
+  const srcMedia = bm?.source || null;                      // 보호자 원본
+  const resMedia = bm?.result || null;                      // AI 생성 결과(작업본)
   return (
     <div>
       <div className="mb-2 flex items-center gap-2">
@@ -161,18 +163,21 @@ export function Preview({ sel, blocks, gens, name, sourceVideoUrl, blockMedia = 
         {label && <span className="text-[11.5px]" style={{ color: FAINT }}>· 지금 보는 블록: <b style={{ color: MUTE }}>{label}</b></span>}
       </div>
       <div className="grid grid-cols-2 gap-4">
-        {/* 원본 = 보호자가 올린 실제 소스(사진·영상·편지). 없으면 완성영상(있으면)·목업 폴백. */}
-        <PreviewBox label="유저가 만든 원본" badge={realMedia ? "보호자 원본" : sourceVideoUrl ? "완성본 · 재생" : "원본 · 수정불가"} badgeColor={{ bg: "rgba(90,100,112,.15)", c: "#5a6470" }}
-          name={name} src={origSrc} videoSrc={sourceVideoUrl} media={realMedia}
+        {/* 원본 = 보호자가 올린 실제 소스. 없으면 완성영상(있으면)·목업 폴백. */}
+        <PreviewBox label="유저가 만든 원본" badge={srcMedia ? "보호자 원본" : sourceVideoUrl ? "완성본 · 재생" : "원본 · 수정불가"} badgeColor={{ bg: "rgba(90,100,112,.15)", c: "#5a6470" }}
+          name={name} src={origSrc} videoSrc={sourceVideoUrl} media={srcMedia}
           subs={subtitles} selSubId={selSubId} onSubEdit={onSubEdit} onSelSub={onSelSub} />
-        <PreviewBox label="내가 편집 중" badge={realMedia ? "작업본 · 생성 전" : "작업본"} badgeColor={{ bg: GOLD_SOFT, c: GOLD_D }} big name={name} src={editedSrc} media={realMedia} />
+        {/* 작업본 = AI 생성 결과(타이틀 Seedream·AI영상 Kling). 없으면 생성 전(목업). */}
+        <PreviewBox label="내가 편집 중" badge={resMedia ? "작업본 · AI 결과" : "작업본 · 생성 전"} badgeColor={{ bg: GOLD_SOFT, c: GOLD_D }} big name={name} src={editedSrc} media={resMedia} />
       </div>
       <div className="mt-1.5 text-[11.5px]" style={{ color: FAINT }}>
         {subtitles.length
           ? "자막을 끌어 위치를 잡으세요. 영상 재생 시 설정한 시간 구간에만 표시됩니다(최종 렌더에 그대로 반영)."
-          : realMedia
-          ? "왼쪽은 보호자가 올린 실제 소스입니다. AI 영상·타이틀은 생성 후 결과물로 바뀝니다. 자막은 타임라인 「자막 추가」."
-          : "선택한 블록의 결과물을 보여줍니다. 왼쪽에서 블록을 고르면 보호자 원본이 표시됩니다."}
+          : resMedia
+          ? "왼쪽 보호자 원본 → 오른쪽 AI 변환 결과(타이틀 Seedream·AI영상 Kling). 「AI로 만들기」로 재생성합니다."
+          : srcMedia
+          ? "왼쪽은 보호자 원본. 오른쪽 작업본은 AI 생성 후 결과물로 바뀝니다(타이틀 Seedream·AI영상 Kling)."
+          : "왼쪽에서 블록을 고르면 보호자 원본이 표시됩니다."}
       </div>
     </div>
   );
