@@ -164,6 +164,16 @@ export const actions = {
     set((s) => ({ prompts: s.prompts.map((x) => x.target === target ? { ...x, active: x.id === id } : x) }));
     if (LIVE) promptsData.setActivePrompt(id, target).catch((e) => toast("활성 설정 실패: " + e.message));
   },
+  reloadPrompts: () => { if (LIVE) promptsData.fetchPrompts().then((p) => set({ prompts: p })).catch(() => {}); },
+  // 프롬프트 참고 이미지(텍스트와 함께 생성에 전송) — 업로드/제거 후 목록 갱신.
+  uploadPromptRef: (id, file) => {
+    if (!LIVE) return;
+    promptsData.uploadPromptRef(id, file).then(() => { actions.reloadPrompts(); toast("참고 사진을 등록했습니다"); }).catch((e) => toast("업로드 실패: " + e.message));
+  },
+  clearPromptRef: (id) => {
+    if (!LIVE) return;
+    promptsData.clearPromptRef(id).then(() => { actions.reloadPrompts(); toast("참고 사진을 제거했습니다"); }).catch((e) => toast("제거 실패: " + e.message));
+  },
   // BGM 볼륨·페이드 설정(파트너 템플릿) — 합성에 반영.
   setTemplateBgm: (partnerId, patch) => {
     if (!partnerId) return;

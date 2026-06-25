@@ -27,10 +27,21 @@ function FileButton({ accept, onFile, className, style, children }) {
   );
 }
 
-// 서명URL 다운로드(새 탭 폴백).
-function dlAnchor(url, name) {
-  try { const a = document.createElement("a"); a.href = url; a.download = name || ""; a.rel = "noopener"; document.body.appendChild(a); a.click(); a.remove(); }
-  catch { window.open(url, "_blank"); }
+// 서명URL 자동 다운로드 — 크로스오리진(Supabase 서명URL)은 download 속성이 무시돼 새 탭으로 열리므로,
+//   fetch→blob→object URL로 받아 강제로 파일 저장(새 창 없이 바로 내려받음). 실패 시에만 직접 앵커 폴백.
+async function dlAnchor(url, name) {
+  const fname = name || (url.split("/").pop() || "download").split("?")[0];
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("fetch " + res.status);
+    const obj = URL.createObjectURL(await res.blob());
+    const a = document.createElement("a"); a.href = obj; a.download = fname;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(obj), 4000);
+  } catch {
+    const a = document.createElement("a"); a.href = url; a.download = fname; a.rel = "noopener";
+    document.body.appendChild(a); a.click(); a.remove();
+  }
 }
 
 // 소스/결과 카드 — 미리보기 + 생성(API) + 다운로드 + 교체 + 생성내역(버전 선택). 생성 중 로딩 표시.
@@ -99,6 +110,15 @@ function PromptCard({ p }) {
         <button onClick={() => actions.removePrompt(p.id)} title="삭제" className="p-1" style={{ color: "#a23b3b" }}><Trash2 className="h-3.5 w-3.5" /></button>
       </div>
       <textarea rows={2} value={body} onChange={(e) => setBody(e.target.value)} placeholder="생성 프롬프트(영문 권장)" className="mt-2 w-full resize-none p-2 text-[11.5px] leading-relaxed outline-none" style={{ background: "#fff", border: "1px solid " + LINE2, borderRadius: 4, color: MUTE }} />
+      {/* 참고 이미지 — 텍스트와 함께 생성에 전송(이미지1 등 Seedream 멀티이미지). */}
+      <div className="mt-2 flex items-center gap-2">
+        {p.refImageUrl
+          ? <img src={p.refImageUrl} alt="" style={{ width: 48, aspectRatio: "1", objectFit: "cover", borderRadius: 4, border: "1px solid " + LINE2 }} />
+          : <span className="flex shrink-0 items-center justify-center" style={{ width: 48, height: 48, background: "#fff", border: "1px dashed " + LINE2, borderRadius: 4 }}><ImageIcon className="h-4 w-4" style={{ color: FAINT }} /></span>}
+        <FileButton accept="image/*" onFile={(f) => actions.uploadPromptRef(p.id, f)} className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold" style={{ border: "1px solid " + LINE2, borderRadius: 5, color: GOLD_D }}><Upload className="h-3.5 w-3.5" /> 참고 사진</FileButton>
+        {p.refImage && <button onClick={() => actions.clearPromptRef(p.id)} className="text-[11px]" style={{ color: "#a23b3b" }}>제거</button>}
+        <span className="text-[10px]" style={{ color: FAINT }}>사진+문구 함께 전송</span>
+      </div>
       {dirty && <button onClick={() => actions.savePrompt({ id: p.id, target: p.target, name, body })} className="mt-1.5 flex items-center gap-1 text-[11.5px] font-bold" style={{ color: GOLD }}><Check className="h-3.5 w-3.5" /> 저장</button>}
     </div>
   );
@@ -107,7 +127,7 @@ function PromptCard({ p }) {
 // AI 문구(프롬프트) 관리 모달 — 실데이터 CRUD.
 function PromptModal({ open, onClose }) {
   const store = useStore();
-  const [addTarget, setAddTarget] = useState("타이틀");
+  const [addTarget, setAddTarget] = useState("이미지1");
   return (
     <Modal open={open} onClose={onClose} width={480}>
       <div className="flex items-center justify-between px-4" style={{ height: 48, borderBottom: "1px solid " + LINE }}>
