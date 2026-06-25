@@ -1,0 +1,22 @@
+-- ─────────────────────────────────────────────────────────────
+-- 0035_seed_title_prompts.sql — 타이틀(영정 초상) 프롬프트 3유형 시드.
+--   Seedream i2i 템플릿에 'body'가 스타일 조각으로 주입됨:
+--     이미지1: …품위 있는 추모 분위기, [body], 고요하고 평온한 표정
+--     이미지2: …예술적 기법 변경, [body], 은은하고 평온한 분위기
+--   → 얼굴·추모 톤은 템플릿이 담당, body는 배경·화풍·질감·빛만 묘사.
+--   target: '이미지1'(독사진→영정초상) / '이미지2'(이미지1→화풍·배경 변경, 오버랩용).
+--   재실행 안전(고정 id, on conflict do nothing). active=false로 넣어 기존 활성 선택을 보존.
+-- ─────────────────────────────────────────────────────────────
+insert into memoria.ai_prompts (id, target, name, body, active) values
+  ('pr-title-warm-1',   '이미지1', '따뜻한 햇살 (생전 회상)',   '부드러운 황금빛 보케 배경, 따뜻한 역광과 포근한 실내광',        false),
+  ('pr-title-warm-2',   '이미지2', '따뜻한 햇살 (생전 회상)',   '따뜻한 유화풍, 인상주의적 붓터치, 황금빛 정원 배경',            false),
+  ('pr-title-bridge-1', '이미지1', '무지개다리 (평안한 떠남)',  '맑고 푸른 하늘과 흰구름 배경, 은은한 빛무리',                   false),
+  ('pr-title-bridge-2', '이미지2', '무지개다리 (평안한 떠남)',  '파스텔 수채화풍, 무지개와 뭉게구름, 몽환적인 천국 배경',        false),
+  ('pr-title-ink-1',    '이미지1', '한지 수묵 (격조·정적)',     '절제된 미색 배경, 은은한 한지 질감과 차분한 자연광',            false),
+  ('pr-title-ink-2',    '이미지2', '한지 수묵 (격조·정적)',     '전통 수묵담채화풍, 한지 번짐과 먹색, 여백의 미',                false)
+on conflict (id) do nothing;
+
+-- 해당 target에 활성 프롬프트가 아직 없으면 '따뜻한 햇살'을 기본 활성으로(이미 있으면 안 건드림).
+update memoria.ai_prompts a set active = true
+ where a.id in ('pr-title-warm-1', 'pr-title-warm-2')
+   and not exists (select 1 from memoria.ai_prompts b where b.target = a.target and b.active);
