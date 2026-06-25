@@ -52,14 +52,16 @@ export default function VideoEditor({ reservation, onClose }) {
   // 유저(보호자)가 완성한 실제 추모영상 — 워커가 적재한 최종본 서명URL. 미리보기 「원본」에서 재생.
   const sourceVideoUrl = (reservation?.id && submissionFor(store, reservation.id)?.videoUrl) || null;
 
-  // 보호자 업로드 실제 자산(강아지 사진·영상·편지) 로드 → 블록별 실제 미리보기. 진입 시 + 주기 폴링(AI 재생성 결과 자동 반영).
-  useEffect(() => {
-    if (!reservation?.id) return;
-    actions.loadReservationMedia(reservation.id);
-    const t = setInterval(() => actions.loadReservationMedia(reservation.id), 6000); // 생성 상태·결과 자동 갱신
-    return () => clearInterval(t);
-  }, [reservation?.id]);
+  // 보호자 업로드 실제 자산(강아지 사진·영상·편지) 로드. 진입 시 1회.
   const media = store.reservationMedia?.[reservation?.id];
+  const mediaLoading = ["queued", "rendering", "composing"].includes(media?.status); // 생성/합성 진행 중
+  useEffect(() => { if (reservation?.id) actions.loadReservationMedia(reservation.id); }, [reservation?.id]);
+  // 폴링은 "생성 중"일 때만 — 유휴 시엔 서명URL 재발급이 없어 미리보기 영상이 끊기지 않음(20초 클립 정상 재생).
+  useEffect(() => {
+    if (!reservation?.id || !mediaLoading) return;
+    const t = setInterval(() => actions.loadReservationMedia(reservation.id), 6000);
+    return () => clearInterval(t);
+  }, [reservation?.id, mediaLoading]);
   // 블록 id → { source(보호자 원본), result(AI 생성 결과) }. 미리보기 좌=원본 / 우=작업본.
   const blockMedia = useMemo(() => {
     const m = {};
