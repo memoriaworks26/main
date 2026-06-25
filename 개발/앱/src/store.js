@@ -417,10 +417,10 @@ export const actions = {
   },
 
   // ── 사이니지 디바이스 등록·인증·명령(라즈베리파이) [Phase8] ──
-  // 상태 새로고침 — DB에서 디바이스 재조회(하트비트/last_comm 반영).
-  refreshDevices: () => {
-    if (LIVE) { signage.fetchDevices().then((devices) => set({ devices })).catch((e) => toast("새로고침 실패: " + e.message)); return; }
-    toast("상태를 새로고침했습니다");
+  // 상태 새로고침 — DB에서 디바이스 재조회(하트비트/last_comm 반영). silent=등록대기 폴링용(토스트 없음).
+  refreshDevices: (silent) => {
+    if (LIVE) { signage.fetchDevices().then((devices) => set({ devices })).catch((e) => { if (!silent) toast("새로고침 실패: " + e.message); }); return; }
+    if (!silent) toast("상태를 새로고침했습니다");
   },
   // 일회성 명령 전송(restart/reboot/refresh/redownload) — pending_cmd로 적재, 파이가 다음 폴에 실행.
   sendDeviceCommand: (id, cmd) => {

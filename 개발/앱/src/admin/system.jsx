@@ -75,6 +75,49 @@ function Row({ label, children }) {
 const inputCls = "w-full px-3 text-[13px] outline-none focus-visible:ring-1";
 const inputSty = { height: 36, background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS, color: INK };
 
+// 파이가 붙을 엣지함수 베이스 주소(설정파일에 박음). 목업/미설정 시 자리표시자.
+const FUNCTIONS_BASE = (import.meta.env.VITE_SUPABASE_URL || "https://<프로젝트>.supabase.co") + "/functions/v1";
+// provision.json 다운로드 — SD카드 루트에 넣으면 첫 부팅에 파이가 읽어 자동 등록.
+//   wifi는 비워두면(랜선/화면설정) 무시, 미리 알면 채워서 출고 가능.
+function downloadProvision(dev, code) {
+  const cfg = { device: dev.id, code, server: FUNCTIONS_BASE, wifi: { ssid: "", password: "" } };
+  const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: "application/json" });
+  const href = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = href; a.download = "provision.json"; a.click();
+  setTimeout(() => window.URL.revokeObjectURL(href), 1000);
+}
+
+// 세팅 가이드 — 새 파이 받고 식장 재생까지 단계(랜선/와이파이 자동). 설정파일 다운로드 포함.
+function SetupGuide({ dev, code }) {
+  const steps = [
+    "메모리아웍스 마스터 SD이미지를 SD카드에 굽습니다. (출고 전 1회 · 재사용)",
+    "아래 설정파일(provision.json)을 받아 SD카드 루트에 복사합니다.",
+    "SD를 파이에 꽂고 모니터(HDMI)·전원을 연결합니다.",
+    "랜선이 있으면 꽂습니다. 없으면 전원만 — 첫 화면 안내대로 폰으로 와이파이를 입력합니다.",
+    "잠시 후 자동 등록되어 재생이 시작됩니다. 아래 상태가 '온라인'으로 바뀌면 완료.",
+  ];
+  return (
+    <div className="mt-3">
+      <div className="mb-1.5 text-[11px] font-semibold" style={{ color: FAINT }}>세팅 방법 (랜선·와이파이 자동 인식)</div>
+      <ol className="space-y-1 text-[12px]" style={{ color: MUTE }}>
+        {steps.map((s, i) => (
+          <li key={i} className="flex gap-2">
+            <span className="flex h-4 w-4 shrink-0 items-center justify-center text-[10px] font-bold" style={{ borderRadius: 3, background: GOLD_SOFT, color: GOLD_D }}>{i + 1}</span>
+            <span className="leading-snug">{s}</span>
+          </li>
+        ))}
+      </ol>
+      {code && (
+        <button onClick={() => downloadProvision(dev, code)} className="mt-2.5 flex items-center gap-1.5 px-3 py-2 text-[12px] font-semibold"
+          style={{ borderRadius: RADIUS, border: "1px solid " + LINE2, color: INK }}>
+          <Download className="h-3.5 w-3.5" /> 설정파일(provision.json) 다운로드
+        </button>
+      )}
+    </div>
+  );
+}
+
 // 디바이스 등록 모달 — 사업부→파트너사→호실 캐스케이드 + 등록코드 발급
 function RegisterModal({ open, onClose }) {
   const { bizUnits, partners } = useStore();
@@ -116,6 +159,7 @@ function RegisterModal({ open, onClose }) {
               <span className="font-bold tracking-[0.2em]" style={{ fontFamily: "ui-monospace, monospace", fontSize: 20, color: GOLD_D }}>{code}</span>
               <CopyBtn text={code} />
             </div>
+            <SetupGuide dev={{ id: devId.trim().toUpperCase() }} code={code} />
             <div className="mt-4 flex justify-end"><Btn size="sm" onClick={onClose}>닫기</Btn></div>
           </div>
         ) : (
@@ -147,45 +191,73 @@ function CmdBtn({ label, onClick, color = INK }) {
   );
 }
 
-// 디바이스 관리 모달 — 등록코드·명령(재시작/재부팅/새로고침/재다운로드)·재발급·폐기
+// 디바이스 관리 모달 — 세팅 가이드·등록코드·명령(재시작/재부팅/새로고침/재다운로드)·재발급·폐기
 function DeviceModal({ dev, onClose }) {
-  if (!dev) return null;
-  const cmd = (c) => actions.sendDeviceCommand(dev.id, c);
-  const reissue = async () => { try { toast("새 등록코드: " + await actions.issueDeviceEnroll(dev.id)); } catch (e) { toast(e.message); } };
+  const devices = useStore().devices;
+  const live = dev ? devices.find((d) => d.id === dev.id) || dev : null;   // 스토어 최신값(상태 실시간 반영)
+  const pending = !!live && !live.enrolled;
+  // 등록대기 동안 5초마다 조용히 리페치 → 파이가 켜지면 '온라인'으로 자동 전환되는 걸 지켜봄.
+  useEffect(() => {
+    if (!dev || !pending) return;
+    const t = setInterval(() => actions.refreshDevices(true), 5000);
+    return () => clearInterval(t);
+  }, [dev, pending]);
+  if (!dev || !live) return null;
+
+  const cmd = (c) => actions.sendDeviceCommand(live.id, c);
+  const reissue = async () => { try { toast("새 등록코드: " + await actions.issueDeviceEnroll(live.id)); } catch (e) { toast(e.message); } };
   const revoke = async () => {
-    if (!await confirm(dev.id + " 디바이스를 폐기할까요? 토큰이 무효화되어 재등록이 필요합니다.")) return;
-    try { await actions.revokeDevice(dev.id); toast(dev.id + " 폐기했습니다"); onClose(); } catch (e) { toast(e.message); }
+    if (!await confirm(live.id + " 디바이스를 폐기할까요? 토큰이 무효화되어 재등록이 필요합니다.")) return;
+    try { await actions.revokeDevice(live.id); toast(live.id + " 폐기했습니다"); onClose(); } catch (e) { toast(e.message); }
   };
   return (
     <Modal open={!!dev} onClose={onClose} width={400}>
       <div className="p-4">
         <div className="flex items-center justify-between">
-          <div className="text-[14px] font-bold" style={{ color: INK }}>{dev.id}</div>
-          <Tag s={dev.status === "pending" ? "standby" : dev.status} label={dev.status === "pending" ? "등록대기" : undefined} />
+          <div className="text-[14px] font-bold" style={{ color: INK }}>{live.id}</div>
+          <Tag s={live.status === "pending" ? "standby" : live.status} label={live.status === "pending" ? "등록대기" : undefined} />
         </div>
-        <div className="mt-0.5 text-[12px]" style={{ color: MUTE }}>{dev.partner} · {dev.room || "호실 미지정"}</div>
-        {!dev.enrolled && dev.enrollCode && (
-          <div className="mt-3 flex items-center justify-between px-3 py-2.5" style={{ background: GOLD_SOFT, border: "1px solid " + LINE, borderRadius: RADIUS }}>
-            <div>
-              <div className="text-[11px]" style={{ color: MUTE }}>등록 대기 — provision.json 코드</div>
-              <span className="font-bold tracking-[0.15em]" style={{ fontFamily: "ui-monospace, monospace", fontSize: 16, color: GOLD_D }}>{dev.enrollCode}</span>
+        <div className="mt-0.5 text-[12px]" style={{ color: MUTE }}>{live.partner} · {live.room || "호실 미지정"}</div>
+
+        {pending ? (
+          // 미등록 — 세팅 안내 + 등록코드 + (대기 중 자동 확인)
+          <>
+            {live.enrollCode && (
+              <div className="mt-3 flex items-center justify-between px-3 py-2.5" style={{ background: GOLD_SOFT, border: "1px solid " + LINE, borderRadius: RADIUS }}>
+                <div>
+                  <div className="text-[11px]" style={{ color: MUTE }}>등록 대기 — provision.json 코드 (24h)</div>
+                  <span className="font-bold tracking-[0.15em]" style={{ fontFamily: "ui-monospace, monospace", fontSize: 16, color: GOLD_D }}>{live.enrollCode}</span>
+                </div>
+                <CopyBtn text={live.enrollCode} />
+              </div>
+            )}
+            <SetupGuide dev={live} code={live.enrollCode} />
+            <div className="mt-2 flex items-center gap-1.5 text-[11px]" style={{ color: FAINT }}>
+              <RefreshCw className="h-3 w-3 animate-spin" /> 파이가 켜지면 자동으로 ‘온라인’으로 바뀝니다 (자동 확인 중)
             </div>
-            <CopyBtn text={dev.enrollCode} />
-          </div>
+            <div className="mt-3 flex justify-between">
+              <CmdBtn label="등록코드 재발급" onClick={reissue} />
+              <Btn size="sm" variant="ghost" onClick={onClose}>닫기</Btn>
+            </div>
+          </>
+        ) : (
+          // 등록 완료 — 명령·프로비저닝
+          <>
+            <div className="mt-4 mb-1.5 text-[11px] font-semibold" style={{ color: FAINT }}>명령 (다음 동기화에 디바이스가 실행)</div>
+            <div className="grid grid-cols-2 gap-1.5">
+              <CmdBtn label="플레이어 재시작" onClick={() => cmd("restart")} color={STATUS.online.c} />
+              <CmdBtn label="장비 재부팅" onClick={() => cmd("reboot")} color={STATUS.review.c} />
+              <CmdBtn label="강제 새로고침" onClick={() => cmd("refresh")} />
+              <CmdBtn label="영상 재다운로드" onClick={() => cmd("redownload")} />
+            </div>
+            <div className="mt-4 mb-1.5 text-[11px] font-semibold" style={{ color: FAINT }}>프로비저닝</div>
+            <div className="flex gap-1.5">
+              <CmdBtn label="등록코드 재발급" onClick={reissue} />
+              <CmdBtn label="디바이스 폐기" onClick={revoke} color="#a4564b" />
+            </div>
+            <div className="mt-4 flex justify-end"><Btn size="sm" variant="ghost" onClick={onClose}>닫기</Btn></div>
+          </>
         )}
-        <div className="mt-4 mb-1.5 text-[11px] font-semibold" style={{ color: FAINT }}>명령 (다음 동기화에 디바이스가 실행)</div>
-        <div className="grid grid-cols-2 gap-1.5">
-          <CmdBtn label="플레이어 재시작" onClick={() => cmd("restart")} color={STATUS.online.c} />
-          <CmdBtn label="장비 재부팅" onClick={() => cmd("reboot")} color={STATUS.review.c} />
-          <CmdBtn label="강제 새로고침" onClick={() => cmd("refresh")} />
-          <CmdBtn label="영상 재다운로드" onClick={() => cmd("redownload")} />
-        </div>
-        <div className="mt-4 mb-1.5 text-[11px] font-semibold" style={{ color: FAINT }}>프로비저닝</div>
-        <div className="flex gap-1.5">
-          <CmdBtn label="등록코드 재발급" onClick={reissue} />
-          <CmdBtn label="디바이스 폐기" onClick={revoke} color="#a4564b" />
-        </div>
-        <div className="mt-4 flex justify-end"><Btn size="sm" variant="ghost" onClick={onClose}>닫기</Btn></div>
       </div>
     </Modal>
   );
