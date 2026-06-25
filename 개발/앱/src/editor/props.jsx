@@ -34,7 +34,7 @@ function dlAnchor(url, name) {
 }
 
 // 소스/결과 카드 — 미리보기 + 생성(API) + 다운로드 + 교체 + 생성내역(버전 선택). 생성 중 로딩 표시.
-function AssetCard({ label, hint, asset, kind = "image", generating, onGenerate, genLabel = "AI 생성", onReplace, replaceAccept = "image/*", history = [], onSelect }) {
+function AssetCard({ label, hint, asset, kind = "image", generating, onGenerate, genLabel = "AI 생성", onReplace, replaceAccept = "image/*", history = [], onSelect, promptSlot }) {
   const has = !!asset?.url;
   const btn = "flex items-center gap-1 px-2 py-1.5 text-[11.5px] font-semibold outline-none disabled:opacity-50";
   const sub = { border: "1px solid " + LINE2, borderRadius: 5, color: MUTE };
@@ -56,6 +56,7 @@ function AssetCard({ label, hint, asset, kind = "image", generating, onGenerate,
           : <div className="absolute inset-0 flex items-center justify-center text-[11px]" style={{ color: FAINT }}>{onGenerate ? "아직 없음 — 생성하세요" : "없음"}</div>}
         {generating && <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5" style={{ background: "rgba(20,24,30,.6)" }}><Loader2 className="h-6 w-6 animate-spin text-white" /><span className="text-[11px] font-semibold text-white">생성 중… 잠시만요</span></div>}
       </div>
+      {promptSlot && <div className="mt-2">{promptSlot}</div>}
       <div className="mt-1.5 flex flex-wrap gap-1.5">
         {onGenerate && <button onClick={onGenerate} disabled={generating} className={btn + " text-white"} style={{ background: GOLD, borderRadius: 5 }}><RefreshCw className="h-3.5 w-3.5" /> {genLabel}</button>}
         {has && <button onClick={() => dlAnchor(asset.url, asset.name)} className={btn} style={sub}><Download className="h-3.5 w-3.5" /> 다운로드</button>}
@@ -137,7 +138,7 @@ function PromptPicker({ target, onManage }) {
   const list = store.prompts.filter((p) => p.target === target);
   const active = list.find((p) => p.active) || list[0];
   return (
-    <div className="mb-4">
+    <div>
       <div className="mb-1.5 flex items-center justify-between">
         <span className="text-[12.5px] font-semibold" style={{ color: INK }}>프롬프트</span>
         <button onClick={onManage} className="flex items-center gap-1 text-[11.5px] font-semibold outline-none" style={{ color: GOLD_D }}><SlidersHorizontal className="h-3.5 w-3.5" /> 관리</button>
@@ -251,11 +252,11 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
               <Field label="반려동물 이름"><input className={inputCls} style={{ ...inputStyle, fontFamily: SERIF }} value={petName} onChange={(e) => onEdit(item.id, { text: e.target.value })} /></Field>
             </div>
             <AssetCard label="보호자 독사진" hint="원본 소스" asset={_titlePhoto} kind="image" onReplace={repl(_titlePhoto?.id)} />
-            <PromptPicker target="이미지1" onManage={() => setPromptModal(true)} />
             <AssetCard label="① 이미지1" hint="독사진 → 영정·배경" asset={_img1} kind="image" generating={isGen("title:0")} onGenerate={() => gen("title:0")} genLabel={_img1 ? "재생성" : "AI 생성"} onReplace={repl(_img1?.id)}
+              promptSlot={<PromptPicker target="이미지1" onManage={() => setPromptModal(true)} />}
               history={_img1Vers.map((v) => ({ id: v.id, url: v.url, selected: v.selected }))} onSelect={(vid) => canEdit ? actions.selectAsset(resId, _subId, vid, "title_result", 0) : null} />
-            <PromptPicker target="이미지2" onManage={() => setPromptModal(true)} />
             <AssetCard label="② 이미지2" hint="이미지1 → 화풍·배경 변경" asset={_img2} kind="image" generating={isGen("title:1")} onGenerate={() => gen("title:1")} genLabel={_img2 ? "재생성" : "AI 생성"} onReplace={repl(_img2?.id)}
+              promptSlot={<PromptPicker target="이미지2" onManage={() => setPromptModal(true)} />}
               history={_img2Vers.map((v) => ({ id: v.id, url: v.url, selected: v.selected }))} onSelect={(vid) => canEdit ? actions.selectAsset(resId, _subId, vid, "title_result", 1) : null} />
             <AssetCard label="③ 영상화" hint="이미지1+2 → 완성 클립 20초" asset={_titleVideo} kind="video" generating={isGen("title:video")} onGenerate={() => gen("title:video")} genLabel={_titleVideo ? "다시 만들기" : "영상 만들기"} />
             <div className="mb-2 px-3 py-2.5 text-[11px] leading-relaxed" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
@@ -366,9 +367,9 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
           const repl = (aid) => (f) => (canEdit && aid) ? actions.replaceAsset(resId, aid, tok, f) : toast("실제 예약에서만 교체할 수 있습니다");
           return (
           <>
-            <PromptPicker target="AI영상" onManage={() => setPromptModal(true)} />
             <AssetCard label="보호자 독사진" hint="원본 소스" asset={srcAsset} kind="image" onReplace={repl(srcAsset?.id)} />
             <AssetCard label="AI 영상 (Kling)" hint="독사진 → 영상(약 5초)" asset={resA} kind="video" generating={isGen("ai:" + i)} onGenerate={gen} genLabel={resA ? "재생성" : "AI 생성"}
+              promptSlot={<PromptPicker target="AI영상" onManage={() => setPromptModal(true)} />}
               history={aiVers.map((v) => ({ id: v.id, url: v.url, selected: v.selected }))} onSelect={(vid) => canEdit ? actions.selectAsset(resId, _subId, vid, "ai_video_result", i) : null} />
             <div className="mt-1 px-3 py-2.5 text-[11.5px] leading-relaxed" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
               추억 슬라이드 앞(A) · 추억 영상 뒤(B)로 유저 소스를 감쌉니다.
