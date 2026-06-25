@@ -5,6 +5,8 @@
 import { db, getClient, UPLOAD_BUCKET } from "../supabase.js";
 
 const need = () => { const d = db(); if (!d) throw new Error("백엔드 미연결"); return d; };
+// 서명URL 캐시(경로별) — 같은 자산은 동일 URL 재사용 → 편집기 미리보기 video src 안정(재로딩·끊김 방지). 만료 5분 전 재발급.
+const _urlCache = new Map(); // storage_path -> { url, exp }
 const COLS = "id,token,reservation_id,pet_name,partner_name,status,video_url,created_at,expires_at";
 const mapSub = (r) => ({ id: r.id, token: r.token, reservationId: r.reservation_id, petName: r.pet_name, partnerName: r.partner_name, status: r.status, videoUrl: r.video_url, createdAt: r.created_at, expiresAt: r.expires_at });
 
@@ -28,12 +30,15 @@ export async function fetchReservationMedia(reservationId) {
   if (ae) throw new Error("자산 조회 실패: " + ae.message);
   const list = rows || [];
   const paths = list.map((r) => r.storage_path).filter(Boolean);
-  const urls = {};
-  if (paths.length) {
+  const now = Date.now();
+  const fresh = paths.filter((p) => { const c = _urlCache.get(p); return !(c && c.exp > now); }); // 캐시 만료된 것만 재발급
+  if (fresh.length) {
     const sbc = getClient();
-    const { data: signed } = await sbc.storage.from(UPLOAD_BUCKET).createSignedUrls(paths, 3600);
-    (signed || []).forEach((s, i) => { if (s && s.signedUrl) urls[paths[i]] = s.signedUrl; });
+    const { data: signed } = await sbc.storage.from(UPLOAD_BUCKET).createSignedUrls(fresh, 3600);
+    (signed || []).forEach((s, i) => { if (s && s.signedUrl) _urlCache.set(fresh[i], { url: s.signedUrl, exp: now + 55 * 60 * 1000 }); });
   }
+  const urls = {};
+  paths.forEach((p) => { const c = _urlCache.get(p); if (c) urls[p] = c.url; });
   const assets = list.map((r) => ({ id: r.id, kind: r.kind, role: r.role, name: r.name, sortOrder: r.sort_order, selected: r.selected !== false, createdAt: r.created_at, url: urls[r.storage_path] || null }));
   return { assets, submissionId: sub.id, token: sub.token, letter: sub.letter, metDate: sub.met_date, partDate: sub.part_date, status: sub.status, videoUrl: sub.video_url, regenTarget: sub.regen_target };
 }

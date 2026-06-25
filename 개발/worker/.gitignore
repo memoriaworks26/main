@@ -10,3 +10,4 @@ run-gen.mjs
 seed-test.mjs
 audio-test.mjs
 bgm-test.mjs
+make-stock.mjs

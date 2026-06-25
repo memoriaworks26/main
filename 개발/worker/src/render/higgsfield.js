@@ -21,18 +21,27 @@ const authHeader = (c) => ({
 });
 
 // 생성요청 → { id, cred }(첫 성공 키). 응답형태(실측): { id, jobs:[{id,status,results}], input_params }.
-//   크레딧소진(403)·결제(402)·인증(401)·서버오류(5xx)면 다음 키로 폴백. 그 외(422 등 요청오류)는 즉시 중단.
+//   429(레이트리밋): 같은 키로 지수 백오프 재시도(한 키 병렬 푸시 대비) → 소진되면 다음 키로.
+//   크레딧소진(403)·결제(402)·인증(401)·서버오류(5xx)면 바로 다음 키로 폴백. 그 외(422 등 요청오류)는 즉시 중단.
+const MAX_429_RETRY = Number(process.env.HIGGSFIELD_429_RETRY) || 4; // 같은 키 429 재시도 횟수(1·2·4·8초 백오프)
 async function submit(path, params) {
   if (!CREDS.length) throw new Error("HIGGSFIELD 키 미설정");
   let lastErr;
   for (const cred of CREDS) {
-    const res = await fetch(`${BASE}${path}`, { method: "POST", headers: authHeader(cred), body: JSON.stringify({ params }) });
-    const data = await res.json().catch(() => ({}));
-    if (res.ok && data.id) return { id: data.id, cred };
-    const det = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail ?? data);
-    lastErr = new Error(`higgsfield ${path} 실패(${res.status}): ${det}`);
-    const transient = res.status === 401 || res.status === 402 || res.status === 403 || res.status >= 500;
-    if (!transient) throw lastErr; // 422 등 요청 자체 오류는 키 바꿔도 동일 → 즉시 중단
+    for (let attempt = 0; attempt <= MAX_429_RETRY; attempt++) {
+      const res = await fetch(`${BASE}${path}`, { method: "POST", headers: authHeader(cred), body: JSON.stringify({ params }) });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.id) return { id: data.id, cred };
+      const det = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail ?? data);
+      lastErr = new Error(`higgsfield ${path} 실패(${res.status}): ${det}`);
+      if (res.status === 429 && attempt < MAX_429_RETRY) {
+        await new Promise((r) => setTimeout(r, Math.min(1000 * 2 ** attempt, 8000))); // 지수 백오프 후 같은 키 재시도
+        continue;
+      }
+      const transient = res.status === 401 || res.status === 402 || res.status === 403 || res.status === 429 || res.status >= 500;
+      if (!transient) throw lastErr; // 422 등 요청 자체 오류는 키 바꿔도 동일 → 즉시 중단
+      break; // 다음 키로 폴백(429는 재시도 소진, 그 외 transient는 즉시)
+    }
   }
   throw lastErr; // 모든 키 소진/오류
 }
@@ -57,9 +66,11 @@ async function poll(id, cred, { timeoutMs = 300000, intervalMs = 5000 } = {}) {
 
 // 타이틀 이미지(Seedream i2i). imageRefUrl: 원본 독사진 서명URL → 영정 초상으로 변환. 반환: 이미지 URL.
 //   /v1/text2image/seedream { params:{ prompt, input_images:[{type:"image_url",image_url}] } } (실측 검증).
-export async function generateTitleImage({ prompt, imageRefUrl }) {
-  if (!imageRefUrl) throw new Error("Seedream: 입력 사진(독사진) 필요");
-  const params = { prompt, input_images: [{ type: "image_url", image_url: imageRefUrl }] };
+export async function generateTitleImage({ prompt, imageRefUrl, imageRefUrls }) {
+  // 독사진 1장 + (옵션) 영정 배경 스톡 등 다중 입력 이미지 + 텍스트 프롬프트 함께 전송.
+  const urls = (imageRefUrls && imageRefUrls.length ? imageRefUrls : [imageRefUrl]).filter(Boolean);
+  if (!urls.length) throw new Error("Seedream: 입력 사진 필요");
+  const params = { prompt, input_images: urls.map((u) => ({ type: "image_url", image_url: u })) };
   const { id, cred } = await submit("/v1/text2image/seedream", params);
   return poll(id, cred);
 }

@@ -69,7 +69,7 @@ export default function VideoEditor({ reservation, onClose }) {
     const a = media.assets || [];
     const bySort = (p, q) => (p.sortOrder ?? 0) - (q.sortOrder ?? 0);
     const titleSrc = a.find((x) => x.role === "title" && x.url);
-    const titleVid = a.find((x) => x.role === "title_video" && x.url);   // 완성 타이틀 클립
+    const titleVid = a.find((x) => x.role === "title_video" && x.url && x.selected);   // 활성 완성 타이틀 클립
     const titleRes = a.filter((x) => x.role === "title_result" && x.url && x.selected).sort(bySort); // 활성 버전만
     const aiSrc = a.filter((x) => x.role === "ai_video" && x.url).sort(bySort);
     const aiRes = a.filter((x) => x.role === "ai_video_result" && x.url && x.selected).sort(bySort); // 활성 버전만
@@ -189,8 +189,12 @@ export default function VideoEditor({ reservation, onClose }) {
     toast("최종 렌더링을 시작했습니다 — 컨펌 대기");
     setTimeout(() => onClose && onClose(), 1000);
   };
-  // 컨펌 대기 → 검수 확인 후 컨펌·발행
+  // 컨펌 대기 → 검수 확인 후 컨펌·발행. 단, 최종 합성(submission done)이 끝나야 발행 가능.
   const confirmPublish = async () => {
+    if (!seJob && reservation?.id) {
+      const sub = submissionFor(store, reservation.id);
+      if (sub && sub.status !== "done") { toast("최종 렌더가 아직 진행 중입니다 — 완료 후 발행해 주세요"); return; }
+    }
     if (!(await confirm({ title: "확인·컨펌", message: "최종 렌더링 결과물을 확인하고 컨펌·발행합니다.\n발행 후에는 고객에게 노출됩니다." }))) return;
     setStage("published");
     toast("확인·컨펌되어 발행되었습니다");

@@ -96,9 +96,6 @@ function PromptCard({ p }) {
       <div className="flex items-center gap-2">
         <span className="px-1.5 py-[1px] text-[10.5px] font-bold" style={{ background: "#e9eef5", color: "#3f5e87", borderRadius: 3 }}>{p.target}</span>
         <input value={name} onChange={(e) => setName(e.target.value)} className="min-w-0 flex-1 px-2 py-1 text-[12.5px] font-semibold outline-none" style={{ background: "#fff", border: "1px solid " + LINE2, borderRadius: 4, color: INK }} />
-        {p.active
-          ? <span className="px-1.5 py-[2px] text-[10.5px] font-bold" style={{ background: GOLD_SOFT, color: GOLD_D, borderRadius: 3 }}>활성</span>
-          : <button onClick={() => actions.setPromptActive(p.id, p.target)} className="text-[11px] font-semibold" style={{ color: GOLD_D }}>활성 지정</button>}
         <button onClick={() => actions.removePrompt(p.id)} title="삭제" className="p-1" style={{ color: "#a23b3b" }}><Trash2 className="h-3.5 w-3.5" /></button>
       </div>
       <textarea rows={2} value={body} onChange={(e) => setBody(e.target.value)} placeholder="생성 프롬프트(영문 권장)" className="mt-2 w-full resize-none p-2 text-[11.5px] leading-relaxed outline-none" style={{ background: "#fff", border: "1px solid " + LINE2, borderRadius: 4, color: MUTE }} />
@@ -123,7 +120,7 @@ function PromptModal({ open, onClose }) {
       <div className="max-h-[58vh] space-y-2 overflow-y-auto px-4 py-3">
         {store.prompts.length === 0 && <div className="py-6 text-center text-[12px]" style={{ color: FAINT }}>프롬프트가 없습니다 — 위 「추가」로 만드세요.</div>}
         {store.prompts.map((p) => <PromptCard key={p.id} p={p} />)}
-        <p className="mt-1 text-[11.5px] leading-relaxed" style={{ color: FAINT }}>※ 타깃별 「활성」 프롬프트가 실제 AI 생성(타이틀 Seedream·AI영상 Kling)에 사용됩니다.</p>
+        <p className="mt-1 text-[11.5px] leading-relaxed" style={{ color: FAINT }}>※ 여기선 프롬프트 추가·수정·삭제만. 실제 사용할 프롬프트는 각 블록(이미지1·이미지2·AI영상)의 드롭다운에서 선택합니다.</p>
       </div>
       <div className="px-4 py-2.5" style={{ borderTop: "1px solid " + LINE }}>
         <button onClick={onClose} className="w-full py-2 text-[13px] font-bold" style={{ background: GOLD, color: "#fff", borderRadius: RADIUS }}>닫기</button>
@@ -201,7 +198,7 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
   const _newest = (p, q) => String(q.createdAt || "").localeCompare(String(p.createdAt || "")); // 최신 우선
   const slotVers = (role, sort) => _assets.filter((a) => a.role === role && (a.sortOrder ?? 0) === sort && a.url).sort(_newest);
   const selOf = (list) => list.find((a) => a.selected) || list[0] || null;
-  const _titleVideo = _assets.find((a) => a.role === "title_video" && a.url);
+  const _titleVidVers = slotVers("title_video", 0), _titleVideo = selOf(_titleVidVers);
   const _img1Vers = slotVers("title_result", 0), _img1 = selOf(_img1Vers);
   const _img2Vers = slotVers("title_result", 1), _img2 = selOf(_img2Vers);
   const _slideResult = _assets.find((a) => a.role === "slide_video" && a.url);
@@ -258,7 +255,8 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
             <AssetCard label="② 이미지2" hint="이미지1 → 화풍·배경 변경" asset={_img2} kind="image" generating={isGen("title:1")} onGenerate={() => gen("title:1")} genLabel={_img2 ? "재생성" : "AI 생성"} onReplace={repl(_img2?.id)}
               promptSlot={<PromptPicker target="이미지2" onManage={() => setPromptModal(true)} />}
               history={_img2Vers.map((v) => ({ id: v.id, url: v.url, selected: v.selected }))} onSelect={(vid) => canEdit ? actions.selectAsset(resId, _subId, vid, "title_result", 1) : null} />
-            <AssetCard label="③ 영상화" hint="이미지1+2 → 완성 클립 20초" asset={_titleVideo} kind="video" generating={isGen("title:video")} onGenerate={() => gen("title:video")} genLabel={_titleVideo ? "다시 만들기" : "영상 만들기"} />
+            <AssetCard label="③ 영상화" hint="이미지1+2 → 완성 클립 20초" asset={_titleVideo} kind="video" generating={isGen("title:video")} onGenerate={() => gen("title:video")} genLabel={_titleVideo ? "다시 만들기" : "영상 만들기"}
+              history={_titleVidVers.map((v) => ({ id: v.id, url: v.url, selected: v.selected }))} onSelect={(vid) => canEdit ? actions.selectAsset(resId, _subId, vid, "title_video", 0) : null} />
             <div className="mb-2 px-3 py-2.5 text-[11px] leading-relaxed" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
               ① 이미지1+자막이 서서히 나타나고 <b style={{ color: INK }}>10초</b>에 ② 이미지2가 오버랩 → 페이드아웃(총 20초). 이미지를 바꾸면 <b style={{ color: INK }}>③ 영상화</b>를 다시 눌러 반영하세요.
             </div>

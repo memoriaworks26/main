@@ -18,9 +18,12 @@ import { makeTitleVideo } from "./ffmpeg.js";
 const FONT = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../assets/NotoSansKR-Regular.otf");
 
 const cfg = loadConfig();
-// 타이틀 2장: ① 독사진 → 영정 초상+배경, ② ①을 화풍·배경 변경(오버랩용). 활성 프롬프트(ai_prompts) 스타일을 덧붙임.
-const titlePrompt1 = (name, style) => `${name} 반려동물 영정 초상, 또렷한 얼굴, 따뜻하고 품위 있는 추모 분위기${style ? ", " + style : ", 부드러운 황금빛 보케 배경"}, 고요하고 평온한 표정`;
+// 타이틀 2장: ① 독사진 → 영정 초상(영정 배경 스톡 위에 합성), ② ①을 화풍·배경 변경(오버랩용). 선택 프롬프트 텍스트 반영.
+const titlePrompt1 = (name, style, hasBg) => hasBg
+  ? `첫 번째 사진의 ${name} 반려동물 얼굴을 그대로 살려, 두 번째 사진(영정 배경) 위에 자연스럽게 올린 영정 초상. 또렷한 얼굴, 따뜻하고 품위 있는 추모 분위기${style ? ", " + style : ""}, 고요하고 평온한 표정`
+  : `${name} 반려동물 영정 초상, 또렷한 얼굴, 따뜻하고 품위 있는 추모 분위기${style ? ", " + style : ", 부드러운 황금빛 보케 배경"}, 고요하고 평온한 표정`;
 const titlePrompt2 = (name, style) => `${name} 추모 초상을 다른 화풍·배경으로 재해석, 예술적 기법 변경${style ? ", " + style : ", 전통 한지 질감과 절제된 먹색"}, 은은하고 평온한 분위기`;
+const STOCK_BG = "stock/jeongi_bg.png"; // memoria-content — 영정 배경 스톡
 const aiPromptDefault = "잔잔하고 따뜻한 추억의 흐름, 부드럽고 느린 카메라 무빙, 평온하고 따뜻한 분위기";
 
 // 타깃별 활성 프롬프트 body(ai_prompts). 없으면 null.
@@ -49,7 +52,6 @@ export async function generateBlocks(job, assets) {
   const titleStyle1 = await activePrompt("이미지1");  // 이미지1 전용 프롬프트
   const titleStyle2 = await activePrompt("이미지2");  // 이미지2 전용 프롬프트
   const aiStyle = await activePrompt("AI영상");
-  const tvPath = `${token}/results/title.mp4`;
   // 활성(selected) 슬롯 자산 경로(최신)
   const curTitleImg = async (sort) => { const { data } = await db.from("submission_assets").select("storage_path").eq("submission_id", job.id).eq("role", "title_result").eq("sort_order", sort).eq("selected", true).order("created_at", { ascending: false }).limit(1).maybeSingle(); return data?.storage_path || null; };
 
@@ -57,7 +59,10 @@ export async function generateBlocks(job, assets) {
   async function genTitleImg0() {
     if (!titleA) return 0;
     const ref = await sign(titleA);
-    const url1 = await generateTitleImage({ prompt: titlePrompt1(name, titleStyle1), imageRefUrl: ref });
+    let bg = null;
+    try { bg = await st.signedUrl("memoria-content", STOCK_BG, 3600); } catch { bg = null; } // 영정 배경 스톡(없으면 생략)
+    const refs = bg ? [ref, bg] : [ref];
+    const url1 = await generateTitleImage({ prompt: titlePrompt1(name, titleStyle1, !!bg), imageRefUrls: refs });
     const p = `${token}/results/title_0_${uniq()}.png`;
     await deselect("title_result", 0); await st.uploadFromUrl(cfg.uploadBucket, p, url1, "image/png");
     await ins({ submission_id: job.id, kind: "photo", role: "title_result", name: "이미지1", storage_path: p, sort_order: 0, selected: true });
@@ -83,9 +88,10 @@ export async function generateBlocks(job, assets) {
       await st.downloadTo(await st.signedUrl(cfg.uploadBucket, a1, 3600), path.join(dir, "t1.png"));
       const tv = path.join(dir, "title.mp4");
       await makeTitleVideo(path.join(dir, "t0.png"), path.join(dir, "t1.png"), `사랑하는 ${name}`, FONT, tv);
-      await del("title_video"); await st.uploadTo(cfg.uploadBucket, tvPath, await fs.readFile(tv), "video/mp4");
-      await ins({ submission_id: job.id, kind: "video", role: "title_video", name: "title.mp4", storage_path: tvPath, sort_order: 0 });
-      log.info("  타이틀 영상화(ffmpeg)");
+      const vp = `${token}/results/title_${uniq()}.mp4`;                    // 버전 누적(고유 경로)
+      await deselect("title_video"); await st.uploadTo(cfg.uploadBucket, vp, await fs.readFile(tv), "video/mp4");
+      await ins({ submission_id: job.id, kind: "video", role: "title_video", name: "타이틀 영상", storage_path: vp, sort_order: 0, selected: true });
+      log.info("  타이틀 영상화(ffmpeg) +버전");
     } finally { await fs.rm(dir, { recursive: true, force: true }); }
     return 0;
   }
@@ -113,8 +119,14 @@ export async function generateBlocks(job, assets) {
   else if (target === "title:video") await genTitleVideo();
   else if (target && target.startsWith("ai:")) count += await genAi(Number(target.slice(3)));
   else {
-    count += await genTitleAll();
-    for (let i = 0; i < aiPhotos.length; i++) count += await genAi(i);
+    // 병렬 발사 — 타이틀체인(이미지1→2→영상화)과 AI영상 N개는 서로 독립이라 동시 진행.
+    //   (이미지2는 이미지1 출력에 의존 → genTitleAll 내부에서만 순차 유지)
+    //   힉스필드 한 키 동시처리 실측 확인(4개 병렬 OK, 429 없음). 하나라도 실패하면 throw→작업 재시도.
+    const counts = await Promise.all([
+      genTitleAll(),
+      ...aiPhotos.map((_, i) => genAi(i)),
+    ]);
+    count += counts.reduce((a, b) => a + b, 0);
   }
   return { count };
 }
