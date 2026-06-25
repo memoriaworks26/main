@@ -1,6 +1,7 @@
 # 사이니지 에이전트 자동 실행 — 부팅 시 시작, 죽으면 즉시 재시작(검은화면 최소화).
-#   설치: /opt/memoria 에 코드 배치 → 이 파일을 /etc/systemd/system/ 에 복사
-#         sudo systemctl enable --now memoria-signage
+#   설치는 setup.sh가 처리. 코드 레이아웃(OTA 호환):
+#     /opt/memoria/current -> versions/<버전>   (심링크, updater가 스왑)
+#   부팅 시 에이전트가 OTA 확인 → 새 버전이면 교체 후 종료 → systemd가 새 코드로 재시작.
 [Unit]
 Description=Memoria Signage Player Agent
 After=network-online.target
@@ -8,7 +9,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=/opt/memoria
+WorkingDirectory=/opt/memoria/current
 ExecStart=/usr/bin/python3 -m memoria_signage
 Restart=always
 RestartSec=3

@@ -5,6 +5,7 @@
 import argparse
 import logging
 
+from . import __version__
 from .agent import Agent
 from .api import Api
 from .cache import Cache
@@ -12,6 +13,8 @@ from .config import Config, DEFAULT_PROVISION, DEFAULT_STATE_DIR, DEFAULT_CACHE_
 from .player import DryRunPlayer, MpvPlayer
 
 log = logging.getLogger("memoria.main")
+
+INSTALL_DIR = "/opt/memoria"   # OTA 레이아웃 루트(current -> versions/<ver>)
 
 
 class FakeApi:
@@ -55,6 +58,14 @@ def main(argv=None):
     code = a.code or ("FAKE" if a.fake else prov.get("code"))
     if a.server or a.code or a.fake:                       # CLI 오버라이드(테스트 편의)
         cfg.load_provision = lambda: {"code": code, "server": server}
+
+    # OTA 자기업데이트 — 부팅 시 1회만(재생 도중 아님). 새 버전이면 교체 후 종료 → systemd 재시작.
+    if not testing and prov.get("update_url"):
+        from .updater import check_and_update
+        applied = check_and_update(prov["update_url"], INSTALL_DIR, __version__)
+        if applied:
+            log.info("업데이트 %s 적용 — 재시작", applied)
+            return
 
     if a.fake:
         api = FakeApi()

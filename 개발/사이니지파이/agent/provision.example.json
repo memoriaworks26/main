@@ -2,5 +2,6 @@
   "device": "RPI-0441",
   "code": "ABCD1234",
   "server": "https://<프로젝트>.supabase.co/functions/v1",
+  "update_url": "",
   "wifi": { "ssid": "", "password": "" }
 }

@@ -1,11 +1,17 @@
-# 에이전트 두뇌 로직 검증 — 하드웨어·백엔드 없이(가짜 api + 드라이런 플레이어 + 비활성 캐시).
-#   실행:  cd 개발/사이니지파이/agent && python -m unittest -v
+# 에이전트 두뇌 로직 + OTA 검증 — 하드웨어·백엔드·네트워크 없이.
+#   실행:  cd 개발/사이니지파이/agent && python3 -m unittest discover -s tests -v
+import hashlib
+import io
+import os
+import tarfile
+import tempfile
 import unittest
 
 from memoria_signage.agent import Agent
 from memoria_signage.cache import Cache
 from memoria_signage.config import Config
 from memoria_signage.player import DryRunPlayer
+from memoria_signage import updater
 
 
 class FakeApi:
@@ -65,6 +71,49 @@ class AgentLogicTest(unittest.TestCase):
         agent.current_video_id = "V9"
         agent.tick()
         self.assertIsNone(agent.current_video_id)           # refresh → 다음 틱 재반영
+
+
+class UpdaterTest(unittest.TestCase):
+    def test_is_newer(self):
+        self.assertTrue(updater.is_newer("0.2.0", "0.1.0"))
+        self.assertFalse(updater.is_newer("0.1.0", "0.1.0"))
+        self.assertFalse(updater.is_newer("0.1.0", "0.2.0"))
+
+    def test_apply_update_swaps_symlink(self):
+        # 로컬 tarball(file://)로 OTA 적용 — 네트워크·하드웨어 없이 원자적 교체 검증.
+        install = tempfile.mkdtemp()
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+            data = b"new-version"
+            ti = tarfile.TarInfo("memoria_signage/_marker.txt")
+            ti.size = len(data)
+            tf.addfile(ti, io.BytesIO(data))
+        blob = buf.getvalue()
+        tarpath = os.path.join(install, "pkg.tar.gz")
+        with open(tarpath, "wb") as f:
+            f.write(blob)
+        manifest = {"version": "0.2.0", "url": "file://" + tarpath, "sha256": hashlib.sha256(blob).hexdigest()}
+
+        ver = updater.apply_update(manifest, install)
+        self.assertEqual(ver, "0.2.0")
+        cur = os.path.join(install, "current")
+        self.assertTrue(os.path.islink(cur))                # current는 심링크
+        self.assertEqual(os.path.realpath(cur), os.path.realpath(os.path.join(install, "versions", "0.2.0")))
+        self.assertTrue(os.path.exists(os.path.join(cur, "memoria_signage", "_marker.txt")))
+
+    def test_apply_update_rejects_bad_sha(self):
+        install = tempfile.mkdtemp()
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+            ti = tarfile.TarInfo("memoria_signage/x.txt"); ti.size = 1
+            tf.addfile(ti, io.BytesIO(b"y"))
+        tarpath = os.path.join(install, "p.tar.gz")
+        with open(tarpath, "wb") as f:
+            f.write(buf.getvalue())
+        manifest = {"version": "9.9.9", "url": "file://" + tarpath, "sha256": "deadbeef"}
+        with self.assertRaises(ValueError):                 # 해시 불일치 → 적용 중단
+            updater.apply_update(manifest, install)
+        self.assertFalse(os.path.exists(os.path.join(install, "current")))   # current 안 만들어짐
 
 
 if __name__ == "__main__":

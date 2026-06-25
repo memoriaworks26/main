@@ -222,5 +222,11 @@ signage_devices → rooms ← reservations ← videos(final_path)
   - 온보딩 = 랜선/와이파이 자동 판단(이미지 1개): 랜선 제로터치 / 와이파이는 캡티브 포털(파이 자체 핫스팟+TV안내+폰 입력). 식장에서 방식 안 고름.
   - 관리자 사이니지탭: 등록 모달·관리 모달에 **세팅 가이드 + provision.json 다운로드 + 등록대기 중 5초 폴링으로 '온라인' 자동 전환 표시** 추가.
   - 캡티브 포털 구현은 2단계 파이 에이전트(하드웨어). 콘솔 쪽은 랜선/와이파이 무관하게 동일 → 완료.
+- **2026-06-25(3) · 파이 에이전트 두뇌 + 배포모델(A: 마스터이미지 + OTA) 확정**
+  - `agent/` Python stdlib만(의존성 0): config·api·cache·player·agent·updater + __main__. DryRunPlayer↔MpvPlayer로 부작용 격리.
+  - 노트북 검증: `python3 -m memoria_signage --fake --dry-run`(두뇌 흐름) + unittest 7건(에이전트4·OTA3) 통과.
+  - **배포 = 마스터 이미지(A)**: setup.sh로 기준 파이 엔진 설치 → 검증 → SD 이미지로 떠서 복제. 안정성 우선(불안정 네트워크에도 부팅, 100대 동일).
+  - **확장 = OTA**: provision.json update_url 매니페스트 → 부팅마다 sha256 검증 후 심링크 원자적 교체(롤백 보존). 현장 재방문 없이 함대 갱신.
+  - 남은 것(하드웨어): MpvPlayer 실측·키오스크·캡티브포털·USB·워치독·마스터이미지 추출.
 
 > 운영 단계 고려(v1 이후): OS 보안패치 정책, SD 수명 관리, 디바이스 인벤토리(시리얼·MAC·보증), 시연/테스트 모드.
