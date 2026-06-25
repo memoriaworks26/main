@@ -137,9 +137,9 @@ function LiveCard({ dev }) {
           <>
             <div className="mb-2.5 px-3 py-2.5 text-[12.5px]" style={{ background: "#f1ece3", border: "1px solid #e4dcce", borderRadius: RADIUS, color: STOP_BROWN }}>장비가 응답하지 않습니다.</div>
             <div className="space-y-2">
-              <button onClick={() => toast("상태를 새로고침했습니다")} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[12.5px] font-bold" style={{ borderRadius: RADIUS, border: "1px solid " + LINE2, color: INK }}><RefreshCw className="h-4 w-4" /> 상태 새로고침</button>
-              <button onClick={() => toast("플레이어를 재시작했습니다")} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[12.5px] font-bold" style={{ borderRadius: RADIUS, border: "1.5px solid " + SIG_GREEN, color: SIG_GREEN }}><Play className="h-4 w-4" /> 플레이어 재시작</button>
-              <button onClick={() => toast("장비를 재부팅했습니다")} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[12.5px] font-bold" style={{ borderRadius: RADIUS, border: "1.5px solid " + WARN_AMBER, color: WARN_AMBER }}><Zap className="h-4 w-4" /> 장비 재부팅</button>
+              <button onClick={() => actions.refreshDevices()} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[12.5px] font-bold" style={{ borderRadius: RADIUS, border: "1px solid " + LINE2, color: INK }}><RefreshCw className="h-4 w-4" /> 상태 새로고침</button>
+              <button onClick={() => actions.sendDeviceCommand(dev.id, "restart")} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[12.5px] font-bold" style={{ borderRadius: RADIUS, border: "1.5px solid " + SIG_GREEN, color: SIG_GREEN }}><Play className="h-4 w-4" /> 플레이어 재시작</button>
+              <button onClick={() => actions.sendDeviceCommand(dev.id, "reboot")} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[12.5px] font-bold" style={{ borderRadius: RADIUS, border: "1.5px solid " + WARN_AMBER, color: WARN_AMBER }}><Zap className="h-4 w-4" /> 장비 재부팅</button>
             </div>
           </>
         ) : (
@@ -394,7 +394,7 @@ export function Live() {
   const [srcCat, setSrcCat] = useState(null); // 열린 소스 관리 모달 카테고리
   return (
     <div>
-      <PageHeader title="라이브 컨트롤" sub="사이니지를 실시간으로 제어합니다." right={<Btn size="sm" variant="neutral"><RefreshCw className="h-3.5 w-3.5" /> 상태 새로고침</Btn>} />
+      <PageHeader title="라이브 컨트롤" sub="사이니지를 실시간으로 제어합니다." right={<Btn size="sm" variant="neutral" onClick={() => actions.refreshDevices()}><RefreshCw className="h-3.5 w-3.5" /> 상태 새로고침</Btn>} />
       {/* 라즈베리파이 디바이스 헬스 — 온라인·오프라인·네트워크 끊김 */}
       <div className="mb-4 space-y-2">
         <div className="flex flex-wrap gap-2">

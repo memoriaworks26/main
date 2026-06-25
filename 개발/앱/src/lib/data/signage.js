@@ -8,9 +8,11 @@ import { db } from "../supabase.js";
 
 const need = () => { const d = db(); if (!d) throw new Error("백엔드 미연결"); return d; };
 const mapDevice = (r) => ({
-  id: r.id, partner: r.partner?.name, room: r.room_label,
+  id: r.id, partnerId: r.partner_id, partner: r.partner?.name, roomId: r.room_id, room: r.room_label,
   status: r.status, playing: r.playing, mode: r.mode,
   volume: r.volume, muted: r.muted, ip: r.ip, lastComm: r.last_comm,
+  enrolled: !!r.device_token_hash, enrollCode: r.enroll_code,    // 토큰해시 값은 노출 X(불리언만)
+  pendingCmd: r.pending_cmd, orientation: r.orientation, currentVideoId: r.current_video_id,
 });
 
 export async function fetchDevices() {
@@ -18,6 +20,35 @@ export async function fetchDevices() {
   const { data, error } = await d.from("signage_devices").select("*, partner:partners(name)").order("id");
   if (error) throw new Error("디바이스 조회 실패: " + error.message);
   return (data || []).map(mapDevice);
+}
+
+// ── 디바이스 등록·인증·명령(라즈베리파이 프로비저닝) ──
+//   등록: 행 insert → 등록코드 발급(RPC). 코드는 SD provision.json에 넣어 첫 부팅 자동등록.
+export async function registerDevice({ id, partnerId, roomId }) {
+  const d = need();
+  const { error } = await d.from("signage_devices").insert({
+    id, partner_id: partnerId, room_id: roomId || null, status: "pending", mode: "대기",
+  });
+  if (error) throw new Error("등록 실패: " + error.message);
+  return issueEnroll(id);   // 발급된 등록코드 반환
+}
+export async function issueEnroll(id) {
+  const d = need();
+  const { data, error } = await d.rpc("signage_issue_enroll", { p_device: id });
+  if (error) throw new Error("코드 발급 실패: " + error.message);
+  return data;   // 8자리 등록코드
+}
+export async function revokeDevice(id) {
+  const d = need();
+  const { error } = await d.rpc("signage_revoke", { p_device: id });
+  if (error) throw new Error("폐기 실패: " + error.message);
+}
+// 일회성 명령(restart/reboot/refresh/redownload) — 파이가 다음 폴에서 읽고 실행 후 비워짐.
+export async function sendCommand(id, cmd) {
+  const d = need();
+  const { error } = await d.from("signage_devices")
+    .update({ pending_cmd: cmd, pending_cmd_at: new Date().toISOString() }).eq("id", id);
+  if (error) throw new Error("명령 실패: " + error.message);
 }
 
 // mode/volume/muted/playing/status만 DB 반영(play 등 전송제어 상태는 store 전용).

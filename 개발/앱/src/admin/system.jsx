@@ -1,10 +1,10 @@
 // [시스템·총관리자] 사이니지(Signage) + 스토리지/기간 다운로드(Storage).
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
-  AlertTriangle, CheckSquare, Clapperboard, ChevronDown, ChevronUp, ChevronsUpDown, Download, HardDrive, RefreshCw, Square, Trash2,
+  AlertTriangle, CheckSquare, Clapperboard, ChevronDown, ChevronUp, ChevronsUpDown, Download, HardDrive, Plus, RefreshCw, Square, Trash2,
 } from "lucide-react";
 import { SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, STATUS, RADIUS } from "../theme.js";
-import { Tag, Btn, Card, Table, PageHeader, DateField, useTableSort } from "../ui.jsx";
+import { Tag, Btn, Card, Table, PageHeader, DateField, CopyBtn, Modal, useTableSort } from "../ui.jsx";
 import { toast } from "../toast.jsx";
 import { confirm } from "../confirm.jsx";
 import { useStore, actions } from "../store.js";
@@ -13,12 +13,23 @@ import * as storage from "../lib/storage.js";
 import { SearchSelect } from "./shared.jsx";
 
 export function Signage() {
-  const { devices } = useStore();
-  const partners = [...new Set(devices.map((d) => d.partner))];
-  const [pf, setPf] = useState("all");
-  const filtered = devices.filter((d) => pf === "all" || d.partner === pf);
+  const { devices, bizUnits, partners } = useStore();
+  const [bf, setBf] = useState("all");   // 사업부 필터
+  const [pf, setPf] = useState("all");   // 파트너사 필터
+  const [reg, setReg] = useState(false); // 등록 모달
+  const [sel, setSel] = useState(null);  // 관리 모달 대상 디바이스
+
+  // 디바이스 → 파트너 레코드(id 우선, 목업 호환 위해 이름도) → 사업부
+  const partnerOf = (d) => partners.find((p) => p.id === d.partnerId || p.name === d.partner);
+  const partnerOpts = bf === "all" ? partners : partners.filter((p) => p.bizUnit === bf);
+  const filtered = devices.filter((d) => {
+    const p = partnerOf(d);
+    if (bf !== "all" && (!p || p.bizUnit !== bf)) return false;
+    if (pf !== "all" && (!p || p.id !== pf)) return false;
+    return true;
+  });
   const { rows, sort, onSortChange } = useTableSort(filtered);
-  const online = filtered.filter((d) => d.status !== "offline").length;
+  const online = filtered.filter((d) => d.status !== "offline" && d.status !== "pending").length;
   const cols = [
     { key: "partner", label: "파트너사", sortable: true }, { key: "id", label: "디바이스", sortable: true }, { key: "room", label: "호실", sortable: true },
     { key: "status", label: "상태", sortable: true }, { key: "playing", label: "표출 중", sortable: true },
@@ -26,20 +37,157 @@ export function Signage() {
   ];
   return (
     <div>
-      <PageHeader title="사이니지" sub="파트너사별 라즈베리파이 디바이스 매핑·재생·온라인 (udev·systemd · 네트워크 독립)" right={<Btn size="sm" variant="ghost" onClick={() => toast("상태를 새로고침했습니다")}><RefreshCw className="h-3.5 w-3.5" /> 상태 새로고침</Btn>} />
-      <div className="mb-3 flex items-center justify-between">
+      <PageHeader title="사이니지" sub="사업부·파트너사별 라즈베리파이 디바이스 등록·매핑·재생·온라인 (udev·systemd · 네트워크 독립)"
+        right={<div className="flex gap-1.5">
+          <Btn size="sm" variant="ghost" onClick={() => actions.refreshDevices()}><RefreshCw className="h-3.5 w-3.5" /> 상태 새로고침</Btn>
+          <Btn size="sm" onClick={() => setReg(true)}><Plus className="h-3.5 w-3.5" /> 디바이스 등록</Btn>
+        </div>} />
+      <div className="mb-3 flex items-center gap-2">
+        <SearchSelect value={bf} onChange={(v) => { setBf(v); setPf("all"); }} placeholder="전체 사업부"
+          options={[{ value: "all", label: "전체 사업부" }, ...bizUnits.map((b) => ({ value: b.id, label: b.name }))]} />
         <SearchSelect value={pf} onChange={setPf} placeholder="전체 파트너사"
-          options={[{ value: "all", label: "전체 파트너사" }, ...partners.map((p) => ({ value: p, label: p }))]} />
-        <span className="text-[12px]" style={{ color: MUTE }}>온라인 <b style={{ color: STATUS.online.c }}>{online}</b> / {rows.length}</span>
+          options={[{ value: "all", label: "전체 파트너사" }, ...partnerOpts.map((p) => ({ value: p.id, label: p.name }))]} />
+        <span className="ml-auto text-[12px]" style={{ color: MUTE }}>온라인 <b style={{ color: STATUS.online.c }}>{online}</b> / {rows.length}</span>
       </div>
       <Table cols={cols} rows={rows} sort={sort} onSortChange={onSortChange} renderCell={(r, k) =>
-        k === "status" ? <Tag s={r.status} /> :
-        k === "act" ? <button onClick={() => toast(r.id + " 디바이스를 제어합니다")} className="text-[12px] font-semibold" style={{ color: GOLD }}>제어</button> :
+        k === "status" ? <Tag s={r.status === "pending" ? "standby" : r.status} label={r.status === "pending" ? "등록대기" : undefined} /> :
+        k === "act" ? <button onClick={() => setSel(r)} className="text-[12px] font-semibold" style={{ color: GOLD }}>관리</button> :
         k === "partner" ? <span className="font-semibold" style={{ color: INK }}>{r.partner}</span> :
-        k === "ip" ? <span className="tabular-nums">{r.ip}</span> : r[k]
+        k === "playing" ? (r.enrolled ? r.playing : <span style={{ color: FAINT }}>등록대기 · 코드 {r.enrollCode || "—"}</span>) :
+        k === "ip" ? <span className="tabular-nums">{r.ip || "—"}</span> : r[k]
       } />
-      <p className="mt-3 text-[11px]" style={{ color: FAINT }}>※ 사이니지 범위(영상 루프만 / 정보안내 화면도)는 메모리아웍스 확인 항목(⚠️E).</p>
+      <p className="mt-3 text-[11px]" style={{ color: FAINT }}>※ 디바이스 등록 시 발급되는 코드를 SD의 <span style={{ fontFamily: "ui-monospace, monospace" }}>provision.json</span>에 넣으면 첫 부팅에 자동 등록됩니다.</p>
+      <RegisterModal open={reg} onClose={() => setReg(false)} />
+      <DeviceModal dev={sel} onClose={() => setSel(null)} />
     </div>
+  );
+}
+
+// 라벨 + 입력 한 줄
+function Row({ label, children }) {
+  return (
+    <label className="block">
+      <span className="text-[11.5px] font-semibold" style={{ color: MUTE }}>{label}</span>
+      <div className="mt-1">{children}</div>
+    </label>
+  );
+}
+const inputCls = "w-full px-3 text-[13px] outline-none focus-visible:ring-1";
+const inputSty = { height: 36, background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS, color: INK };
+
+// 디바이스 등록 모달 — 사업부→파트너사→호실 캐스케이드 + 등록코드 발급
+function RegisterModal({ open, onClose }) {
+  const { bizUnits, partners } = useStore();
+  const [biz, setBiz] = useState("");
+  const [pid, setPid] = useState("");
+  const [rooms, setRooms] = useState([]);
+  const [roomId, setRoomId] = useState("");
+  const [devId, setDevId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [code, setCode] = useState("");
+
+  useEffect(() => { if (!open) { setBiz(""); setPid(""); setRooms([]); setRoomId(""); setDevId(""); setBusy(false); setCode(""); } }, [open]);
+  useEffect(() => { setPid(""); setRooms([]); setRoomId(""); }, [biz]);
+  useEffect(() => {
+    if (!pid) { setRooms([]); setRoomId(""); return; }
+    let alive = true;
+    actions.fetchPartnerRooms(pid).then((r) => { if (alive) setRooms(r); }).catch(() => {});
+    return () => { alive = false; };
+  }, [pid]);
+
+  const bizPartners = biz ? partners.filter((p) => p.bizUnit === biz) : [];
+  const submit = async () => {
+    if (!devId.trim()) return toast("디바이스 ID를 입력하세요 (예: RPI-0441)");
+    if (!pid) return toast("파트너사를 선택하세요");
+    setBusy(true);
+    try { setCode(await actions.registerDevice({ id: devId.trim().toUpperCase(), partnerId: pid, roomId: roomId || null })); }
+    catch (e) { toast(e.message || "등록 실패"); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <Modal open={open} onClose={onClose} width={420}>
+      <div className="p-4">
+        {code ? (
+          <div>
+            <div className="text-[14px] font-bold" style={{ color: INK }}>등록 완료</div>
+            <p className="mt-1 text-[12px] leading-relaxed" style={{ color: MUTE }}>아래 등록코드를 디바이스 SD의 <span style={{ fontFamily: "ui-monospace, monospace" }}>provision.json</span>에 넣으면 첫 부팅에 자동 등록됩니다. <b>24시간 유효</b>.</p>
+            <div className="mt-3 flex items-center justify-between px-3 py-3" style={{ background: GOLD_SOFT, border: "1px solid " + LINE, borderRadius: RADIUS }}>
+              <span className="font-bold tracking-[0.2em]" style={{ fontFamily: "ui-monospace, monospace", fontSize: 20, color: GOLD_D }}>{code}</span>
+              <CopyBtn text={code} />
+            </div>
+            <div className="mt-4 flex justify-end"><Btn size="sm" onClick={onClose}>닫기</Btn></div>
+          </div>
+        ) : (
+          <div>
+            <div className="text-[14px] font-bold" style={{ color: INK }}>디바이스 등록</div>
+            <p className="mt-1 text-[12px]" style={{ color: MUTE }}>사업부 → 파트너사 → 호실을 고르면 등록코드가 발급됩니다.</p>
+            <div className="mt-3 space-y-2.5">
+              <Row label="디바이스 ID"><input value={devId} onChange={(e) => setDevId(e.target.value)} placeholder="RPI-0441" className={inputCls} style={inputSty} /></Row>
+              <Row label="사업부"><SearchSelect value={biz} onChange={setBiz} placeholder="사업부 선택" width="100%" options={bizUnits.map((b) => ({ value: b.id, label: b.name }))} /></Row>
+              <Row label="파트너사"><SearchSelect value={pid} onChange={setPid} placeholder={biz ? "파트너사 선택" : "사업부 먼저 선택"} width="100%" options={bizPartners.map((p) => ({ value: p.id, label: p.name }))} /></Row>
+              <Row label="호실 (선택)"><SearchSelect value={roomId} onChange={setRoomId} placeholder={pid ? "호실 선택" : "파트너사 먼저 선택"} width="100%" options={rooms.map((r) => ({ value: r.id, label: r.name }))} /></Row>
+            </div>
+            <div className="mt-4 flex justify-end gap-1.5">
+              <Btn size="sm" variant="ghost" onClick={onClose}>취소</Btn>
+              <Btn size="sm" onClick={submit} disabled={busy}>{busy ? "등록 중…" : "등록"}</Btn>
+            </div>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+// 명령 버튼(작은 테두리 버튼)
+function CmdBtn({ label, onClick, color = INK }) {
+  return (
+    <button onClick={onClick} className="py-2 text-[12px] font-semibold outline-none transition focus-visible:ring-1"
+      style={{ borderRadius: RADIUS, border: "1px solid " + LINE2, color }}>{label}</button>
+  );
+}
+
+// 디바이스 관리 모달 — 등록코드·명령(재시작/재부팅/새로고침/재다운로드)·재발급·폐기
+function DeviceModal({ dev, onClose }) {
+  if (!dev) return null;
+  const cmd = (c) => actions.sendDeviceCommand(dev.id, c);
+  const reissue = async () => { try { toast("새 등록코드: " + await actions.issueDeviceEnroll(dev.id)); } catch (e) { toast(e.message); } };
+  const revoke = async () => {
+    if (!await confirm(dev.id + " 디바이스를 폐기할까요? 토큰이 무효화되어 재등록이 필요합니다.")) return;
+    try { await actions.revokeDevice(dev.id); toast(dev.id + " 폐기했습니다"); onClose(); } catch (e) { toast(e.message); }
+  };
+  return (
+    <Modal open={!!dev} onClose={onClose} width={400}>
+      <div className="p-4">
+        <div className="flex items-center justify-between">
+          <div className="text-[14px] font-bold" style={{ color: INK }}>{dev.id}</div>
+          <Tag s={dev.status === "pending" ? "standby" : dev.status} label={dev.status === "pending" ? "등록대기" : undefined} />
+        </div>
+        <div className="mt-0.5 text-[12px]" style={{ color: MUTE }}>{dev.partner} · {dev.room || "호실 미지정"}</div>
+        {!dev.enrolled && dev.enrollCode && (
+          <div className="mt-3 flex items-center justify-between px-3 py-2.5" style={{ background: GOLD_SOFT, border: "1px solid " + LINE, borderRadius: RADIUS }}>
+            <div>
+              <div className="text-[11px]" style={{ color: MUTE }}>등록 대기 — provision.json 코드</div>
+              <span className="font-bold tracking-[0.15em]" style={{ fontFamily: "ui-monospace, monospace", fontSize: 16, color: GOLD_D }}>{dev.enrollCode}</span>
+            </div>
+            <CopyBtn text={dev.enrollCode} />
+          </div>
+        )}
+        <div className="mt-4 mb-1.5 text-[11px] font-semibold" style={{ color: FAINT }}>명령 (다음 동기화에 디바이스가 실행)</div>
+        <div className="grid grid-cols-2 gap-1.5">
+          <CmdBtn label="플레이어 재시작" onClick={() => cmd("restart")} color={STATUS.online.c} />
+          <CmdBtn label="장비 재부팅" onClick={() => cmd("reboot")} color={STATUS.review.c} />
+          <CmdBtn label="강제 새로고침" onClick={() => cmd("refresh")} />
+          <CmdBtn label="영상 재다운로드" onClick={() => cmd("redownload")} />
+        </div>
+        <div className="mt-4 mb-1.5 text-[11px] font-semibold" style={{ color: FAINT }}>프로비저닝</div>
+        <div className="flex gap-1.5">
+          <CmdBtn label="등록코드 재발급" onClick={reissue} />
+          <CmdBtn label="디바이스 폐기" onClick={revoke} color="#a4564b" />
+        </div>
+        <div className="mt-4 flex justify-end"><Btn size="sm" variant="ghost" onClick={onClose}>닫기</Btn></div>
+      </div>
+    </Modal>
   );
 }
 

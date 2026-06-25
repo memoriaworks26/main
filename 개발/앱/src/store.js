@@ -120,6 +120,8 @@ export const term = (s, key, side, bizId = s.bizUnit) => {
 export const userTextOf = (s, bizId = s.bizUnit) => ({ ...D.USER_TEXT, ...(s.userText[bizId] || {}) });
 
 const mapById = (arr, id, patch) => arr.map((x) => (x.id === id ? { ...x, ...patch } : x));
+// 목업용 등록코드(8자리). 라이브는 서버 RPC가 발급.
+const mockCode = () => Math.random().toString(36).slice(2, 10).toUpperCase();
 
 export const actions = {
   // [Phase4-1] 라이브 부팅 시 DB에서 사업부·파트너 적재(AuthGate가 staff 로그인 후 호출).
@@ -414,6 +416,55 @@ export const actions = {
     set((s) => ({ devices: mapById(s.devices, id, { muted }) }));
   },
 
+  // ── 사이니지 디바이스 등록·인증·명령(라즈베리파이) [Phase8] ──
+  // 상태 새로고침 — DB에서 디바이스 재조회(하트비트/last_comm 반영).
+  refreshDevices: () => {
+    if (LIVE) { signage.fetchDevices().then((devices) => set({ devices })).catch((e) => toast("새로고침 실패: " + e.message)); return; }
+    toast("상태를 새로고침했습니다");
+  },
+  // 일회성 명령 전송(restart/reboot/refresh/redownload) — pending_cmd로 적재, 파이가 다음 폴에 실행.
+  sendDeviceCommand: (id, cmd) => {
+    const L = { restart: "플레이어 재시작", reboot: "장비 재부팅", refresh: "강제 새로고침", redownload: "영상 재다운로드" };
+    if (LIVE) { signage.sendCommand(id, cmd).then(() => { set((s) => ({ devices: mapById(s.devices, id, { pendingCmd: cmd }) })); toast((L[cmd] || cmd) + " 명령을 보냈습니다"); }).catch((e) => toast("명령 실패: " + e.message)); return; }
+    set((s) => ({ devices: mapById(s.devices, id, { pendingCmd: cmd }) }));
+    toast((L[cmd] || cmd) + " 명령을 보냈습니다");
+  },
+  // 디바이스 등록 → 등록코드 반환(SD provision.json용). 등록 후 디바이스 목록 갱신.
+  registerDevice: async ({ id, partnerId, roomId }) => {
+    if (LIVE) {
+      const code = await signage.registerDevice({ id, partnerId, roomId });
+      const devices = await signage.fetchDevices();
+      set({ devices });
+      return code;
+    }
+    const code = mockCode();
+    const partner = state.partners.find((p) => p.id === partnerId);
+    const room = state.rooms.find((r) => r.id === roomId);
+    set((s) => ({ devices: [...s.devices, { id, partnerId, partner: partner?.name, roomId, room: room?.name, status: "pending", mode: "대기", volume: 50, muted: false, enrolled: false, enrollCode: code }] }));
+    return code;
+  },
+  // 등록코드 재발급(=재프로비저닝, 기존 토큰 폐기).
+  issueDeviceEnroll: async (id) => {
+    if (LIVE) {
+      const code = await signage.issueEnroll(id);
+      set((s) => ({ devices: mapById(s.devices, id, { enrollCode: code, enrolled: false, status: "pending" }) }));
+      return code;
+    }
+    const code = mockCode();
+    set((s) => ({ devices: mapById(s.devices, id, { enrollCode: code, enrolled: false, status: "pending" }) }));
+    return code;
+  },
+  // 디바이스 폐기(분실·교체 — 토큰/코드 무효화).
+  revokeDevice: async (id) => {
+    if (LIVE) { await signage.revokeDevice(id); set((s) => ({ devices: mapById(s.devices, id, { enrolled: false, enrollCode: null, status: "offline" }) })); return; }
+    set((s) => ({ devices: mapById(s.devices, id, { enrolled: false, enrollCode: null, status: "offline" }) }));
+  },
+  // 등록 모달용 — 파트너사의 호실 목록(라이브=DB 조회, 목업=시드 필터).
+  fetchPartnerRooms: (partnerId) => {
+    if (LIVE) return roomsData.fetchRooms(partnerId);
+    return Promise.resolve(state.rooms.filter((r) => r.partnerId === partnerId));
+  },
+
   // 사이니지 표출 소스 (광고·대기·알림) — 파트너별 [Phase4-6 배선]
   addSignageSource: (src) => {
     if (LIVE) {
@@ -508,17 +559,9 @@ export const actions = {
     set((s) => ({ storageClasses: s.storageClasses.map((c) => (c.key === key ? { ...c, retention } : c)) }));
   },
 
-  // 영상 템플릿 (파트너별 요소 구성·순서 + BGM 편집) [Phase4-4 배선]
-  setTemplateBgm: (pid, bgm) => {
-    const next = { ...(state.templates[pid] || { bgm: null, blocks: [] }), bgm };
-    if (LIVE) {
-      tpl.upsertTemplate(pid, next)
-        .then(() => set((s) => ({ templates: { ...s.templates, [pid]: next } })))
-        .catch((e) => toast("BGM 저장 실패: " + e.message));
-      return;
-    }
-    set((s) => ({ templates: { ...s.templates, [pid]: next } }));
-  },
+  // 영상 템플릿 블록(파트너별 요소 구성·순서) [Phase4-4 배선]
+  //   ※ BGM 볼륨·페이드는 위 setTemplateBgm(partnerId, patch)가 처리.
+  //     (이름이 같던 (pid,bgm) 트랙 세터는 호출처 0 + 볼륨세터를 가려 제거 — BGM 트랙 적용은 uploadBgm)
   setTemplateBlocks: (pid, blocks) => {
     const next = { ...(state.templates[pid] || { bgm: null, blocks: [] }), blocks };
     if (LIVE) {
