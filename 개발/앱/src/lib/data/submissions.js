@@ -20,11 +20,11 @@ export async function fetchSubmissions() {
 export async function fetchReservationMedia(reservationId) {
   const d = need();
   const { data: sub, error: se } = await d.from("submissions")
-    .select("id, token, letter, met_date, part_date, status, video_url").eq("reservation_id", reservationId).maybeSingle();
+    .select("id, token, letter, met_date, part_date, status, video_url, regen_target").eq("reservation_id", reservationId).maybeSingle();
   if (se) throw new Error("제출 조회 실패: " + se.message);
-  if (!sub) return { assets: [], submissionId: null, token: null, letter: null, metDate: null, partDate: null, status: null, videoUrl: null };
+  if (!sub) return { assets: [], submissionId: null, token: null, letter: null, metDate: null, partDate: null, status: null, videoUrl: null, regenTarget: null };
   const { data: rows, error: ae } = await d.from("submission_assets")
-    .select("id,kind,role,name,storage_path,sort_order").eq("submission_id", sub.id).order("sort_order");
+    .select("id,kind,role,name,storage_path,sort_order,selected,created_at").eq("submission_id", sub.id).order("created_at");
   if (ae) throw new Error("자산 조회 실패: " + ae.message);
   const list = rows || [];
   const paths = list.map((r) => r.storage_path).filter(Boolean);
@@ -34,8 +34,16 @@ export async function fetchReservationMedia(reservationId) {
     const { data: signed } = await sbc.storage.from(UPLOAD_BUCKET).createSignedUrls(paths, 3600);
     (signed || []).forEach((s, i) => { if (s && s.signedUrl) urls[paths[i]] = s.signedUrl; });
   }
-  const assets = list.map((r) => ({ id: r.id, kind: r.kind, role: r.role, name: r.name, sortOrder: r.sort_order, url: urls[r.storage_path] || null }));
-  return { assets, submissionId: sub.id, token: sub.token, letter: sub.letter, metDate: sub.met_date, partDate: sub.part_date, status: sub.status, videoUrl: sub.video_url };
+  const assets = list.map((r) => ({ id: r.id, kind: r.kind, role: r.role, name: r.name, sortOrder: r.sort_order, selected: r.selected !== false, createdAt: r.created_at, url: urls[r.storage_path] || null }));
+  return { assets, submissionId: sub.id, token: sub.token, letter: sub.letter, metDate: sub.met_date, partDate: sub.part_date, status: sub.status, videoUrl: sub.video_url, regenTarget: sub.regen_target };
+}
+
+// 자산 버전 선택(활성) — 같은 슬롯(role+sort)에서 하나만 활성. compose·편집기가 활성본 사용.
+export async function selectAsset(submissionId, assetId, role, sortOrder) {
+  const d = need();
+  await d.from("submission_assets").update({ selected: false }).eq("submission_id", submissionId).eq("role", role).eq("sort_order", sortOrder);
+  const { error } = await d.from("submission_assets").update({ selected: true }).eq("id", assetId);
+  if (error) throw new Error(error.message);
 }
 
 const _ext = (n = "") => { const i = n.lastIndexOf("."); return i > 0 ? n.slice(i + 1) : "bin"; };

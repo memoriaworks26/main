@@ -6,6 +6,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { db } from "../supabase.js";
 import * as st from "../storage.js";
@@ -41,29 +42,36 @@ export async function generateBlocks(job, assets) {
   const sign = (a) => st.signedUrl(cfg.uploadBucket, a.storage_path, 3600);
   const del = (role, sort) => { let q = db.from("submission_assets").delete().eq("submission_id", job.id).eq("role", role); if (sort != null) q = q.eq("sort_order", sort); return q; };
   const ins = (row) => db.from("submission_assets").insert(row);
+  // 버전 히스토리 — 삭제 대신 기존 비활성(selected=false) + 새 버전 활성 삽입. 기존본도 나중에 선택 가능.
+  const deselect = (role, sort) => { let q = db.from("submission_assets").update({ selected: false }).eq("submission_id", job.id).eq("role", role); if (sort != null) q = q.eq("sort_order", sort); return q; };
+  const uniq = () => crypto.randomUUID().slice(0, 8);
 
-  const titleStyle = await activePrompt("타이틀");
+  const titleStyle1 = await activePrompt("이미지1");  // 이미지1 전용 프롬프트
+  const titleStyle2 = await activePrompt("이미지2");  // 이미지2 전용 프롬프트
   const aiStyle = await activePrompt("AI영상");
-  const tp0 = `${token}/results/title_0.png`, tp1 = `${token}/results/title_1.png`, tvPath = `${token}/results/title.mp4`;
-  const curTitleImg = async (sort) => { const { data } = await db.from("submission_assets").select("storage_path").eq("submission_id", job.id).eq("role", "title_result").eq("sort_order", sort).maybeSingle(); return data?.storage_path || null; };
+  const tvPath = `${token}/results/title.mp4`;
+  // 활성(selected) 슬롯 자산 경로(최신)
+  const curTitleImg = async (sort) => { const { data } = await db.from("submission_assets").select("storage_path").eq("submission_id", job.id).eq("role", "title_result").eq("sort_order", sort).eq("selected", true).order("created_at", { ascending: false }).limit(1).maybeSingle(); return data?.storage_path || null; };
 
-  // 타이틀 이미지1(Seedream): 독사진 → 영정+배경
+  // 타이틀 이미지1(Seedream): 독사진 → 영정+배경. 새 버전 활성, 기존본은 히스토리로 보관.
   async function genTitleImg0() {
     if (!titleA) return 0;
     const ref = await sign(titleA);
-    const url1 = await generateTitleImage({ prompt: titlePrompt1(name, titleStyle), imageRefUrl: ref });
-    await del("title_result", 0); await st.uploadFromUrl(cfg.uploadBucket, tp0, url1, "image/png");
-    await ins({ submission_id: job.id, kind: "photo", role: "title_result", name: "title_0.png", storage_path: tp0, sort_order: 0 });
-    log.info("  타이틀 이미지1 생성(Seedream)"); return 1;
+    const url1 = await generateTitleImage({ prompt: titlePrompt1(name, titleStyle1), imageRefUrl: ref });
+    const p = `${token}/results/title_0_${uniq()}.png`;
+    await deselect("title_result", 0); await st.uploadFromUrl(cfg.uploadBucket, p, url1, "image/png");
+    await ins({ submission_id: job.id, kind: "photo", role: "title_result", name: "이미지1", storage_path: p, sort_order: 0, selected: true });
+    log.info("  타이틀 이미지1 생성(Seedream) +버전"); return 1;
   }
-  // 타이틀 이미지2(Seedream): 이미지1 → 화풍·배경 변경(오버랩용)
+  // 타이틀 이미지2(Seedream): 활성 이미지1 → 화풍·배경 변경(오버랩용)
   async function genTitleImg1() {
-    const p = await curTitleImg(0); if (!p) throw new Error("이미지1을 먼저 생성하세요");
-    const ref = await st.signedUrl(cfg.uploadBucket, p, 3600);
-    const url2 = await generateTitleImage({ prompt: titlePrompt2(name, titleStyle), imageRefUrl: ref });
-    await del("title_result", 1); await st.uploadFromUrl(cfg.uploadBucket, tp1, url2, "image/png");
-    await ins({ submission_id: job.id, kind: "photo", role: "title_result", name: "title_1.png", storage_path: tp1, sort_order: 1 });
-    log.info("  타이틀 이미지2 생성(Seedream, 화풍변경)"); return 1;
+    const p0 = await curTitleImg(0); if (!p0) throw new Error("이미지1을 먼저 생성하세요");
+    const ref = await st.signedUrl(cfg.uploadBucket, p0, 3600);
+    const url2 = await generateTitleImage({ prompt: titlePrompt2(name, titleStyle2), imageRefUrl: ref });
+    const p = `${token}/results/title_1_${uniq()}.png`;
+    await deselect("title_result", 1); await st.uploadFromUrl(cfg.uploadBucket, p, url2, "image/png");
+    await ins({ submission_id: job.id, kind: "photo", role: "title_result", name: "이미지2", storage_path: p, sort_order: 1, selected: true });
+    log.info("  타이틀 이미지2 생성(Seedream, 화풍변경) +버전"); return 1;
   }
   // 타이틀 영상화(ffmpeg): 이미지1·2 → 완성 클립(20초, 크레딧 없음)
   async function genTitleVideo() {
@@ -82,16 +90,16 @@ export async function generateBlocks(job, assets) {
     return 0;
   }
   async function genTitleAll() { let c = await genTitleImg0(); c += await genTitleImg1(); await genTitleVideo(); return c; }
-  // AI영상 i번(Kling) — 해당 독사진 1장 → 영상. 활성 프롬프트 반영.
+  // AI영상 i번(Kling) — 해당 독사진 1장 → 영상. 새 버전 활성, 기존본은 히스토리로 보관.
   async function genAi(i) {
     if (!aiPhotos[i]) return 0;
-    await del("ai_video_result", i);
     const ref = await sign(aiPhotos[i]);
     const vurl = await generateMemoryVideo({ prompt: aiStyle || aiPromptDefault, imageUrl: ref });
-    const path = `${token}/results/ai_${i}.mp4`;
-    await st.uploadFromUrl(cfg.uploadBucket, path, vurl, "video/mp4");
-    await ins({ submission_id: job.id, kind: "video", role: "ai_video_result", name: `ai_${i}.mp4`, storage_path: path, sort_order: i });
-    log.info(`  AI영상 ${String.fromCharCode(65 + i)} 생성(Kling)`);
+    const vp = `${token}/results/ai_${i}_${uniq()}.mp4`;
+    await deselect("ai_video_result", i);
+    await st.uploadFromUrl(cfg.uploadBucket, vp, vurl, "video/mp4");
+    await ins({ submission_id: job.id, kind: "video", role: "ai_video_result", name: `AI영상 ${String.fromCharCode(65 + i)}`, storage_path: vp, sort_order: i, selected: true });
+    log.info(`  AI영상 ${String.fromCharCode(65 + i)} 생성(Kling) +버전`);
     return 1;
   }
 

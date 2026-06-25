@@ -1,7 +1,7 @@
 // 편집기 — 오른쪽 속성 패널(PropPanel) + 보조(PromptPicker·PromptModal·GenHistory).
 // 선택(sel)에 따라 블록/전환/음악의 편집 컨트롤을 보여준다. 편집값은 상위(VideoEditor)의 edits로 컨트롤드.
 import React, { useState, useRef } from "react";
-import { Image as ImageIcon, Music, Upload, Plus, RefreshCw, Trash2, ArrowRightLeft, Check, Type, SlidersHorizontal, X, Film, Download } from "lucide-react";
+import { Image as ImageIcon, Music, Upload, Plus, RefreshCw, Trash2, ArrowRightLeft, Check, Type, SlidersHorizontal, X, Film, Download, Loader2 } from "lucide-react";
 import { SERIF, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS } from "../theme.js";
 import { DateField, Modal } from "../ui.jsx";
 import { toast } from "../toast.jsx";
@@ -9,7 +9,7 @@ import * as D from "../data.js";
 import { useStore, actions } from "../store.js";
 import { BLOCK_ICON, KIND_LABEL, blockTrans, exampleLetter, SLIDE_PHOTOS, SLIDE_PER, TITLE_SYSTEM_TEXT } from "./blocks.js";
 
-const PROMPT_TARGETS = ["타이틀", "AI영상"];
+const PROMPT_TARGETS = ["이미지1", "이미지2", "AI영상"]; // API 호출별 프롬프트(타이틀 통합 X)
 
 // ── 오른쪽: 편집 패널 ──────────────────────────────────────────
 function L({ children }) { return <div className="mb-1.5 text-[12.5px] font-semibold" style={{ color: INK }}>{children}</div>; }
@@ -33,28 +33,49 @@ function dlAnchor(url, name) {
   catch { window.open(url, "_blank"); }
 }
 
-// 소스/결과 카드 — 미리보기 + 생성(API) + 다운로드 + 교체(업로드). 타이틀 이미지1·2·영상화, AI영상 등 각각 매니징.
-function AssetCard({ label, hint, asset, kind = "image", onGenerate, genLabel = "AI 생성", onReplace, replaceAccept = "image/*" }) {
+// 소스/결과 카드 — 미리보기 + 생성(API) + 다운로드 + 교체 + 생성내역(버전 선택). 생성 중 로딩 표시.
+function AssetCard({ label, hint, asset, kind = "image", generating, onGenerate, genLabel = "AI 생성", onReplace, replaceAccept = "image/*", history = [], onSelect }) {
   const has = !!asset?.url;
-  const btn = "flex items-center gap-1 px-2 py-1.5 text-[11.5px] font-semibold outline-none";
+  const btn = "flex items-center gap-1 px-2 py-1.5 text-[11.5px] font-semibold outline-none disabled:opacity-50";
   const sub = { border: "1px solid " + LINE2, borderRadius: 5, color: MUTE };
+  const thumb = (v) => kind === "video"
+    ? <video src={v.url} muted playsInline preload="metadata" className="h-full w-full object-cover" />
+    : <img src={v.url} alt="" className="h-full w-full object-cover" />;
   return (
     <div className="mb-3 px-2.5 py-2.5" style={{ background: "#faf8f3", border: "1px solid " + LINE2, borderRadius: RADIUS }}>
       <div className="mb-1.5 flex items-center gap-1.5">
         <span className="text-[12px] font-bold" style={{ color: INK }}>{label}</span>
         {hint && <span className="text-[10.5px]" style={{ color: FAINT }}>{hint}</span>}
+        {generating && <span className="ml-auto flex items-center gap-1 text-[10.5px] font-bold" style={{ color: GOLD_D }}><Loader2 className="h-3 w-3 animate-spin" /> 생성 중…</span>}
+        {!generating && has && <span className="ml-auto text-[10.5px] font-bold" style={{ color: "#3a7468" }}>완료</span>}
       </div>
       <div className="relative w-full overflow-hidden" style={{ aspectRatio: "16/9", background: "#1c232c", borderRadius: 6 }}>
         {has ? (kind === "video"
           ? <video src={asset.url} controls playsInline preload="metadata" className="absolute inset-0 h-full w-full" />
           : <img src={asset.url} alt="" className="absolute inset-0 h-full w-full object-contain" />)
           : <div className="absolute inset-0 flex items-center justify-center text-[11px]" style={{ color: FAINT }}>{onGenerate ? "아직 없음 — 생성하세요" : "없음"}</div>}
+        {generating && <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5" style={{ background: "rgba(20,24,30,.6)" }}><Loader2 className="h-6 w-6 animate-spin text-white" /><span className="text-[11px] font-semibold text-white">생성 중… 잠시만요</span></div>}
       </div>
       <div className="mt-1.5 flex flex-wrap gap-1.5">
-        {onGenerate && <button onClick={onGenerate} className={btn + " text-white"} style={{ background: GOLD, borderRadius: 5 }}><RefreshCw className="h-3.5 w-3.5" /> {genLabel}</button>}
+        {onGenerate && <button onClick={onGenerate} disabled={generating} className={btn + " text-white"} style={{ background: GOLD, borderRadius: 5 }}><RefreshCw className="h-3.5 w-3.5" /> {genLabel}</button>}
         {has && <button onClick={() => dlAnchor(asset.url, asset.name)} className={btn} style={sub}><Download className="h-3.5 w-3.5" /> 다운로드</button>}
         {onReplace && <FileButton accept={replaceAccept} onFile={onReplace} className={btn} style={sub}><Upload className="h-3.5 w-3.5" /> 교체</FileButton>}
       </div>
+      {/* 생성 내역 — 이전 버전도 클릭해 다시 적용(활성 표시) */}
+      {history.length > 1 && onSelect && (
+        <div className="mt-2">
+          <div className="mb-1 text-[10.5px] font-semibold" style={{ color: FAINT }}>생성 내역 ({history.length}) · 눌러서 적용</div>
+          <div className="flex gap-1.5 overflow-x-auto pb-1">
+            {history.map((v) => (
+              <button key={v.id} onClick={() => onSelect(v.id)} title={v.selected ? "현재 적용본" : "이 버전 적용"}
+                className="relative shrink-0 overflow-hidden outline-none" style={{ width: 56, aspectRatio: "16/9", borderRadius: 4, border: "2px solid " + (v.selected ? GOLD : LINE2) }}>
+                {thumb(v)}
+                {v.selected && <span className="absolute right-0.5 top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full" style={{ background: GOLD }}><Check className="h-2.5 w-2.5 text-white" strokeWidth={3} /></span>}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -171,23 +192,19 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
   const _titlePhoto = _assets.find((a) => a.role === "title");
   const _aiPhotos = _assets.filter((a) => a.role === "ai_video");
   const srcAsset = k === "title" ? _titlePhoto : k === "ai" ? _aiPhotos[(item.aiIndex || 1) - 1] : null; // 블록 소스 사진
-  // AI 생성 결과물(실데이터) — GenHistory에 실제로 표시.
-  const _bySort = (p, q) => (p.sort_order ?? p.sortOrder ?? 0) - (q.sort_order ?? q.sortOrder ?? 0);
+  // AI 생성 — 버전 히스토리(슬롯당 다중) + 활성본 + 생성중 상태.
+  const _subId = media?.submissionId;
+  const _genActive = ["queued", "rendering"].includes(media?.status);
+  const _genTarget = media?.regenTarget;
+  const isGen = (t) => _genActive && (!_genTarget || _genTarget === t || (_genTarget === "title" && t.startsWith("title")));
+  const _newest = (p, q) => String(q.createdAt || "").localeCompare(String(p.createdAt || "")); // 최신 우선
+  const slotVers = (role, sort) => _assets.filter((a) => a.role === role && (a.sortOrder ?? 0) === sort && a.url).sort(_newest);
+  const selOf = (list) => list.find((a) => a.selected) || list[0] || null;
   const _titleVideo = _assets.find((a) => a.role === "title_video" && a.url);
-  const _titleResults = _assets.filter((a) => a.role === "title_result" && a.url).sort(_bySort);
-  const _img1 = _titleResults.find((a) => (a.sortOrder ?? 0) === 0);
-  const _img2 = _titleResults.find((a) => (a.sortOrder ?? 0) === 1);
-  const _aiResults = _assets.filter((a) => a.role === "ai_video_result" && a.url).sort(_bySort);
+  const _img1Vers = slotVers("title_result", 0), _img1 = selOf(_img1Vers);
+  const _img2Vers = slotVers("title_result", 1), _img2 = selOf(_img2Vers);
   const _slideResult = _assets.find((a) => a.role === "slide_video" && a.url);
-  const genResults = k === "title"
-    ? (_titleVideo
-        ? [{ kind: "video", url: _titleVideo.url, label: "타이틀 영상(완성 클립 · 20초)" }]
-        : _titleResults.map((a, i) => ({ kind: "image", url: a.url, label: i === 0 ? "① 영정(합성 중)" : "② 화풍변경(합성 중)" })))
-    : k === "ai"
-    ? (_aiResults[(item.aiIndex || 1) - 1] ? [{ kind: "video", url: _aiResults[(item.aiIndex || 1) - 1].url, label: "Kling AI영상" }] : [])
-    : k === "slide"
-    ? (_slideResult ? [{ kind: "video", url: _slideResult.url, label: "슬라이드 영상" }] : [])
-    : [];
+  const genResults = (k === "slide" && _slideResult) ? [{ kind: "video", url: _slideResult.url, label: "슬라이드 영상" }] : [];
   const name = reservation?.deceased || D.EDITOR_RESERVATION.deceased;
   // 편집값(컨트롤드) — 전환은 "trans-"+id, 음악은 "audio" 키로 보관
   const transKey = "trans-" + sel.id;
@@ -233,11 +250,14 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
               <Field label="시스템 문구"><input className={inputCls} style={{ ...inputStyle, fontFamily: SERIF }} value={prefix} onChange={(e) => onEdit(item.id, { prefix: e.target.value })} /></Field>
               <Field label="반려동물 이름"><input className={inputCls} style={{ ...inputStyle, fontFamily: SERIF }} value={petName} onChange={(e) => onEdit(item.id, { text: e.target.value })} /></Field>
             </div>
-            <PromptPicker target="타이틀" onManage={() => setPromptModal(true)} />
             <AssetCard label="보호자 독사진" hint="원본 소스" asset={_titlePhoto} kind="image" onReplace={repl(_titlePhoto?.id)} />
-            <AssetCard label="① 이미지1" hint="독사진 → 영정·배경" asset={_img1} kind="image" onGenerate={() => gen("title:0")} genLabel={_img1 ? "재생성" : "AI 생성"} onReplace={repl(_img1?.id)} />
-            <AssetCard label="② 이미지2" hint="이미지1 → 화풍·배경 변경" asset={_img2} kind="image" onGenerate={() => gen("title:1")} genLabel={_img2 ? "재생성" : "AI 생성"} onReplace={repl(_img2?.id)} />
-            <AssetCard label="③ 영상화" hint="이미지1+2 → 완성 클립 20초" asset={_titleVideo} kind="video" onGenerate={() => gen("title:video")} genLabel={_titleVideo ? "다시 만들기" : "영상 만들기"} />
+            <PromptPicker target="이미지1" onManage={() => setPromptModal(true)} />
+            <AssetCard label="① 이미지1" hint="독사진 → 영정·배경" asset={_img1} kind="image" generating={isGen("title:0")} onGenerate={() => gen("title:0")} genLabel={_img1 ? "재생성" : "AI 생성"} onReplace={repl(_img1?.id)}
+              history={_img1Vers.map((v) => ({ id: v.id, url: v.url, selected: v.selected }))} onSelect={(vid) => canEdit ? actions.selectAsset(resId, _subId, vid, "title_result", 0) : null} />
+            <PromptPicker target="이미지2" onManage={() => setPromptModal(true)} />
+            <AssetCard label="② 이미지2" hint="이미지1 → 화풍·배경 변경" asset={_img2} kind="image" generating={isGen("title:1")} onGenerate={() => gen("title:1")} genLabel={_img2 ? "재생성" : "AI 생성"} onReplace={repl(_img2?.id)}
+              history={_img2Vers.map((v) => ({ id: v.id, url: v.url, selected: v.selected }))} onSelect={(vid) => canEdit ? actions.selectAsset(resId, _subId, vid, "title_result", 1) : null} />
+            <AssetCard label="③ 영상화" hint="이미지1+2 → 완성 클립 20초" asset={_titleVideo} kind="video" generating={isGen("title:video")} onGenerate={() => gen("title:video")} genLabel={_titleVideo ? "다시 만들기" : "영상 만들기"} />
             <div className="mb-2 px-3 py-2.5 text-[11px] leading-relaxed" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
               ① 이미지1+자막이 서서히 나타나고 <b style={{ color: INK }}>10초</b>에 ② 이미지2가 오버랩 → 페이드아웃(총 20초). 이미지를 바꾸면 <b style={{ color: INK }}>③ 영상화</b>를 다시 눌러 반영하세요.
             </div>
@@ -340,14 +360,16 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
         {k === "ai" && (() => {
           const resId = reservation?.id, tok = media?.token, canEdit = !!(resId && tok);
           const i = (item.aiIndex || 1) - 1;
-          const resA = _aiResults[i];
+          const aiVers = slotVers("ai_video_result", i);
+          const resA = selOf(aiVers);
           const gen = () => canEdit ? actions.regenBlock(resId, "ai:" + i) : toast("실제 예약에서만 생성됩니다");
           const repl = (aid) => (f) => (canEdit && aid) ? actions.replaceAsset(resId, aid, tok, f) : toast("실제 예약에서만 교체할 수 있습니다");
           return (
           <>
             <PromptPicker target="AI영상" onManage={() => setPromptModal(true)} />
             <AssetCard label="보호자 독사진" hint="원본 소스" asset={srcAsset} kind="image" onReplace={repl(srcAsset?.id)} />
-            <AssetCard label="AI 영상 (Kling)" hint="독사진 → 영상(약 5초)" asset={resA} kind="video" onGenerate={gen} genLabel={resA ? "재생성" : "AI 생성"} />
+            <AssetCard label="AI 영상 (Kling)" hint="독사진 → 영상(약 5초)" asset={resA} kind="video" generating={isGen("ai:" + i)} onGenerate={gen} genLabel={resA ? "재생성" : "AI 생성"}
+              history={aiVers.map((v) => ({ id: v.id, url: v.url, selected: v.selected }))} onSelect={(vid) => canEdit ? actions.selectAsset(resId, _subId, vid, "ai_video_result", i) : null} />
             <div className="mt-1 px-3 py-2.5 text-[11.5px] leading-relaxed" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
               추억 슬라이드 앞(A) · 추억 영상 뒤(B)로 유저 소스를 감쌉니다.
             </div>

@@ -56,7 +56,7 @@ export default function VideoEditor({ reservation, onClose }) {
   useEffect(() => {
     if (!reservation?.id) return;
     actions.loadReservationMedia(reservation.id);
-    const t = setInterval(() => actions.loadReservationMedia(reservation.id), 12000);
+    const t = setInterval(() => actions.loadReservationMedia(reservation.id), 6000); // 생성 상태·결과 자동 갱신
     return () => clearInterval(t);
   }, [reservation?.id]);
   const media = store.reservationMedia?.[reservation?.id];
@@ -68,9 +68,9 @@ export default function VideoEditor({ reservation, onClose }) {
     const bySort = (p, q) => (p.sortOrder ?? 0) - (q.sortOrder ?? 0);
     const titleSrc = a.find((x) => x.role === "title" && x.url);
     const titleVid = a.find((x) => x.role === "title_video" && x.url);   // 완성 타이틀 클립
-    const titleRes = a.filter((x) => x.role === "title_result" && x.url).sort(bySort);
+    const titleRes = a.filter((x) => x.role === "title_result" && x.url && x.selected).sort(bySort); // 활성 버전만
     const aiSrc = a.filter((x) => x.role === "ai_video" && x.url).sort(bySort);
-    const aiRes = a.filter((x) => x.role === "ai_video_result" && x.url).sort(bySort);
+    const aiRes = a.filter((x) => x.role === "ai_video_result" && x.url && x.selected).sort(bySort); // 활성 버전만
     const slideSrc = a.filter((x) => x.role === "slide_photo" && x.url).map((x) => x.url);
     const slideRes = a.find((x) => x.role === "slide_video" && x.url);
     const vidSrc = a.filter((x) => x.role === "memory_video" && x.url).map((x) => x.url);
@@ -81,9 +81,9 @@ export default function VideoEditor({ reservation, onClose }) {
         result: titleVid ? { kind: "videos", urls: [titleVid.url], label: "타이틀 영상(완성 클립)" }
           : titleRes.length ? { kind: titleRes.length > 1 ? "images" : "image", url: titleRes[0].url, urls: titleRes.map((r) => r.url), label: `Seedream ${titleRes.length}장(합성 중)` } : null,
       };
-      else if (b.type === "ai") { const i = (b.aiIndex || 1) - 1; m[b.id] = {
+      else if (b.type === "ai") { const i = (b.aiIndex || 1) - 1; const r = aiRes.find((x) => (x.sortOrder ?? 0) === i); m[b.id] = {
         source: aiSrc[i] && { kind: "image", url: aiSrc[i].url, label: "AI영상 소스 사진" },
-        result: aiRes[i] && { kind: "videos", urls: [aiRes[i].url], label: "Kling AI영상" },
+        result: r && { kind: "videos", urls: [r.url], label: "Kling AI영상" },
       }; }
       else if (b.type === "slide") m[b.id] = {
         source: slideSrc.length && { kind: "images", urls: slideSrc, label: `보호자 사진 ${slideSrc.length}장` },

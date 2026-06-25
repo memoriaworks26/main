@@ -42,7 +42,8 @@ export async function composeFinal(job, assets) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mw-compose-"));
   try {
     const name = job.pet_name || "";
-    const pick = (role) => assets.filter((a) => a.role === role && a.storage_path).sort(bySort);
+    // 활성(selected) 버전만 사용(버전 히스토리 중 선택본). slide_photo/memory_video는 selected 무관(모두 사용).
+    const pick = (role) => assets.filter((a) => a.role === role && a.storage_path && a.selected !== false).sort(bySort);
     const titleVid = pick("title_video")[0];        // 완성 타이틀 클립(우선)
     const titleRes = pick("title_result");          // 이미지 2장(폴백)
     const aiRes = pick("ai_video_result");          // 영상 A·B

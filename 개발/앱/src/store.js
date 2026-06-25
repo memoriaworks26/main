@@ -191,10 +191,19 @@ export const actions = {
       .then(() => { actions.loadReservationMedia(reservationId); toast("사진을 추가했습니다"); })
       .catch((e) => toast("추가 실패: " + e.message));
   },
-  // 단일 블록 AI 재생성 — 워커가 해당 블록만 재생성(타이틀/AI영상).
+  // 단일 블록 AI 재생성 — 워커가 해당 블록만 재생성(타이틀/AI영상). 요청 직후 미디어 갱신(상태→생성중 즉시 반영).
   regenBlock: (reservationId, target) => {
     if (!LIVE || !reservationId) return;
-    subs.regenBlock(reservationId, target).catch((e) => toast("재생성 요청 실패: " + e.message));
+    subs.regenBlock(reservationId, target)
+      .then(() => actions.loadReservationMedia(reservationId))
+      .catch((e) => toast("재생성 요청 실패: " + e.message));
+  },
+  // 자산 버전 선택(활성) — 생성 내역 중 하나를 적용.
+  selectAsset: (reservationId, submissionId, assetId, role, sortOrder) => {
+    if (!LIVE) return;
+    subs.selectAsset(submissionId, assetId, role, sortOrder)
+      .then(() => { actions.loadReservationMedia(reservationId); toast("이 버전을 적용했습니다"); })
+      .catch((e) => toast("버전 선택 실패: " + e.message));
   },
   // 최종 합성 요청 — 워커가 블록 결과물로 최종 영상 합성(관리자 「최종 렌더」).
   requestCompose: (reservationId) => {
