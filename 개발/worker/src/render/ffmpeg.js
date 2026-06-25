@@ -76,8 +76,19 @@ async function videoSegment(src, dur, out, cap, fontFile, isLetter) {
   await ff(args);
 }
 
-// segments: [{ type:'image'|'video', path, dur, caption? }], bgmPath?, fontFile?(한글캡션), outPath
-export async function compose({ segments, bgmPath, fontFile, outPath }) {
+// 오디오 스트림 존재 여부(추억영상 원본 사운드 판정).
+function hasAudio(file) {
+  return new Promise((res) => {
+    const p = spawn(ffprobePath, ["-v", "error", "-select_streams", "a", "-show_entries", "stream=codec_type", "-of", "csv=p=0", file]);
+    let o = ""; p.stdout.on("data", (d) => (o += d));
+    p.on("error", () => res(false));
+    p.on("close", () => res(o.trim().length > 0));
+  });
+}
+
+// segments: [{ type:'image'|'video', path, dur, caption?, letter?, mem? }] (mem=추억영상: 원본사운드 유지·BGM 덕킹)
+// bgmPath?, bgmVol(0~100), bgmFadeIn/Out(초), fontFile?(한글캡션), outPath
+export async function compose({ segments, bgmPath, bgmVol = 70, bgmFadeIn = 1, bgmFadeOut = 2, fontFile, outPath }) {
   if (!segments?.length) throw new Error("compose: 세그먼트 없음");
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mw-render-"));
   try {
@@ -90,14 +101,40 @@ export async function compose({ segments, bgmPath, fontFile, outPath }) {
     }
     const list = path.join(dir, "list.txt");
     await fs.writeFile(list, parts.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join("\n"));
-    const concat = path.join(dir, "concat.mp4");
+    const concat = path.join(dir, "concat.mp4");           // 영상 전용(세그 -an)
     await ff(["-y", "-f", "concat", "-safe", "0", "-i", list, "-c", "copy", concat]);
-    if (bgmPath) {
-      // BGM 루프(-stream_loop) → 영상 길이에 맞춤(-shortest). 영상 트랙은 무손실 복사.
-      await ff(["-y", "-i", concat, "-stream_loop", "-1", "-i", bgmPath, "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", outPath]);
-    } else {
-      await fs.copyFile(concat, outPath);
+
+    // ── 오디오 트랙 구성 ── 추억영상 원본 사운드(해당 구간 배치) + BGM(볼륨·페이드, 추억영상 구간 덕킹)
+    const durs = []; for (const p of parts) durs.push(await durationOf(p));
+    const total = durs.reduce((a, b) => a + b, 0);
+    const offs = []; { let a = 0; for (const d of durs) { offs.push(a); a += d; } }
+    const memAudio = []; const memRanges = [];
+    for (let i = 0; i < segments.length; i++) {
+      if (!segments[i].mem) continue;
+      memRanges.push([offs[i], offs[i] + durs[i]]);
+      if (await hasAudio(segments[i].path)) memAudio.push({ src: segments[i].path, start: offs[i] });
     }
+    if (!bgmPath && memAudio.length === 0) { await fs.copyFile(concat, outPath); return outPath; } // 무음
+
+    const args = ["-y", "-i", concat]; const fc = []; const mix = [];
+    memAudio.forEach((m, j) => {
+      args.push("-i", m.src); const ms = Math.round(m.start * 1000);
+      fc.push(`[${1 + j}:a]adelay=${ms}|${ms}[ma${j}]`); mix.push(`[ma${j}]`);
+    });
+    if (bgmPath) {
+      const bidx = 1 + memAudio.length; args.push("-stream_loop", "-1", "-i", bgmPath);
+      const vol = (Math.max(0, Math.min(100, bgmVol)) / 100).toFixed(2);
+      const duck = memRanges.length
+        ? `if(${memRanges.map(([s, e]) => `between(t,${s.toFixed(2)},${e.toFixed(2)})`).join("+")},0,${vol})`
+        : `${vol}`;
+      let bg = `[${bidx}:a]atrim=0:${total.toFixed(2)},volume='${duck}':eval=frame`;
+      if (bgmFadeIn > 0) bg += `,afade=t=in:st=0:d=${bgmFadeIn}`;
+      if (bgmFadeOut > 0) bg += `,afade=t=out:st=${Math.max(0, total - bgmFadeOut).toFixed(2)}:d=${bgmFadeOut}`;
+      fc.push(`${bg}[bg]`); mix.push("[bg]");
+    }
+    fc.push(`${mix.join("")}amix=inputs=${mix.length}:normalize=0:duration=longest[aout]`);
+    args.push("-filter_complex", fc.join(";"), "-map", "0:v:0", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-t", total.toFixed(2), outPath);
+    await ff(args);
     return outPath;
   } finally {
     await fs.rm(dir, { recursive: true, force: true });

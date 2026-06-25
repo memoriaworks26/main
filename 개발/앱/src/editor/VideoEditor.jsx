@@ -8,7 +8,7 @@ import { toast } from "../toast.jsx";
 import { confirm } from "../confirm.jsx";
 import * as D from "../data.js";
 import { useStore, actions, submissionFor } from "../store.js";
-import { buildBlocks, seedGens, genDefault } from "./blocks.js";
+import { buildBlocks, genDefault } from "./blocks.js";
 import { BlockList, Timeline } from "./timeline.jsx";
 import { Preview } from "./preview.jsx";
 import { PropPanel } from "./props.jsx";
@@ -32,7 +32,7 @@ export default function VideoEditor({ reservation, onClose }) {
   const [sel, setSel] = useState(firstBlockSel);
 
   // 편집 문서(편집값 edits + 결과물 gens) + 되돌리기/다시 히스토리(past/present/future)
-  const initialDoc = useMemo(() => ({ edits: {}, gens: seedGens(blocks), subs: [] }), [blocks]);
+  const initialDoc = useMemo(() => ({ edits: {}, gens: {}, subs: [] }), [blocks]); // gens: 실제 결과물은 reservationMedia로 표시(가짜 버전 시드 제거)
   const [hist, setHist] = useState(() => ({ past: [], present: initialDoc, future: [] }));
   const [savedDoc, setSavedDoc] = useState(initialDoc);
   const doc = hist.present;

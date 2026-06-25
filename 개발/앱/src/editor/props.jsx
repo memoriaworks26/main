@@ -156,8 +156,10 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
   // 편집값(컨트롤드) — 전환은 "trans-"+id, 음악은 "audio" 키로 보관
   const transKey = "trans-" + sel.id;
   const effect = (edits[transKey] && edits[transKey].effect) || blockTrans(sel.id);
-  const au = edits.audio || {};                 // 배경 음악 편집값("audio" 키) — 추억 슬라이드에서 설정
-  const audioItem = D.EDITOR_TIMELINE.audio[0];
+  const _store = useStore();                    // BGM 설정(파트너 템플릿)
+  const _pid = reservation?.partnerId;
+  const _tb = (_pid && _store.templates?.[_pid]) || {};
+  const bgmVol = _tb.bgmVol ?? 70, bgmFadeIn = _tb.bgmFadeIn ?? 1, bgmFadeOut = _tb.bgmFadeOut ?? 2;
   // 추억 슬라이드 — 실제 보호자 사진(없으면 목업 폴백) + 사진 사이 전환(기본 페이드).
   const slideSrcs = _slidePhotos.length ? _slidePhotos.map((a) => a.url) : SLIDE_PHOTOS;
   const slideTrans = item.slideTrans || slideSrcs.slice(1).map(() => "페이드");
@@ -275,10 +277,10 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
                   <button onClick={() => toast("실제 예약에서만 업로드할 수 있습니다")} className="mt-2 flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><Upload className="h-4 w-4" /> 음악 파일 업로드</button>
                 )}
               </Field>
-              <SoundField label="소리 크기" value={au.volume != null ? au.volume : audioItem.volume} onChange={(val) => onEdit("audio", { volume: val })} />
+              <SoundField label="소리 크기" value={bgmVol} onChange={(val) => actions.setTemplateBgm(_pid, { volume: val })} />
               <div className="grid grid-cols-2 gap-2">
-                <Field label="서서히 커지기 (초)"><input type="number" min="0" step="0.5" className={inputCls} style={inputStyle} value={au.fadeIn != null ? au.fadeIn : audioItem.fadeIn} onChange={(e) => onEdit("audio", { fadeIn: +e.target.value })} /></Field>
-                <Field label="서서히 작아지기 (초)"><input type="number" min="0" step="0.5" className={inputCls} style={inputStyle} value={au.fadeOut != null ? au.fadeOut : audioItem.fadeOut} onChange={(e) => onEdit("audio", { fadeOut: +e.target.value })} /></Field>
+                <Field label="서서히 커지기 (초)"><input type="number" min="0" step="0.5" className={inputCls} style={inputStyle} value={bgmFadeIn} onChange={(e) => actions.setTemplateBgm(_pid, { fadeIn: +e.target.value })} /></Field>
+                <Field label="서서히 작아지기 (초)"><input type="number" min="0" step="0.5" className={inputCls} style={inputStyle} value={bgmFadeOut} onChange={(e) => actions.setTemplateBgm(_pid, { fadeOut: +e.target.value })} /></Field>
               </div>
             </div>
           </>

@@ -162,6 +162,15 @@ export const actions = {
     set((s) => ({ prompts: s.prompts.map((x) => x.target === target ? { ...x, active: x.id === id } : x) }));
     if (LIVE) promptsData.setActivePrompt(id, target).catch((e) => toast("활성 설정 실패: " + e.message));
   },
+  // BGM 볼륨·페이드 설정(파트너 템플릿) — 합성에 반영.
+  setTemplateBgm: (partnerId, patch) => {
+    if (!partnerId) return;
+    set((s) => ({ templates: { ...s.templates, [partnerId]: { ...(s.templates[partnerId] || {}),
+      ...(patch.volume != null ? { bgmVol: patch.volume } : {}),
+      ...(patch.fadeIn != null ? { bgmFadeIn: patch.fadeIn } : {}),
+      ...(patch.fadeOut != null ? { bgmFadeOut: patch.fadeOut } : {}) } } }));
+    if (LIVE) tpl.setBgmSettings(partnerId, patch).catch((e) => toast("BGM 설정 저장 실패: " + e.message));
+  },
   // 배경 음악 업로드(실제 음원) — 파트너 템플릿에 적용. 다음 최종 렌더부터 합성에 반영.
   uploadBgm: (partnerId, file) => {
     if (!LIVE) return;

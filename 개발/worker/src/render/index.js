@@ -133,8 +133,8 @@ export async function composeFinal(job, assets) {
     if (aiRes[0]) { await dl(aiRes[0], "aiA.mp4"); segs.push({ type: "video", path: path.join(dir, "aiA.mp4") }); }
     // 추억 슬라이드(사진)
     for (let i = 0; i < slidePhotos.length; i++) { await dl(slidePhotos[i], `s${i}.img`); segs.push({ type: "image", path: path.join(dir, `s${i}.img`), dur: 4 }); }
-    // 추억 영상(개별 클립)
-    for (let i = 0; i < memVideos.length; i++) { await dl(memVideos[i], `m${i}.mp4`); segs.push({ type: "video", path: path.join(dir, `m${i}.mp4`) }); }
+    // 추억 영상(개별 클립) — 원본 사운드 유지(mem)
+    for (let i = 0; i < memVideos.length; i++) { await dl(memVideos[i], `m${i}.mp4`); segs.push({ type: "video", path: path.join(dir, `m${i}.mp4`), mem: true }); }
     // AI영상 B
     if (aiRes[1]) { await dl(aiRes[1], "aiB.mp4"); segs.push({ type: "video", path: path.join(dir, "aiB.mp4") }); }
     // 편지 — 아래→위 스크롤 영상(편집기 미리보기와 동일)
@@ -155,21 +155,24 @@ export async function composeFinal(job, assets) {
       const { data: r } = await db.from("reservations").select("partner_id, end_date").eq("id", job.reservation_id).maybeSingle();
       partnerId = r?.partner_id || null; endDate = r?.end_date || null;
     }
-    // BGM — 파트너 템플릿의 bgm_id → bgm.storage_path(memoria-content) 있으면 다운로드해 합성에 믹스.
-    let bgmPath = null;
+    // BGM — 파트너 템플릿의 bgm_id → bgm.storage_path(memoria-content) 있으면 다운로드 + 볼륨·페이드 설정.
+    let bgmPath = null, bgmVol = 70, bgmFadeIn = 1, bgmFadeOut = 2;
     if (partnerId) {
-      const { data: tpl } = await db.from("templates").select("bgm_id").eq("partner_id", partnerId).maybeSingle();
-      if (tpl?.bgm_id) {
-        const { data: bgm } = await db.from("bgm").select("storage_path").eq("id", tpl.bgm_id).maybeSingle();
-        if (bgm?.storage_path) {
-          try { bgmPath = path.join(dir, "bgm.mp3"); await st.downloadTo(await st.signedUrl("memoria-content", bgm.storage_path, 3600), bgmPath); log.info(`  BGM 적용 → ${bgm.storage_path}`); }
-          catch (e) { bgmPath = null; log.warn("  BGM 다운로드 실패(무음 진행): " + e.message); }
+      const { data: tpl } = await db.from("templates").select("bgm_id, bgm_volume, bgm_fade_in, bgm_fade_out").eq("partner_id", partnerId).maybeSingle();
+      if (tpl) {
+        bgmVol = tpl.bgm_volume ?? 70; bgmFadeIn = Number(tpl.bgm_fade_in ?? 1); bgmFadeOut = Number(tpl.bgm_fade_out ?? 2);
+        if (tpl.bgm_id) {
+          const { data: bgm } = await db.from("bgm").select("storage_path").eq("id", tpl.bgm_id).maybeSingle();
+          if (bgm?.storage_path) {
+            try { bgmPath = path.join(dir, "bgm.mp3"); await st.downloadTo(await st.signedUrl("memoria-content", bgm.storage_path, 3600), bgmPath); log.info(`  BGM 적용(vol ${bgmVol}) → ${bgm.storage_path}`); }
+            catch (e) { bgmPath = null; log.warn("  BGM 다운로드 실패(무음 진행): " + e.message); }
+          }
         }
       }
     }
 
     const out = path.join(dir, "final.mp4");
-    await compose({ segments: segs, fontFile: FONT, bgmPath, outPath: out });
+    await compose({ segments: segs, fontFile: FONT, bgmPath, bgmVol, bgmFadeIn, bgmFadeOut, outPath: out });
     const finalPath = `${partnerId || "unknown"}/${job.id}_final.mp4`;
     const buf = await fs.readFile(out);
     await st.uploadFinal(finalPath, buf, "video/mp4");

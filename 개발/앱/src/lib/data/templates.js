@@ -5,7 +5,7 @@
 import { db } from "../supabase.js";
 
 const need = () => { const d = db(); if (!d) throw new Error("백엔드 미연결"); return d; };
-const mapTpl = (r) => ({ bgm: r.bgm_id ?? null, blocks: r.blocks || [] });
+const mapTpl = (r) => ({ bgm: r.bgm_id ?? null, blocks: r.blocks || [], bgmVol: r.bgm_volume ?? 70, bgmFadeIn: Number(r.bgm_fade_in ?? 1), bgmFadeOut: Number(r.bgm_fade_out ?? 2) });
 const toRow = (partnerId, t) => ({
   partner_id: partnerId, bgm_id: t.bgm ?? null, blocks: t.blocks || [],
   updated_at: new Date().toISOString(),
@@ -23,6 +23,18 @@ export async function fetchTemplates() {
 export async function upsertTemplate(partnerId, tpl) {
   const d = need();
   const { error } = await d.from("templates").upsert(toRow(partnerId, tpl));
+  if (error) throw new Error(error.message);
+}
+
+// BGM 볼륨·페이드만 부분 갱신(blocks 보존).
+export async function setBgmSettings(partnerId, { volume, fadeIn, fadeOut }) {
+  const d = need();
+  const patch = {};
+  if (volume != null) patch.bgm_volume = volume;
+  if (fadeIn != null) patch.bgm_fade_in = fadeIn;
+  if (fadeOut != null) patch.bgm_fade_out = fadeOut;
+  if (!Object.keys(patch).length) return;
+  const { error } = await d.from("templates").update(patch).eq("partner_id", partnerId);
   if (error) throw new Error(error.message);
 }
 
