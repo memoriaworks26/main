@@ -13,27 +13,35 @@ import { loadConfig } from "../config.js";
 
 const cfg = loadConfig();
 const BASE = "https://platform.higgsfield.ai";
-const headers = () => ({
-  Authorization: `Key ${cfg.higgsfield.key}:${cfg.higgsfield.secret}`,
+// 인증키 우선순위: main(오늘 추가) … → sub(기존). 앞 키가 크레딧소진/인증오류면 다음 키로 폴백.
+const CREDS = cfg.higgsfield.keys;
+const authHeader = (c) => ({
+  Authorization: `Key ${c.key}:${c.secret}`,
   "Content-Type": "application/json",
 });
 
-// 생성요청 → job_set id. 응답형태(실측): { id, jobs:[{id,status,results}], input_params }.
+// 생성요청 → { id, cred }(첫 성공 키). 응답형태(실측): { id, jobs:[{id,status,results}], input_params }.
+//   크레딧소진(403)·결제(402)·인증(401)·서버오류(5xx)면 다음 키로 폴백. 그 외(422 등 요청오류)는 즉시 중단.
 async function submit(path, params) {
-  if (!cfg.higgsfield.key || !cfg.higgsfield.secret) throw new Error("HIGGSFIELD 키 미설정");
-  const res = await fetch(`${BASE}${path}`, { method: "POST", headers: headers(), body: JSON.stringify({ params }) });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) { const det = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail ?? data); throw new Error(`higgsfield ${path} 실패(${res.status}): ${det}`); }
-  const id = data.id;
-  if (!id) throw new Error("higgsfield: job_set id 없음 — " + JSON.stringify(data).slice(0, 200));
-  return id;
+  if (!CREDS.length) throw new Error("HIGGSFIELD 키 미설정");
+  let lastErr;
+  for (const cred of CREDS) {
+    const res = await fetch(`${BASE}${path}`, { method: "POST", headers: authHeader(cred), body: JSON.stringify({ params }) });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.id) return { id: data.id, cred };
+    const det = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail ?? data);
+    lastErr = new Error(`higgsfield ${path} 실패(${res.status}): ${det}`);
+    const transient = res.status === 401 || res.status === 402 || res.status === 403 || res.status >= 500;
+    if (!transient) throw lastErr; // 422 등 요청 자체 오류는 키 바꿔도 동일 → 즉시 중단
+  }
+  throw lastErr; // 모든 키 소진/오류
 }
 
-// 폴링(실측): GET /v1/job-sets/{id} → jobs[0].status, jobs[0].results.raw.url. 완료 시 결과 URL 반환.
-async function poll(id, { timeoutMs = 300000, intervalMs = 5000 } = {}) {
+// 폴링(실측): GET /v1/job-sets/{id} → jobs[0].status, jobs[0].results.raw.url. submit가 쓴 키로 조회.
+async function poll(id, cred, { timeoutMs = 300000, intervalMs = 5000 } = {}) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const res = await fetch(`${BASE}/v1/job-sets/${id}`, { headers: headers() });
+    const res = await fetch(`${BASE}/v1/job-sets/${id}`, { headers: authHeader(cred) });
     const d = await res.json().catch(() => ({}));
     const job = (d.jobs && d.jobs[0]) || {};
     if (job.status === "completed") {
@@ -52,7 +60,8 @@ async function poll(id, { timeoutMs = 300000, intervalMs = 5000 } = {}) {
 export async function generateTitleImage({ prompt, imageRefUrl }) {
   if (!imageRefUrl) throw new Error("Seedream: 입력 사진(독사진) 필요");
   const params = { prompt, input_images: [{ type: "image_url", image_url: imageRefUrl }] };
-  return poll(await submit("/v1/text2image/seedream", params));
+  const { id, cred } = await submit("/v1/text2image/seedream", params);
+  return poll(id, cred);
 }
 
 // AI영상(Kling i2v). imageUrl: 독사진 1장 서명URL → 영상. 반환: 영상 URL.
@@ -63,5 +72,6 @@ export async function generateMemoryVideo({ prompt, imageUrl, imageUrls }) {
   const params = { prompt, input_image: { type: "image_url", image_url: url } };
   // Kling 영상생성은 수 분 소요 — 폴링 타임아웃 길게(기본 12분, 리퍼 15분보다 짧게). env로 조정.
   const timeoutMs = Number(process.env.HIGGSFIELD_POLL_MS) || 720000;
-  return poll(await submit("/v1/image2video/kling", params), { timeoutMs });
+  const { id, cred } = await submit("/v1/image2video/kling", params);
+  return poll(id, cred, { timeoutMs });
 }
