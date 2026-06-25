@@ -13,7 +13,7 @@ bash supabase/tests/run.sh
 ```
 
 필요 환경변수(.env):
-- `SB_REF` — 프로젝트 ref (예: lvrirxtfjeuwionjluxf)
+- `SB_REF` — 프로젝트 ref (예: mgybnsidmnzjfqtucfhl)
 - `SB_PAT` — Supabase Management API Personal Access Token
 - `SB_SERVICE_KEY` — service_role 키 (테스트 유저 생성/삭제·소유자 SQL용)
 - `SB_ANON_KEY` — anon 키
