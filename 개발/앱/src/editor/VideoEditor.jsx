@@ -68,10 +68,10 @@ export default function VideoEditor({ reservation, onClose }) {
     if (!media) return m;
     const a = media.assets || [];
     const bySort = (p, q) => (p.sortOrder ?? 0) - (q.sortOrder ?? 0);
-    const titleSrc = a.find((x) => x.role === "title" && x.url);
+    const titleSrc = a.find((x) => x.role === "title" && x.url && x.selected) || a.find((x) => x.role === "title" && x.url);
     const titleVid = a.find((x) => x.role === "title_video" && x.url && x.selected);   // 활성 완성 타이틀 클립
     const titleRes = a.filter((x) => x.role === "title_result" && x.url && x.selected).sort(bySort); // 활성 버전만
-    const aiSrc = a.filter((x) => x.role === "ai_video" && x.url).sort(bySort);
+    const aiSrc = a.filter((x) => x.role === "ai_video" && x.url && x.selected).sort(bySort); // 활성 소스만
     const aiRes = a.filter((x) => x.role === "ai_video_result" && x.url && x.selected).sort(bySort); // 활성 버전만
     const slideSrc = a.filter((x) => x.role === "slide_photo" && x.url).map((x) => x.url);
     const slideRes = a.find((x) => x.role === "slide_video" && x.url);

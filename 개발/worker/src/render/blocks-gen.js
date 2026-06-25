@@ -40,9 +40,12 @@ export async function generateBlocks(job, assets) {
   const token = job.token;
   const name = job.pet_name || "";
   const photos = assets.filter((a) => a.kind === "photo" && a.storage_path);
-  const titleA = photos.find((a) => a.role === "title") || photos[0];
-  const aiPhotos = photos.filter((a) => a.role === "ai_video");
-  const sign = (a) => st.signedUrl(cfg.uploadBucket, a.storage_path, 3600);
+  const _bySort = (p, q) => (p.sort_order ?? 0) - (q.sort_order ?? 0);
+  // 소스도 버전 히스토리 — 활성(selected) 본을 사용. 슬롯당 하나.
+  const titleA = photos.filter((a) => a.role === "title" && a.selected).sort(_bySort)[0] || photos.find((a) => a.role === "title") || photos[0];
+  const aiSel = photos.filter((a) => a.role === "ai_video" && a.selected).sort(_bySort);
+  const aiPhotos = aiSel.length ? aiSel : photos.filter((a) => a.role === "ai_video").sort(_bySort);
+  const sign = (a) => st.safeImageUrl(cfg.uploadBucket, a.storage_path, 3600); // B: 힉스필드 안전 포맷(jpg/png) 보장
   const del = (role, sort) => { let q = db.from("submission_assets").delete().eq("submission_id", job.id).eq("role", role); if (sort != null) q = q.eq("sort_order", sort); return q; };
   const ins = (row) => db.from("submission_assets").insert(row);
   // 버전 히스토리 — 삭제 대신 기존 비활성(selected=false) + 새 버전 활성 삽입. 기존본도 나중에 선택 가능.
@@ -56,14 +59,14 @@ export async function generateBlocks(job, assets) {
   const curTitleImg = async (sort) => { const { data } = await db.from("submission_assets").select("storage_path").eq("submission_id", job.id).eq("role", "title_result").eq("sort_order", sort).eq("selected", true).order("created_at", { ascending: false }).limit(1).maybeSingle(); return data?.storage_path || null; };
 
   // 프롬프트 참고이미지(memoria-content) 서명URL — 없으면 null.
-  const pRef = async (p) => { if (!p?.refImage) return null; try { return await st.signedUrl("memoria-content", p.refImage, 3600); } catch { return null; } };
+  const pRef = async (p) => { if (!p?.refImage) return null; try { return await st.safeImageUrl("memoria-content", p.refImage, 3600); } catch { return null; } };
 
   // 타이틀 이미지1(Seedream): 독사진 + 영정배경 + (선택)프롬프트 참고이미지 + 텍스트. 새 버전 활성.
   async function genTitleImg0() {
     if (!titleA) return 0;
     const ref = await sign(titleA);
     let bg = null;
-    try { bg = await st.signedUrl("memoria-content", STOCK_BG, 3600); } catch { bg = null; } // 영정 배경 스톡(없으면 생략)
+    try { bg = await st.safeImageUrl("memoria-content", STOCK_BG, 3600); } catch { bg = null; } // 영정 배경 스톡(없으면 생략)
     const pref = await pRef(titleStyle1);
     const refs = [ref, bg, pref].filter(Boolean);
     const url1 = await generateTitleImage({ prompt: titlePrompt1(name, titleStyle1?.body, !!bg), imageRefUrls: refs });
@@ -75,7 +78,7 @@ export async function generateBlocks(job, assets) {
   // 타이틀 이미지2(Seedream): 활성 이미지1 → 화풍·배경 변경(오버랩용)
   async function genTitleImg1() {
     const p0 = await curTitleImg(0); if (!p0) throw new Error("이미지1을 먼저 생성하세요");
-    const ref = await st.signedUrl(cfg.uploadBucket, p0, 3600);
+    const ref = await st.safeImageUrl(cfg.uploadBucket, p0, 3600);
     const pref = await pRef(titleStyle2);
     const url2 = await generateTitleImage({ prompt: titlePrompt2(name, titleStyle2?.body), imageRefUrls: [ref, pref].filter(Boolean) });
     const p = `${token}/results/title_1_${uniq()}.png`;

@@ -190,12 +190,19 @@ export const actions = {
       .then((b) => toast(`배경 음악 적용: ${b.name} — 다음 최종 렌더부터 반영`))
       .catch((e) => toast("음악 업로드 실패: " + e.message));
   },
-  // 소스 자산 파일 교체/추가(편집기) — 업로드 후 미디어 재로드.
-  replaceAsset: (reservationId, assetId, token, file) => {
+  // 자산 버전 추가(덮어쓰기 X) — 같은 슬롯에 새 버전 쌓고 활성. 결과·소스 공용.
+  addAsset: (reservationId, submissionId, token, file, role, sortOrder, kind) => {
     if (!LIVE) return;
-    subs.replaceAssetFile(assetId, token, file)
-      .then(() => { actions.loadReservationMedia(reservationId); toast("사진을 교체했습니다 — 「AI로 만들기」로 다시 생성하세요"); })
-      .catch((e) => toast("교체 실패: " + e.message));
+    subs.addAsset(submissionId, token, file, role, sortOrder, kind)
+      .then(() => { actions.loadReservationMedia(reservationId); toast("내역에 추가했습니다"); })
+      .catch((e) => toast("추가 실패: " + e.message));
+  },
+  // 자산 버전 삭제.
+  deleteAsset: (reservationId, assetId) => {
+    if (!LIVE) return;
+    subs.deleteAsset(assetId)
+      .then(() => { actions.loadReservationMedia(reservationId); toast("삭제했습니다"); })
+      .catch((e) => toast("삭제 실패: " + e.message));
   },
   addSlidePhoto: (reservationId, submissionId, token, file) => {
     if (!LIVE) return;

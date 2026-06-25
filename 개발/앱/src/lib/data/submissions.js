@@ -54,6 +54,31 @@ export async function selectAsset(submissionId, assetId, role, sortOrder) {
 const _ext = (n = "") => { const i = n.lastIndexOf("."); return i > 0 ? n.slice(i + 1) : "bin"; };
 const _uniq = () => globalThis.crypto?.randomUUID?.() || Date.now() + "-" + Math.random().toString(36).slice(2, 8);
 
+// 자산 버전 추가(덮어쓰기 X) — 같은 슬롯(role+sort)에 새 버전 업로드 + 활성, 기존은 내역으로 보관.
+export async function addAsset(submissionId, token, file, role, sortOrder, kind) {
+  const sbc = getClient();
+  const isVid = (kind || file.type || "").includes("video");
+  const path = `${token}/added/${_uniq()}.${_ext(file.name)}`;
+  const { error: ue } = await sbc.storage.from(UPLOAD_BUCKET).upload(path, file, { contentType: file.type || undefined });
+  if (ue) throw new Error("업로드 실패: " + ue.message);
+  const d = need();
+  await d.from("submission_assets").update({ selected: false }).eq("submission_id", submissionId).eq("role", role).eq("sort_order", sortOrder);
+  const { error } = await d.from("submission_assets").insert({ submission_id: submissionId, kind: isVid ? "video" : "photo", role, name: file.name, storage_path: path, sort_order: sortOrder, selected: true });
+  if (error) throw new Error(error.message);
+}
+
+// 자산 버전 삭제 — 활성본을 지우면 같은 슬롯의 최신 남은 버전을 활성으로.
+export async function deleteAsset(assetId) {
+  const d = need();
+  const { data: a } = await d.from("submission_assets").select("submission_id, role, sort_order, selected").eq("id", assetId).maybeSingle();
+  const { error } = await d.from("submission_assets").delete().eq("id", assetId);
+  if (error) throw new Error(error.message);
+  if (a && a.selected) {
+    const { data: rest } = await d.from("submission_assets").select("id").eq("submission_id", a.submission_id).eq("role", a.role).eq("sort_order", a.sort_order).order("created_at", { ascending: false }).limit(1);
+    if (rest && rest[0]) await d.from("submission_assets").update({ selected: true }).eq("id", rest[0].id);
+  }
+}
+
 // 소스 자산 파일 교체(타이틀·AI 독사진 등) — 새 파일 업로드 후 storage_path 갱신(staff write RLS).
 export async function replaceAssetFile(assetId, token, file) {
   const sbc = getClient();
