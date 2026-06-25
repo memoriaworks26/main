@@ -1,7 +1,7 @@
 // 편집기 — 오른쪽 속성 패널(PropPanel) + 보조(PromptPicker·PromptModal·GenHistory).
 // 선택(sel)에 따라 블록/전환/음악의 편집 컨트롤을 보여준다. 편집값은 상위(VideoEditor)의 edits로 컨트롤드.
 import React, { useState, useRef } from "react";
-import { Image as ImageIcon, Music, Upload, Plus, RefreshCw, Trash2, ArrowRightLeft, Check, Type, SlidersHorizontal, X, Film } from "lucide-react";
+import { Image as ImageIcon, Music, Upload, Plus, RefreshCw, Trash2, ArrowRightLeft, Check, Type, SlidersHorizontal, X, Film, Download } from "lucide-react";
 import { SERIF, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS } from "../theme.js";
 import { DateField, Modal } from "../ui.jsx";
 import { toast } from "../toast.jsx";
@@ -24,6 +24,38 @@ function FileButton({ accept, onFile, className, style, children }) {
       <input ref={ref} type="file" accept={accept} className="hidden" onChange={(e) => { const f = e.target.files && e.target.files[0]; if (f) onFile(f); e.target.value = ""; }} />
       <button type="button" onClick={() => ref.current && ref.current.click()} className={className} style={style}>{children}</button>
     </>
+  );
+}
+
+// 서명URL 다운로드(새 탭 폴백).
+function dlAnchor(url, name) {
+  try { const a = document.createElement("a"); a.href = url; a.download = name || ""; a.rel = "noopener"; document.body.appendChild(a); a.click(); a.remove(); }
+  catch { window.open(url, "_blank"); }
+}
+
+// 소스/결과 카드 — 미리보기 + 생성(API) + 다운로드 + 교체(업로드). 타이틀 이미지1·2·영상화, AI영상 등 각각 매니징.
+function AssetCard({ label, hint, asset, kind = "image", onGenerate, genLabel = "AI 생성", onReplace, replaceAccept = "image/*" }) {
+  const has = !!asset?.url;
+  const btn = "flex items-center gap-1 px-2 py-1.5 text-[11.5px] font-semibold outline-none";
+  const sub = { border: "1px solid " + LINE2, borderRadius: 5, color: MUTE };
+  return (
+    <div className="mb-3 px-2.5 py-2.5" style={{ background: "#faf8f3", border: "1px solid " + LINE2, borderRadius: RADIUS }}>
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <span className="text-[12px] font-bold" style={{ color: INK }}>{label}</span>
+        {hint && <span className="text-[10.5px]" style={{ color: FAINT }}>{hint}</span>}
+      </div>
+      <div className="relative w-full overflow-hidden" style={{ aspectRatio: "16/9", background: "#1c232c", borderRadius: 6 }}>
+        {has ? (kind === "video"
+          ? <video src={asset.url} controls playsInline preload="metadata" className="absolute inset-0 h-full w-full" />
+          : <img src={asset.url} alt="" className="absolute inset-0 h-full w-full object-contain" />)
+          : <div className="absolute inset-0 flex items-center justify-center text-[11px]" style={{ color: FAINT }}>{onGenerate ? "아직 없음 — 생성하세요" : "없음"}</div>}
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        {onGenerate && <button onClick={onGenerate} className={btn + " text-white"} style={{ background: GOLD, borderRadius: 5 }}><RefreshCw className="h-3.5 w-3.5" /> {genLabel}</button>}
+        {has && <button onClick={() => dlAnchor(asset.url, asset.name)} className={btn} style={sub}><Download className="h-3.5 w-3.5" /> 다운로드</button>}
+        {onReplace && <FileButton accept={replaceAccept} onFile={onReplace} className={btn} style={sub}><Upload className="h-3.5 w-3.5" /> 교체</FileButton>}
+      </div>
+    </div>
   );
 }
 // 소리 크기 슬라이더(0~100%) — 클립·추억영상 공용
@@ -143,6 +175,8 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
   const _bySort = (p, q) => (p.sort_order ?? p.sortOrder ?? 0) - (q.sort_order ?? q.sortOrder ?? 0);
   const _titleVideo = _assets.find((a) => a.role === "title_video" && a.url);
   const _titleResults = _assets.filter((a) => a.role === "title_result" && a.url).sort(_bySort);
+  const _img1 = _titleResults.find((a) => (a.sortOrder ?? 0) === 0);
+  const _img2 = _titleResults.find((a) => (a.sortOrder ?? 0) === 1);
   const _aiResults = _assets.filter((a) => a.role === "ai_video_result" && a.url).sort(_bySort);
   const _slideResult = _assets.find((a) => a.role === "slide_video" && a.url);
   const genResults = k === "title"
@@ -178,24 +212,12 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        {/* 소스 파일 — 타이틀·AI영상은 독사진(이미지)·클립은 파일. 추억 영상(유저 영상 묶음)·슬라이드는 별도 처리라 미노출 */}
-        {(k === "clip" || k === "ai" || k === "title") && (() => {
-          const isPhoto = k === "title" || k === "ai"; // 독사진(이미지) 입력
+        {/* 클립 소스 파일(콘텐츠 허브) — 타이틀·AI영상의 독사진은 각 섹션에서 카드로 매니징 */}
+        {k === "clip" && (() => {
           const fileName = srcAsset?.name || (item.file || item.source || "").split("/").pop() || "파일 없음";
           return (
-            <Field label={isPhoto ? "보호자 독사진 (AI 변환 소스)" : "지금 들어간 파일"}>
-              {srcAsset?.url && (
-                <img src={srcAsset.url} alt="" className="mb-2 w-full" style={{ aspectRatio: "16/9", objectFit: "cover", borderRadius: RADIUS, border: "1px solid " + LINE2, background: "#000" }} />
-              )}
+            <Field label="지금 들어간 파일">
               <div className="px-3 py-2.5 text-[12.5px]" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: INK, wordBreak: "break-all" }}>{fileName}</div>
-              {srcAsset && reservation?.id && media?.token ? (
-                <FileButton accept={isPhoto ? "image/*" : "image/*,video/*"} onFile={(f) => actions.replaceAsset(reservation.id, srcAsset.id, media.token, f)}
-                  className="mt-2 flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}>
-                  <Upload className="h-4 w-4" /> {isPhoto ? "사진 교체" : "다른 파일로 바꾸기"}
-                </FileButton>
-              ) : (
-                <button onClick={() => toast("실제 예약에서만 교체할 수 있습니다")} className="mt-2 flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><Upload className="h-4 w-4" /> {isPhoto ? "사진 교체" : "다른 파일로 바꾸기"}</button>
-              )}
             </Field>
           );
         })()}
@@ -203,23 +225,23 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
         {k === "title" && (() => {
           const prefix = item.prefix ?? TITLE_SYSTEM_TEXT;
           const petName = item.text ?? name;
+          const resId = reservation?.id, tok = media?.token, canEdit = !!(resId && tok);
+          const gen = (t) => canEdit ? actions.regenBlock(resId, t) : toast("실제 예약에서만 생성됩니다");
+          const repl = (aid) => (f) => (canEdit && aid) ? actions.replaceAsset(resId, aid, tok, f) : toast("먼저 생성하거나 실제 예약에서 교체하세요");
           return (
           <>
             <div className="grid grid-cols-2 gap-2">
               <Field label="시스템 문구"><input className={inputCls} style={{ ...inputStyle, fontFamily: SERIF }} value={prefix} onChange={(e) => onEdit(item.id, { prefix: e.target.value })} /></Field>
               <Field label="반려동물 이름"><input className={inputCls} style={{ ...inputStyle, fontFamily: SERIF }} value={petName} onChange={(e) => onEdit(item.id, { text: e.target.value })} /></Field>
             </div>
-            <Field label="자막 미리보기 · 중앙 하단">
-              <div className="flex items-center justify-center px-3 py-4" style={{ background: "#1c232c", borderRadius: RADIUS }}>
-                <span style={{ fontFamily: SERIF, fontSize: 22, fontWeight: 700, color: "#f3e9c8", textShadow: "0 2px 8px rgba(0,0,0,.6)" }}>{`${prefix} ${petName}`.trim()}</span>
-              </div>
-            </Field>
-            <div className="mb-4 px-3 py-2.5 text-[11.5px] leading-relaxed" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
-              ① <b style={{ color: INK }}>AI 초상화</b>(독사진→초상화)와 자막이 서서히 나타나고, <b style={{ color: INK }}>10초</b>에 ② <b style={{ color: INK }}>톤 변경 사진</b>이 오버랩되어 나타난 뒤 페이드아웃됩니다. (총 20초)
-            </div>
             <PromptPicker target="타이틀" onManage={() => setPromptModal(true)} />
-            <button onClick={() => onGenerate(item.id)} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> AI로 만들기</button>
-            <GenHistory results={genResults} />
+            <AssetCard label="보호자 독사진" hint="원본 소스" asset={_titlePhoto} kind="image" onReplace={repl(_titlePhoto?.id)} />
+            <AssetCard label="① 이미지1" hint="독사진 → 영정·배경" asset={_img1} kind="image" onGenerate={() => gen("title:0")} genLabel={_img1 ? "재생성" : "AI 생성"} onReplace={repl(_img1?.id)} />
+            <AssetCard label="② 이미지2" hint="이미지1 → 화풍·배경 변경" asset={_img2} kind="image" onGenerate={() => gen("title:1")} genLabel={_img2 ? "재생성" : "AI 생성"} onReplace={repl(_img2?.id)} />
+            <AssetCard label="③ 영상화" hint="이미지1+2 → 완성 클립 20초" asset={_titleVideo} kind="video" onGenerate={() => gen("title:video")} genLabel={_titleVideo ? "다시 만들기" : "영상 만들기"} />
+            <div className="mb-2 px-3 py-2.5 text-[11px] leading-relaxed" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
+              ① 이미지1+자막이 서서히 나타나고 <b style={{ color: INK }}>10초</b>에 ② 이미지2가 오버랩 → 페이드아웃(총 20초). 이미지를 바꾸면 <b style={{ color: INK }}>③ 영상화</b>를 다시 눌러 반영하세요.
+            </div>
           </>
           );
         })()}
@@ -316,17 +338,24 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
           );
         })()}
 
-        {k === "ai" && (
+        {k === "ai" && (() => {
+          const resId = reservation?.id, tok = media?.token, canEdit = !!(resId && tok);
+          const i = (item.aiIndex || 1) - 1;
+          const resA = _aiResults[i];
+          const gen = () => canEdit ? actions.regenBlock(resId, "ai:" + i) : toast("실제 예약에서만 생성됩니다");
+          const repl = (aid) => (f) => (canEdit && aid) ? actions.replaceAsset(resId, aid, tok, f) : toast("실제 예약에서만 교체할 수 있습니다");
+          return (
           <>
             <PromptPicker target="AI영상" onManage={() => setPromptModal(true)} />
-            <button onClick={() => onGenerate(item.id)} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> AI로 만들기</button>
-            <GenHistory results={genResults} />
-            <div className="mt-3 px-3 py-2.5 text-[11.5px] leading-relaxed" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
-              독사진 1장 → AI 영상(약 8초). 추억 슬라이드 앞(A) · 추억 영상 뒤(B)로 유저 소스를 감쌉니다.
+            <AssetCard label="보호자 독사진" hint="원본 소스" asset={srcAsset} kind="image" onReplace={repl(srcAsset?.id)} />
+            <AssetCard label="AI 영상 (Kling)" hint="독사진 → 영상(약 5초)" asset={resA} kind="video" onGenerate={gen} genLabel={resA ? "재생성" : "AI 생성"} />
+            <div className="mt-1 px-3 py-2.5 text-[11.5px] leading-relaxed" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
+              추억 슬라이드 앞(A) · 추억 영상 뒤(B)로 유저 소스를 감쌉니다.
             </div>
-            <div className="mt-4"><SoundField label="AI 영상 소리 크기" value={item.volume} onChange={(val) => onEdit(item.id, { volume: val })} /></div>
+            <div className="mt-3"><SoundField label="AI 영상 소리 크기" value={item.volume} onChange={(val) => onEdit(item.id, { volume: val })} /></div>
           </>
-        )}
+          );
+        })()}
 
         {k === "letter" && (
           <>

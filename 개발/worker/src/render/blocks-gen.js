@@ -44,35 +44,44 @@ export async function generateBlocks(job, assets) {
 
   const titleStyle = await activePrompt("타이틀");
   const aiStyle = await activePrompt("AI영상");
-  // 타이틀 2장(Seedream): ① 독사진→영정, ② ①→화풍·배경 변경(오버랩용). 활성 프롬프트 스타일 반영.
-  async function genTitle() {
+  const tp0 = `${token}/results/title_0.png`, tp1 = `${token}/results/title_1.png`, tvPath = `${token}/results/title.mp4`;
+  const curTitleImg = async (sort) => { const { data } = await db.from("submission_assets").select("storage_path").eq("submission_id", job.id).eq("role", "title_result").eq("sort_order", sort).maybeSingle(); return data?.storage_path || null; };
+
+  // 타이틀 이미지1(Seedream): 독사진 → 영정+배경
+  async function genTitleImg0() {
     if (!titleA) return 0;
-    await del("title_result");
     const ref = await sign(titleA);
     const url1 = await generateTitleImage({ prompt: titlePrompt1(name, titleStyle), imageRefUrl: ref });
-    const p1 = `${token}/results/title_0.png`;
-    await st.uploadFromUrl(cfg.uploadBucket, p1, url1, "image/png");
-    await ins({ submission_id: job.id, kind: "photo", role: "title_result", name: "title_0.png", storage_path: p1, sort_order: 0 });
-    const url2 = await generateTitleImage({ prompt: titlePrompt2(name, titleStyle), imageRefUrl: url1 });
-    const p2 = `${token}/results/title_1.png`;
-    await st.uploadFromUrl(cfg.uploadBucket, p2, url2, "image/png");
-    await ins({ submission_id: job.id, kind: "photo", role: "title_result", name: "title_1.png", storage_path: p2, sort_order: 1 });
-    log.info(`  타이틀 2장 생성(Seedream)${titleStyle ? " [활성 프롬프트]" : ""}`);
-    // 2장 → ffmpeg 타이틀 영상(완성 클립: ①페이드+자막 → ②오버랩 20초) → title_video. 편집기는 이 클립을 재생.
+    await del("title_result", 0); await st.uploadFromUrl(cfg.uploadBucket, tp0, url1, "image/png");
+    await ins({ submission_id: job.id, kind: "photo", role: "title_result", name: "title_0.png", storage_path: tp0, sort_order: 0 });
+    log.info("  타이틀 이미지1 생성(Seedream)"); return 1;
+  }
+  // 타이틀 이미지2(Seedream): 이미지1 → 화풍·배경 변경(오버랩용)
+  async function genTitleImg1() {
+    const p = await curTitleImg(0); if (!p) throw new Error("이미지1을 먼저 생성하세요");
+    const ref = await st.signedUrl(cfg.uploadBucket, p, 3600);
+    const url2 = await generateTitleImage({ prompt: titlePrompt2(name, titleStyle), imageRefUrl: ref });
+    await del("title_result", 1); await st.uploadFromUrl(cfg.uploadBucket, tp1, url2, "image/png");
+    await ins({ submission_id: job.id, kind: "photo", role: "title_result", name: "title_1.png", storage_path: tp1, sort_order: 1 });
+    log.info("  타이틀 이미지2 생성(Seedream, 화풍변경)"); return 1;
+  }
+  // 타이틀 영상화(ffmpeg): 이미지1·2 → 완성 클립(20초, 크레딧 없음)
+  async function genTitleVideo() {
+    const a0 = await curTitleImg(0), a1 = await curTitleImg(1);
+    if (!a0 || !a1) throw new Error("이미지 1·2를 먼저 생성하세요");
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mw-title-"));
     try {
-      await st.downloadTo(await st.signedUrl(cfg.uploadBucket, p1, 3600), path.join(dir, "t0.png"));
-      await st.downloadTo(await st.signedUrl(cfg.uploadBucket, p2, 3600), path.join(dir, "t1.png"));
+      await st.downloadTo(await st.signedUrl(cfg.uploadBucket, a0, 3600), path.join(dir, "t0.png"));
+      await st.downloadTo(await st.signedUrl(cfg.uploadBucket, a1, 3600), path.join(dir, "t1.png"));
       const tv = path.join(dir, "title.mp4");
       await makeTitleVideo(path.join(dir, "t0.png"), path.join(dir, "t1.png"), `사랑하는 ${name}`, FONT, tv);
-      const tvPath = `${token}/results/title.mp4`;
-      await st.uploadTo(cfg.uploadBucket, tvPath, await fs.readFile(tv), "video/mp4");
-      await del("title_video");
+      await del("title_video"); await st.uploadTo(cfg.uploadBucket, tvPath, await fs.readFile(tv), "video/mp4");
       await ins({ submission_id: job.id, kind: "video", role: "title_video", name: "title.mp4", storage_path: tvPath, sort_order: 0 });
-      log.info(`  타이틀 영상 합성 → ${tvPath}`);
+      log.info("  타이틀 영상화(ffmpeg)");
     } finally { await fs.rm(dir, { recursive: true, force: true }); }
-    return 2;
+    return 0;
   }
+  async function genTitleAll() { let c = await genTitleImg0(); c += await genTitleImg1(); await genTitleVideo(); return c; }
   // AI영상 i번(Kling) — 해당 독사진 1장 → 영상. 활성 프롬프트 반영.
   async function genAi(i) {
     if (!aiPhotos[i]) return 0;
@@ -86,13 +95,17 @@ export async function generateBlocks(job, assets) {
     return 1;
   }
 
-  const target = job.regen_target; // null=전체 / "title" / "ai:i"
+  // target: null=전체 / "title"(전체) / "title:0"(이미지1) / "title:1"(이미지2) / "title:video"(영상화) / "ai:i"
+  const target = job.regen_target;
   if (job.skip_ai && !target) { log.info("  AI 변환 안함 — 블록 생성 생략"); return { count: 0 }; }
   let count = 0;
-  if (target === "title") count += await genTitle();
+  if (target === "title") count += await genTitleAll();
+  else if (target === "title:0") count += await genTitleImg0();
+  else if (target === "title:1") count += await genTitleImg1();
+  else if (target === "title:video") await genTitleVideo();
   else if (target && target.startsWith("ai:")) count += await genAi(Number(target.slice(3)));
   else {
-    count += await genTitle();
+    count += await genTitleAll();
     for (let i = 0; i < aiPhotos.length; i++) count += await genAi(i);
   }
   return { count };
