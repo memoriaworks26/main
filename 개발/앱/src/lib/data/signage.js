@@ -13,6 +13,7 @@ const mapDevice = (r) => ({
   volume: r.volume, muted: r.muted, ip: r.ip, lastComm: r.last_comm,
   enrolled: !!r.device_token_hash, enrollCode: r.enroll_code,    // 토큰해시 값은 노출 X(불리언만)
   pendingCmd: r.pending_cmd, orientation: r.orientation, currentVideoId: r.current_video_id,
+  hwSerial: r.hw_serial, model: r.model, mac: r.mac,             // 파이가 보고한 하드웨어 식별값
 });
 
 export async function fetchDevices() {

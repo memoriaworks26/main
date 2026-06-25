@@ -219,6 +219,15 @@ function DeviceModal({ dev, onClose }) {
         </div>
         <div className="mt-0.5 text-[12px]" style={{ color: MUTE }}>{live.partner} · {live.room || "호실 미지정"}</div>
 
+        {(live.hwSerial || live.model || live.ip || live.mac) && (
+          <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-0.5 px-2.5 py-2 text-[11.5px]" style={{ background: "#faf8f4", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
+            {live.model && <div>모델 <span style={{ color: INK }}>{live.model}</span></div>}
+            {live.ip && <div>IP <span className="tabular-nums" style={{ color: INK }}>{live.ip}</span></div>}
+            {live.hwSerial && <div className="col-span-2">시리얼 <span style={{ fontFamily: "ui-monospace, monospace", color: INK }}>{live.hwSerial}</span></div>}
+            {live.mac && <div className="col-span-2">MAC <span style={{ fontFamily: "ui-monospace, monospace", color: INK }}>{live.mac}</span></div>}
+          </div>
+        )}
+
         {pending ? (
           // 미등록 — 세팅 안내 + 등록코드 + (대기 중 자동 확인)
           <>

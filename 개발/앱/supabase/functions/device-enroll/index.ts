@@ -45,13 +45,14 @@ Deno.serve(async (req) => {
   if (dev.enroll_expires_at && new Date(dev.enroll_expires_at) < new Date())
     return json(401, { error: "등록코드 만료 — 콘솔에서 재발급" });
 
-  // 토큰 발급 → 해시만 저장, 코드 폐기
+  // 토큰 발급 → 해시만 저장, 코드 폐기. 하드웨어 식별값(시리얼·모델·MAC)도 1회 보고받아 저장.
   const token = randToken();
-  const ip = typeof body.ip === "string" ? body.ip : null;
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
   const { error } = await mem.from("signage_devices").update({
     device_token_hash: await sha256hex(token),
     enroll_code: null, enroll_expires_at: null,
-    status: "online", last_comm: new Date().toISOString(), ip,
+    status: "online", last_comm: new Date().toISOString(), ip: str(body.ip),
+    hw_serial: str(body.serial), model: str(body.model), mac: str(body.mac),
   }).eq("id", dev.id);
   if (error) return json(400, { error: error.message });
 

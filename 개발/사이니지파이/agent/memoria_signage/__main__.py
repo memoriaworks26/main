@@ -22,7 +22,7 @@ class FakeApi:
     def __init__(self):
         self.n = 0
 
-    def enroll(self, code, ip=None):
+    def enroll(self, code, ip=None, hw=None):
         return "FAKE-TOKEN"
 
     def sync(self, token, ip=None, current_video_id=None):

@@ -20,7 +20,7 @@ class FakeApi:
         self.i = 0
         self.synced = []          # 매 sync에 보고된 current_video_id 기록
 
-    def enroll(self, code, ip=None):
+    def enroll(self, code, ip=None, hw=None):
         return "T"
 
     def sync(self, token, ip=None, current_video_id=None):

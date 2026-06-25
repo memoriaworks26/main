@@ -44,8 +44,11 @@ class Api:
         except (urllib.error.URLError, socket.timeout, OSError) as e:
             raise ApiError("%s 연결 실패: %s" % (path, e))
 
-    def enroll(self, code, ip=None):
-        r = self._post("/device-enroll", {"code": code, "ip": ip})
+    def enroll(self, code, ip=None, hw=None):
+        body = {"code": code, "ip": ip}
+        if hw:
+            body.update({k: v for k, v in hw.items() if v is not None})   # serial·model·mac
+        r = self._post("/device-enroll", body)
         if not r.get("ok") or not r.get("token"):
             raise ApiError("등록 거부: " + str(r.get("error") or r))
         return r["token"]

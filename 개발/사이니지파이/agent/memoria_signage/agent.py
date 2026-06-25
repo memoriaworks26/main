@@ -5,6 +5,7 @@ import logging
 import os
 import time
 
+from . import hardware
 from .api import ApiError, local_ip
 
 log = logging.getLogger("memoria.agent")
@@ -32,7 +33,7 @@ class Agent:
             log.error("등록코드 없음(provision.json) — 등록 불가")
             return False
         try:
-            self.token = self.api.enroll(code, ip=local_ip())
+            self.token = self.api.enroll(code, ip=local_ip(), hw=hardware.hw_info())
             self.cfg.save_token(self.token)
             log.info("등록 완료 — 토큰 저장")
             return True
