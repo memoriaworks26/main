@@ -8,7 +8,7 @@ import { toast } from "../toast.jsx";
 import { confirm } from "../confirm.jsx";
 import * as D from "../data.js";
 import { useStore, actions, submissionFor } from "../store.js";
-import { buildBlocks, genDefault } from "./blocks.js";
+import { buildBlocks } from "./blocks.js";
 import { BlockList, Timeline } from "./timeline.jsx";
 import { Preview } from "./preview.jsx";
 import { PropPanel } from "./props.jsx";
@@ -142,16 +142,6 @@ export default function VideoEditor({ reservation, onClose }) {
     actions.regenBlock(reservation.id, target);
     toast("AI 재생성을 요청했습니다 — 1~2분 후 결과가 자동 갱신됩니다");
   };
-  const selectGen = (blockId, vid) => commit({ ...doc, gens: { ...gens, [blockId]: { ...(gens[blockId] || genDefault(blockId)), sel: vid } } });
-  // 만든 결과물 삭제 — 자동본은 제외. 선택본을 지우면 마지막 남은 버전으로 선택 이동.
-  const deleteGen = (blockId, vid) => {
-    const cur = gens[blockId] || genDefault(blockId);
-    const list = cur.list.filter((v) => v.id !== vid);
-    if (!list.length) return;
-    const selId = cur.sel === vid ? list[list.length - 1].id : cur.sel;
-    commit({ ...doc, gens: { ...gens, [blockId]: { list, sel: selId } } });
-    toast("결과물을 삭제했습니다");
-  };
   // 자막 추가/삭제 — 기본 없음에서 「자막 추가」로 넣고 미리보기/타임라인에서 배치. 텍스트·시간·위치는 edits로.
   const addSub = () => {
     const id = "sub-" + Date.now();
@@ -169,10 +159,8 @@ export default function VideoEditor({ reservation, onClose }) {
   // 자동본으로 — 편집값 비우고 모든 결과물 선택을 자동본(v0)으로
   const resetAuto = async () => {
     if (!(await confirm({ title: "자동본으로 되돌리기", message: "편집한 내용을 모두 비우고 자동 생성본으로 되돌립니다.", danger: true, confirmLabel: "되돌리기" }))) return;
-    const g0 = {};
-    Object.keys(gens).forEach((id) => { g0[id] = { ...gens[id], sel: gens[id].list[0]?.id }; });
-    commit({ edits: {}, gens: g0 });
-    toast("자동 생성본으로 되돌렸습니다");
+    commit({ ...doc, edits: {} });
+    toast("편집을 초기화했습니다");
   };
   const save = async () => { if (!(await confirm({ title: "저장", message: "편집한 내용을 저장합니다." }))) return; setSavedDoc(doc); toast("저장되었습니다"); };
 
@@ -253,7 +241,7 @@ export default function VideoEditor({ reservation, onClose }) {
           <Timeline blocks={timelineBlocks} edits={edits} bgmName={bgmName} subtitles={editedSubs} onSubChange={setEdit} onAddSub={addSub} onPickBgm={selectSlide} sel={sel} onSel={setSel} />
         </div>
         <aside className="w-80 shrink-0 overflow-y-auto" style={{ background: SURFACE, borderLeft: "1px solid " + LINE }}>
-          <PropPanel key={sel.scope + sel.id} blocks={panelBlocks} subtitles={editedSubs} edits={edits} onEdit={setEdit} onRemoveSub={removeSub} reservation={reservation} bgmName={bgmName} media={media} blockMedia={blockMedia} gens={gens} onGenerate={generate} onSelectGen={selectGen} onDeleteGen={deleteGen} sel={sel} />
+          <PropPanel key={sel.scope + sel.id} blocks={panelBlocks} subtitles={editedSubs} edits={edits} onEdit={setEdit} onRemoveSub={removeSub} reservation={reservation} bgmName={bgmName} media={media} blockMedia={blockMedia} onGenerate={generate} sel={sel} />
         </aside>
       </div>
 

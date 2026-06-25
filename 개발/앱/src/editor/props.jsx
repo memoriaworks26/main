@@ -7,7 +7,7 @@ import { DateField, Modal } from "../ui.jsx";
 import { toast } from "../toast.jsx";
 import * as D from "../data.js";
 import { useStore, actions } from "../store.js";
-import { BLOCK_ICON, KIND_LABEL, blockTrans, genDefault, exampleLetter, SLIDE_PHOTOS, SLIDE_PER, TITLE_SYSTEM_TEXT } from "./blocks.js";
+import { BLOCK_ICON, KIND_LABEL, blockTrans, exampleLetter, SLIDE_PHOTOS, SLIDE_PER, TITLE_SYSTEM_TEXT } from "./blocks.js";
 
 const PROMPT_TARGETS = ["타이틀", "AI영상"];
 
@@ -156,7 +156,7 @@ function GenHistory({ results = [] }) {
   );
 }
 
-export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, reservation, bgmName, media, gens, onGenerate, onSelectGen, onDeleteGen, sel }) {
+export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, reservation, bgmName, media, onGenerate, sel }) {
   const [promptModal, setPromptModal] = useState(false); // AI 문구 관리 모달
   let item;
   if (sel.scope === "block") item = blocks.find((b) => b.id === sel.id);
@@ -188,7 +188,6 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
     : k === "slide"
     ? (_slideResult ? [{ kind: "video", url: _slideResult.url, label: "슬라이드 영상" }] : [])
     : [];
-  const gen = sel.scope === "block" ? (gens[item.id] || genDefault(item.id)) : null; // 타이틀·슬라이드·AI 결과물 히스토리
   const name = reservation?.deceased || D.EDITOR_RESERVATION.deceased;
   // 편집값(컨트롤드) — 전환은 "trans-"+id, 음악은 "audio" 키로 보관
   const transKey = "trans-" + sel.id;
