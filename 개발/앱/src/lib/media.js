@@ -83,3 +83,33 @@ export const grabVideoFrame = (file) =>
     v.onseeked = done;
     v.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
   });
+
+// 업로드 전 이미지 정규화 — 무엇이 들어와도(HEIC·WebP·PNG…) JPEG로 통일. 힉스필드 입력 안정성 + 용량 절감.
+//   · EXIF 회전 보정(아이폰 사진 눕는 문제) — createImageBitmap의 imageOrientation으로 픽셀에 회전 반영
+//   · 장축 상한(maxEdge)으로 과대 원본 폭주 방지 → URL fetch 크기제한/타임아웃 회피
+//   · 브라우저가 디코딩 못 하면(데스크톱 HEIC 등) 원본 File 그대로 반환 → 워커(safeImageUrl)가 최종 정규화
+export async function imageToJpeg(file, { maxEdge = 2048, quality = 0.9 } = {}) {
+  if (!file || !file.type || !file.type.startsWith("image/")) return file; // 이미지 아니면 패스
+  let bitmap;
+  try {
+    bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  } catch (_) {
+    return file; // 디코딩 불가 → 원본 그대로(서버 정규화가 받음)
+  }
+  try {
+    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height) || 1);
+    const w = Math.max(1, Math.round(bitmap.width * scale));
+    const h = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = w; canvas.height = h;
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, w, h);
+    const blob = await new Promise((r) => canvas.toBlob(r, "image/jpeg", quality));
+    if (!blob) return file;
+    const base = (file.name || "photo").replace(/\.[^.]+$/, "");
+    return new File([blob], `${base}.jpg`, { type: "image/jpeg" });
+  } catch (_) {
+    return file;
+  } finally {
+    if (bitmap && bitmap.close) bitmap.close();
+  }
+}

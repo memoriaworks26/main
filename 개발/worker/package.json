@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "description": "메모리아웍스 렌더 워커 — 큐(submissions.queued) 소비 → AI·FFmpeg 렌더 → done",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "start": "node src/index.js",
     "once": "node src/index.js --once",
@@ -14,6 +16,7 @@
     "@supabase/supabase-js": "^2.45.0",
     "dotenv": "^16.4.5",
     "ffmpeg-static": "^5.3.0",
-    "ffprobe-static": "^3.1.0"
+    "ffprobe-static": "^3.1.0",
+    "sharp": "^0.33.5"
   }
 }

@@ -2,6 +2,7 @@
 // 워커 스토리지 — service_role(RLS 우회). 소스 서명URL·원격 다운로드·최종본 업로드.
 // ─────────────────────────────────────────────────────────────
 import { promises as fs } from "node:fs";
+import sharp from "sharp";
 import { sb } from "./supabase.js";
 
 // 비공개 객체 서명URL(Higgsfield가 가져갈 수 있게 / 결과 공유용).
@@ -9,6 +10,27 @@ export async function signedUrl(bucket, path, sec = 3600) {
   const { data, error } = await sb.storage.from(bucket).createSignedUrl(path, sec);
   if (error) throw new Error("서명URL 실패: " + error.message);
   return data.signedUrl;
+}
+
+// 힉스필드 입력용 안전 이미지 URL(B: 서버 정규화 백스톱).
+//   jpg/png는 그대로 통과(힉스필드 호환 확인됨), 그 외(heic·webp·tiff·bmp…)만 sharp로 jpeg 변환 후 재업로드.
+//   클라(imageToJpeg)를 거치지 않은 경로(어드민 프롬프트 참고이미지·편집기 교체·데스크톱 HEIC)까지 한 곳에서 보장.
+//   변환 시 EXIF 회전 보정(.rotate()) + 장축 4096 상한. 변환본은 {path}.hf.jpg로 upsert(재렌더 시 재사용).
+const SAFE_EXT = new Set(["jpg", "jpeg", "png"]);
+export async function safeImageUrl(bucket, path, sec = 3600) {
+  const ext = (path.split(".").pop() || "").toLowerCase();
+  if (SAFE_EXT.has(ext)) return signedUrl(bucket, path, sec); // 이미 안전 → 다운로드/변환 없이 통과
+  const src = await signedUrl(bucket, path, 600);
+  const res = await fetch(src);
+  if (!res.ok) throw new Error("정규화 원본 다운로드 실패(" + res.status + "): " + path);
+  const jpg = await sharp(Buffer.from(await res.arrayBuffer()))
+    .rotate() // EXIF 방향 자동 보정
+    .resize({ width: 4096, height: 4096, fit: "inside", withoutEnlargement: true })
+    .jpeg({ quality: 90 })
+    .toBuffer();
+  const out = path.replace(/\.[^.]+$/, "") + ".hf.jpg";
+  await uploadTo(bucket, out, jpg, "image/jpeg");
+  return signedUrl(bucket, out, sec);
 }
 
 // 원격 URL(서명URL·Higgsfield 결과) → 로컬 파일.

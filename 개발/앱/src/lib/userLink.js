@@ -6,6 +6,7 @@
 // 라이브(env 설정)면 Supabase, 아니면 목업으로 동일 인터페이스 폴백.
 // ─────────────────────────────────────────────────────────────
 import { getClient, BACKEND_LIVE, UPLOAD_BUCKET } from "./supabase.js";
+import { imageToJpeg } from "./media.js";
 
 // URL에서 토큰 추출: /u/<token> 경로 또는 ?t=<token> 쿼리. 없으면 null(데모).
 export function getToken() {
@@ -63,6 +64,7 @@ export async function fetchLinkConfig(token) {
 // 파일 1건 업로드. 반환: { storagePath, name, sizeMB, kind }.
 // 라이브가 아니면 업로드를 건너뛰고 합성 경로만 돌려준다(목업 동작 유지).
 export async function uploadAsset(token, file, { kind }) {
+  if (kind === "photo") file = await imageToJpeg(file); // A: 사진은 업로드 전 JPEG 통일(HEIC·WebP 등 정규화)
   const sizeMB = +(file.size / 1048576).toFixed(1);
   if (!BACKEND_LIVE || !token) {
     return { storagePath: `demo/${file.name}`, name: file.name, sizeMB, kind };
