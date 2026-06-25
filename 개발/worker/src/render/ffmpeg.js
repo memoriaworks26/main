@@ -147,14 +147,15 @@ export async function makeTitleVideo(img1, img2, caption, fontFile, out) {
   const dir = path.dirname(out);
   const font = fontFile ? `fontfile='${fontFile}':` : "";
   const seg1 = path.join(dir, "_tt1.mp4"), seg2 = path.join(dir, "_tt2.mp4");
-  // 자막: 2초까지 투명 → 3.5초까지 서서히 → 유지. border가 text alpha와 함께 페이드(box 대신).
+  // 자막: 큰 글씨(100), 3초까지 투명 → 8초까지 아주 천천히 서서히 → 유지. border가 text alpha와 함께 페이드.
   const cap = caption
-    ? `,drawtext=${font}text='${escText(caption)}':fontcolor=white:fontsize=64:borderw=3:bordercolor=black:x=(w-text_w)/2:y=h-200:alpha='if(lt(t,2),0,if(lt(t,3.5),(t-2)/1.5,1))'`
+    ? `,drawtext=${font}text='${escText(caption)}':fontcolor=white:fontsize=100:borderw=4:bordercolor=black:x=(w-text_w)/2:y=h-260:alpha='if(lt(t,3),0,if(lt(t,8),(t-3)/5,1))'`
     : "";
-  await ff(["-y", "-loop", "1", "-t", "11", "-i", img1, "-vf", `${FIT},fade=t=in:st=0:d=1.5${cap}`, "-r", String(FPS), ...ENC, seg1]);
+  // ① 이미지1 14초(천천히 3초 페이드인 + 자막 서서히). xfade offset10+dur4=14 안에 들어와야 함. ② 이미지2 10초.
+  await ff(["-y", "-loop", "1", "-t", "14", "-i", img1, "-vf", `${FIT},fade=t=in:st=0:d=3${cap}`, "-r", String(FPS), ...ENC, seg1]);
   await ff(["-y", "-loop", "1", "-t", "10", "-i", img2, "-vf", FIT, "-r", String(FPS), ...ENC, seg2]);
-  // 10초 지점에서 ②로 크로스페이드(1.5초) → 총 ~19.5초
-  await ff(["-y", "-i", seg1, "-i", seg2, "-filter_complex", "[0][1]xfade=transition=fade:duration=1.5:offset=10,format=yuv420p", "-r", String(FPS), ...ENC, out]);
+  // 10초 지점에서 ②로 크로스페이드(천천히 4초) → 총 ~19초
+  await ff(["-y", "-i", seg1, "-i", seg2, "-filter_complex", "[0][1]xfade=transition=fade:duration=4:offset=10,format=yuv420p", "-r", String(FPS), ...ENC, out]);
   return out;
 }
 
