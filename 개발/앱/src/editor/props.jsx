@@ -141,11 +141,14 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
   const srcAsset = k === "title" ? _titlePhoto : k === "ai" ? _aiPhotos[(item.aiIndex || 1) - 1] : null; // 블록 소스 사진
   // AI 생성 결과물(실데이터) — GenHistory에 실제로 표시.
   const _bySort = (p, q) => (p.sort_order ?? p.sortOrder ?? 0) - (q.sort_order ?? q.sortOrder ?? 0);
+  const _titleVideo = _assets.find((a) => a.role === "title_video" && a.url);
   const _titleResults = _assets.filter((a) => a.role === "title_result" && a.url).sort(_bySort);
   const _aiResults = _assets.filter((a) => a.role === "ai_video_result" && a.url).sort(_bySort);
   const _slideResult = _assets.find((a) => a.role === "slide_video" && a.url);
   const genResults = k === "title"
-    ? _titleResults.map((a, i) => ({ kind: "image", url: a.url, label: i === 0 ? "① 영정" : i === 1 ? "② 화풍변경" : `장면 ${i + 1}` }))
+    ? (_titleVideo
+        ? [{ kind: "video", url: _titleVideo.url, label: "타이틀 영상(완성 클립 · 20초)" }]
+        : _titleResults.map((a, i) => ({ kind: "image", url: a.url, label: i === 0 ? "① 영정(합성 중)" : "② 화풍변경(합성 중)" })))
     : k === "ai"
     ? (_aiResults[(item.aiIndex || 1) - 1] ? [{ kind: "video", url: _aiResults[(item.aiIndex || 1) - 1].url, label: "Kling AI영상" }] : [])
     : k === "slide"

@@ -11,6 +11,35 @@ import { Title, PhotoExampleGuide } from "./parts.jsx";
 
 const TRANSITIONS = D.USER_TRANSITIONS; // 전환 효과 명칭은 data.js에서 단일 관리
 
+// 미리보기 캔버스 슬라이드쇼 — 보호자 슬라이드 사진/영상 첫프레임을 크로스페이드로 순환(ffmpeg 슬라이드 구간을 클라이언트에서 모사).
+function SlideCanvas({ frames }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const cv = ref.current; if (!cv) return;
+    const ctx = cv.getContext("2d"); const W = cv.width, H = cv.height;
+    const imgs = frames.map((src) => { const im = new Image(); im.src = src; return im; });
+    const drawCover = (im) => {
+      const ir = im.naturalWidth / im.naturalHeight, cr = W / H; let w, h, x, y;
+      if (ir > cr) { h = H; w = H * ir; x = (W - w) / 2; y = 0; } else { w = W; h = W / ir; x = 0; y = (H - h) / 2; }
+      ctx.drawImage(im, x, y, w, h);
+    };
+    const PER = 2600, FADE = 700; let raf; const t0 = performance.now();
+    const frame = (now) => {
+      const n = imgs.length;
+      ctx.fillStyle = "#1c232c"; ctx.fillRect(0, 0, W, H);
+      if (n) {
+        const e = now - t0, idx = Math.floor(e / PER) % n, prev = (idx - 1 + n) % n, a = Math.min(1, (e % PER) / FADE);
+        if (n > 1 && imgs[prev].complete && imgs[prev].naturalWidth) drawCover(imgs[prev]);
+        if (imgs[idx].complete && imgs[idx].naturalWidth) { ctx.globalAlpha = n > 1 ? a : 1; drawCover(imgs[idx]); ctx.globalAlpha = 1; }
+      }
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, [frames]);
+  return <canvas ref={ref} width={640} height={360} className="absolute inset-0 h-full w-full" />;
+}
+
 // 소스 업로드 그리드 — 사진(슬라이드, 전환 선택) / 영상(추억 영상) 공용. withTrans면 카드마다 전환 선택 노출.
 function UploadGrid({ items, withTrans, st, onAdd, onFiles, inputRef, onRemove, onReorder, accept, addLabel, addHint }) {
   const [dragId, setDragId] = useState(null);
@@ -255,6 +284,21 @@ export function StepBody({ step, st }) {
           <p className="mt-1 text-[11px]" style={{ color: FAINT }}>{st.T.petNameHint}</p>
         </div>
 
+        {/* AI 변환 안함 — 체크 시 독사진 없이 진행(타이틀·AI영상 생성 생략) */}
+        <label className="mb-4 flex cursor-pointer items-start gap-2.5 px-3 py-2.5" style={{ background: st.skipAi ? "#f1ede3" : "#faf8f3", border: "1.5px solid " + (st.skipAi ? GOLD : LINE2), borderRadius: RADIUS }}>
+          <input type="checkbox" checked={st.skipAi} onChange={(e) => st.setSkipAi(e.target.checked)} className="mt-0.5 h-4 w-4 shrink-0" style={{ accentColor: GOLD }} />
+          <span>
+            <span className="block text-[12.5px] font-bold" style={{ color: INK }}>AI 변환 안함</span>
+            <span className="mt-0.5 block text-[11px] leading-relaxed" style={{ color: MUTE }}>독사진 없이 진행합니다. 타이틀·AI영상 없이 <b>추억 슬라이드·영상·편지</b>로만 제작됩니다.</span>
+          </span>
+        </label>
+
+        {st.skipAi ? (
+          <div className="mb-2 px-3 py-3 text-[11.5px] leading-relaxed" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
+            AI 변환을 사용하지 않습니다. 다음 단계에서 추억 사진·영상과 편지를 올려 주세요.
+          </div>
+        ) : (
+        <>
         {/* 가이드 — 상단(3장 전체에 적용) */}
         <PhotoExampleGuide good={st.photos.good} bad={st.photos.bad} />
         <div className="mb-3 px-3 py-2 text-[11px] leading-relaxed" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
@@ -311,6 +355,8 @@ export function StepBody({ step, st }) {
         <p className="mt-1 text-[10.5px] leading-relaxed" style={{ color: FAINT }}>
           ※ AI 변환 영상과 이미지는 원본의 생김새와 다를 수 있습니다.
         </p>
+        </>
+        )}
       </div>
     );
   // 프로세스 4 — 배경 음악 (선택 시 미리듣기 재생)
@@ -360,28 +406,48 @@ export function StepBody({ step, st }) {
         <div className="mt-1 text-right text-[11px]" style={{ color: FAINT }}>{st.letter.length} / 300</div>
       </div>
     );
-  // 5 — 미리보기
-  if (step === 5)
+  // 5 — 미리보기 (ffmpeg 합성 전 — 슬라이드는 캔버스로, 영상은 직접 재생)
+  if (step === 5) {
+    const slideFrames = [...st.slidePhotos, ...st.videos].map((u) => u.thumb).filter(Boolean);
+    const playable = st.videos.filter((v) => v.url);
     return (
       <div>
         <Title sub={st.T.sub5}>미리보기</Title>
-        <div className="relative flex items-center justify-center" style={{ aspectRatio: "16/9", background: "#2a323d", borderRadius: RADIUS }}>
-          <Play className="h-10 w-10 text-white" style={{ opacity: 0.85 }} fill="#fff" />
-          <span className="absolute bottom-2 left-2 px-1.5 py-[2px] text-[9px] font-bold tracking-wider text-white" style={{ background: "rgba(0,0,0,.4)", borderRadius: 2 }}>16:9 · 1080p</span>
+        <div className="relative overflow-hidden" style={{ aspectRatio: "16/9", background: "#1c232c", borderRadius: RADIUS }}>
+          {slideFrames.length ? <SlideCanvas frames={slideFrames} /> : <div className="flex h-full items-center justify-center"><Play className="h-10 w-10 text-white" style={{ opacity: 0.85 }} fill="#fff" /></div>}
+          <span className="absolute bottom-2 left-2 px-1.5 py-[2px] text-[9px] font-bold tracking-wider text-white" style={{ background: "rgba(0,0,0,.45)", borderRadius: 2 }}>추억 슬라이드 미리보기 · 16:9</span>
         </div>
+        {/* 추억 영상 — 실제 재생 */}
+        {playable.length > 0 && (
+          <div className="mt-2">
+            <div className="mb-1 text-[11.5px] font-bold" style={{ color: INK }}>추억 영상 {playable.length}개</div>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {playable.map((v) => (
+                <video key={v.id} src={v.url} controls playsInline preload="metadata" className="shrink-0" style={{ width: 168, aspectRatio: "16/9", background: "#000", borderRadius: 6 }} />
+              ))}
+            </div>
+          </div>
+        )}
+        <p className="mt-2 text-[11px] leading-relaxed" style={{ color: FAINT }}>
+          {st.skipAi
+            ? "추억 슬라이드·영상·편지로 제작됩니다. (위는 슬라이드·영상 미리보기)"
+            : "타이틀·AI 영상은 제작 후 완성본에서 확인됩니다. (위는 추억 슬라이드·영상 미리보기)"}
+        </p>
         <div className="mt-3 text-center" style={{ fontFamily: SERIF, fontSize: 18, fontWeight: 700, color: INK }}>{st.petName || st.link.petName || "콩이"}</div>
-        <p className="mt-1 text-center text-[12px]" style={{ color: MUTE }}>타이틀 · AI 영상 · 추억 슬라이드 · 추억 영상 · 편지</p>
+        <p className="mt-1 text-center text-[12px]" style={{ color: MUTE }}>{st.skipAi ? "추억 슬라이드 · 추억 영상 · 편지" : "타이틀 · AI 영상 · 추억 슬라이드 · 추억 영상 · 편지"}</p>
         {/* 유저가 고른 설정 요약 */}
         <div className="mt-3 space-y-1 px-3 py-2.5 text-[11.5px]" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
           <div className="flex justify-between"><span>추억 슬라이드 사진</span><span style={{ color: INK }}>{st.slidePhotos.length}장</span></div>
           <div className="flex justify-between"><span>추억 영상</span><span style={{ color: INK }}>{st.videos.length}개</span></div>
-          <div className="flex justify-between"><span>타이틀 사진</span><span style={{ color: INK }}>{st.titleSel + 1}번 선택</span></div>
-          <div className="flex justify-between"><span>AI 영상 변환</span><span style={{ color: INK }}>나머지 2장 (앞·뒤)</span></div>
+          {!st.skipAi && <div className="flex justify-between"><span>타이틀 사진</span><span style={{ color: INK }}>{st.titleSel + 1}번 선택</span></div>}
+          {!st.skipAi && <div className="flex justify-between"><span>AI 영상 변환</span><span style={{ color: INK }}>나머지 2장 (앞·뒤)</span></div>}
+          {st.skipAi && <div className="flex justify-between"><span>AI 변환</span><span style={{ color: INK }}>사용 안 함</span></div>}
           <div className="flex justify-between"><span>장면 전환</span><span style={{ color: INK }}>{Object.keys(st.transMap).length > 0 ? "개별 설정" : TRANSITIONS[st.trans]?.ko}</span></div>
           <div className="flex justify-between"><span>배경 음악</span><span style={{ color: INK }}>{D.BGM[st.bgm].name}</span></div>
         </div>
       </div>
     );
+  }
   // 6 — 제출 완료 (렌더 큐잉 → 제작중 → 완료 상태별 노출)
   const done = st.videoStatus === "done";
   const copyShare = async () => {

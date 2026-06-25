@@ -67,6 +67,7 @@ export default function VideoEditor({ reservation, onClose }) {
     const a = media.assets || [];
     const bySort = (p, q) => (p.sortOrder ?? 0) - (q.sortOrder ?? 0);
     const titleSrc = a.find((x) => x.role === "title" && x.url);
+    const titleVid = a.find((x) => x.role === "title_video" && x.url);   // 완성 타이틀 클립
     const titleRes = a.filter((x) => x.role === "title_result" && x.url).sort(bySort);
     const aiSrc = a.filter((x) => x.role === "ai_video" && x.url).sort(bySort);
     const aiRes = a.filter((x) => x.role === "ai_video_result" && x.url).sort(bySort);
@@ -76,7 +77,9 @@ export default function VideoEditor({ reservation, onClose }) {
     editedBlocks.forEach((b) => {
       if (b.type === "title") m[b.id] = {
         source: titleSrc && { kind: "image", url: titleSrc.url, label: "보호자 독사진" },
-        result: titleRes.length && { kind: titleRes.length > 1 ? "images" : "image", url: titleRes[0].url, urls: titleRes.map((r) => r.url), label: `Seedream 변환 ${titleRes.length}장` },
+        // 작업본 = ffmpeg 완성 타이틀 클립(20초). 없으면(생성 중) Seedream 이미지 폴백.
+        result: titleVid ? { kind: "videos", urls: [titleVid.url], label: "타이틀 영상(완성 클립)" }
+          : titleRes.length ? { kind: titleRes.length > 1 ? "images" : "image", url: titleRes[0].url, urls: titleRes.map((r) => r.url), label: `Seedream ${titleRes.length}장(합성 중)` } : null,
       };
       else if (b.type === "ai") { const i = (b.aiIndex || 1) - 1; m[b.id] = {
         source: aiSrc[i] && { kind: "image", url: aiSrc[i].url, label: "AI영상 소스 사진" },
@@ -87,9 +90,11 @@ export default function VideoEditor({ reservation, onClose }) {
         result: slideRes && { kind: "videos", urls: [slideRes.url], label: "슬라이드 영상" },
       };
       else if (b.type === "video" && vidSrc.length) m[b.id] = { source: { kind: "videos", urls: vidSrc, label: `보호자 영상 ${vidSrc.length}개` } };
-      else if (b.type === "letter" && (b.text != null || media.letter)) m[b.id] = { source: { kind: "letter",
-        text: b.text != null ? b.text : (media.letter || ""),                 // 편집값 우선 → 실시간 반영, 없으면 보호자 원본
-        metDate: b.metDate ?? media.metDate ?? null, partDate: b.partDate ?? media.partDate ?? null } };
+      else if (b.type === "letter" && (b.text != null || media.letter)) m[b.id] = {
+        // 좌(원본)=보호자 원본 그대로 / 우(작업본)=관리자 편집본(실시간 반영)
+        source: media.letter ? { kind: "letter", text: media.letter, metDate: media.metDate ?? null, partDate: media.partDate ?? null } : null,
+        result: { kind: "letter", text: b.text != null ? b.text : (media.letter || ""), metDate: b.metDate ?? media.metDate ?? null, partDate: b.partDate ?? media.partDate ?? null },
+      };
     });
     return m;
   }, [media, editedBlocks]);

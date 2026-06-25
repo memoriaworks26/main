@@ -2,9 +2,9 @@
 import React, { useState, useEffect } from "react";
 import {
   ChevronRight, Clock, FolderOpen, Plus, Search, UserPlus, X,
-  Check, PlayCircle, RefreshCw, Film,
+  Check, PlayCircle, RefreshCw, Film, Loader2,
 } from "lucide-react";
-import { SERIF, SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS, SUB_LABEL } from "../theme.js";
+import { SERIF, SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS, SUB_LABEL, SUB_LOADING } from "../theme.js";
 import { Tag, Btn, PageHeader } from "../ui.jsx";
 import { useStore, actions, bizPartners, bizReservations, submissionFor, videoFor } from "../store.js";
 import { confirm } from "../confirm.jsx";
@@ -222,10 +222,13 @@ export function Production({ onOpenEditor, account }) {
                     const sub = submissionFor(s, r.id);
                     const done = sub?.status === "done";
                     const submitted = sub && sub.status !== "draft";
+                    const loading = sub && SUB_LOADING.includes(sub.status);
+                    const failed = sub?.status === "failed";
                     return (
-                      <span className="shrink-0 px-1.5 py-0.5 text-[10.5px] font-bold" style={{ borderRadius: RADIUS,
-                        background: done ? "#e9f1ee" : submitted ? "#e9eef5" : "#f4ead7",
-                        color: done ? "#3a7468" : submitted ? "#3f5e87" : "#9a6a1c" }}>
+                      <span className="inline-flex shrink-0 items-center gap-1 px-1.5 py-0.5 text-[10.5px] font-bold" style={{ borderRadius: RADIUS,
+                        background: failed ? "#f7ecec" : loading ? "#fff4e0" : done ? "#e9f1ee" : submitted ? "#e9eef5" : "#f4ead7",
+                        color: failed ? "#a23b3b" : loading ? "#9a6a1c" : done ? "#3a7468" : submitted ? "#3f5e87" : "#9a6a1c" }}>
+                        {loading && <Loader2 className="h-3 w-3 animate-spin" />}
                         보호자 {sub ? (SUB_LABEL[sub.status] || sub.status) : "미발급"}
                       </span>
                     );

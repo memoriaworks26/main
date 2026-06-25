@@ -111,7 +111,8 @@ export async function composeFinal(job, assets) {
   try {
     const name = job.pet_name || "";
     const pick = (role) => assets.filter((a) => a.role === role && a.storage_path).sort(bySort);
-    const titleRes = pick("title_result");        // 이미지 2장
+    const titleVid = pick("title_video")[0];        // 완성 타이틀 클립(우선)
+    const titleRes = pick("title_result");          // 이미지 2장(폴백)
     const aiRes = pick("ai_video_result");          // 영상 A·B
     const slidePhotos = pick("slide_photo");
     const memVideos = pick("memory_video");
@@ -119,8 +120,10 @@ export async function composeFinal(job, assets) {
     const dl = async (a, fn) => st.downloadTo(await sign(a), path.join(dir, fn));
 
     const segs = [];
-    // 타이틀 — 2장이면 영상화(①페이드+자막 → ②오버랩 20초), 1장이면 정적
-    if (titleRes.length >= 2) {
+    // 타이틀 — 완성 클립(title_video) 우선, 없으면 2장으로 영상화, 1장이면 정적, 없으면 텍스트
+    if (titleVid) {
+      await dl(titleVid, "title.mp4"); segs.push({ type: "video", path: path.join(dir, "title.mp4") });
+    } else if (titleRes.length >= 2) {
       await dl(titleRes[0], "t0.png"); await dl(titleRes[1], "t1.png");
       const tv = path.join(dir, "title.mp4");
       await makeTitleVideo(path.join(dir, "t0.png"), path.join(dir, "t1.png"), `사랑하는 ${name}`, FONT, tv);
@@ -128,6 +131,10 @@ export async function composeFinal(job, assets) {
     } else if (titleRes.length === 1) {
       await dl(titleRes[0], "t0.png");
       segs.push({ type: "image", path: path.join(dir, "t0.png"), dur: 8, caption: `사랑하는 ${name}` });
+    } else {
+      // AI 변환 안함(타이틀 이미지 없음) — 텍스트 타이틀 카드
+      const bg = await makeSolid("0x161310", path.join(dir, "tbg.png"));
+      segs.push({ type: "image", path: bg, dur: 6, caption: `사랑하는 ${name}` });
     }
     // AI영상 A
     if (aiRes[0]) { await dl(aiRes[0], "aiA.mp4"); segs.push({ type: "video", path: path.join(dir, "aiA.mp4") }); }

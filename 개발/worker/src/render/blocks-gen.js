@@ -3,11 +3,18 @@
 //   결과를 memoria-uploads/{token}/results/ 에 저장 + submission_assets(role=*_result) 적재.
 //   전체 합성은 안 함(관리자 「최종 렌더」에서 compose). 편집기는 이 결과물을 블록별로 표시.
 // ─────────────────────────────────────────────────────────────
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import os from "node:os";
+import { fileURLToPath } from "node:url";
 import { db } from "../supabase.js";
 import * as st from "../storage.js";
 import { loadConfig } from "../config.js";
 import { log } from "../log.js";
 import { generateTitleImage, generateMemoryVideo } from "./higgsfield.js";
+import { makeTitleVideo } from "./ffmpeg.js";
+
+const FONT = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../assets/NotoSansKR-Regular.otf");
 
 const cfg = loadConfig();
 // 타이틀 2장: ① 독사진 → 영정 초상+배경, ② ①을 화풍·배경 변경(오버랩용). 활성 프롬프트(ai_prompts) 스타일을 덧붙임.
@@ -51,6 +58,19 @@ export async function generateBlocks(job, assets) {
     await st.uploadFromUrl(cfg.uploadBucket, p2, url2, "image/png");
     await ins({ submission_id: job.id, kind: "photo", role: "title_result", name: "title_1.png", storage_path: p2, sort_order: 1 });
     log.info(`  타이틀 2장 생성(Seedream)${titleStyle ? " [활성 프롬프트]" : ""}`);
+    // 2장 → ffmpeg 타이틀 영상(완성 클립: ①페이드+자막 → ②오버랩 20초) → title_video. 편집기는 이 클립을 재생.
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mw-title-"));
+    try {
+      await st.downloadTo(await st.signedUrl(cfg.uploadBucket, p1, 3600), path.join(dir, "t0.png"));
+      await st.downloadTo(await st.signedUrl(cfg.uploadBucket, p2, 3600), path.join(dir, "t1.png"));
+      const tv = path.join(dir, "title.mp4");
+      await makeTitleVideo(path.join(dir, "t0.png"), path.join(dir, "t1.png"), `사랑하는 ${name}`, FONT, tv);
+      const tvPath = `${token}/results/title.mp4`;
+      await st.uploadTo(cfg.uploadBucket, tvPath, await fs.readFile(tv), "video/mp4");
+      await del("title_video");
+      await ins({ submission_id: job.id, kind: "video", role: "title_video", name: "title.mp4", storage_path: tvPath, sort_order: 0 });
+      log.info(`  타이틀 영상 합성 → ${tvPath}`);
+    } finally { await fs.rm(dir, { recursive: true, force: true }); }
     return 2;
   }
   // AI영상 i번(Kling) — 해당 독사진 1장 → 영상. 활성 프롬프트 반영.
@@ -67,6 +87,7 @@ export async function generateBlocks(job, assets) {
   }
 
   const target = job.regen_target; // null=전체 / "title" / "ai:i"
+  if (job.skip_ai && !target) { log.info("  AI 변환 안함 — 블록 생성 생략"); return { count: 0 }; }
   let count = 0;
   if (target === "title") count += await genTitle();
   else if (target && target.startsWith("ai:")) count += await genAi(Number(target.slice(3)));

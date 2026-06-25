@@ -50,6 +50,7 @@ export function useUserWizard(previewBizId, stepCtl) {
   // 독사진 3장(AI 변환 전용) — 슬라이드 소스와 별개로 먼저 업로드.
   //   타이틀 1장 → GPT 이미지→이미지(영정 타이틀) · 나머지 2장 → Kling 이미지→영상(AI 추억 영상)
   const [aiPhotos, setAiPhotos] = useState([]); // 항상 빈 상태로 시작 — 보호자가 직접 3장 업로드
+  const [skipAi, setSkipAi] = useState(false);  // 「AI 변환 안함」 — 체크 시 독사진 없이 진행(타이틀·AI영상 생성 생략)
   const addAiPhoto = () => aiFileRef.current && aiFileRef.current.click();
   const onAiFiles = (e) => {
     const room = Math.max(0, 3 - aiPhotos.length); // 최대 3장
@@ -159,6 +160,7 @@ export function useUserWizard(previewBizId, stepCtl) {
         id, name: f.name, kind,
         size: (f.size / 1048576).toFixed(1) + "MB",
         thumb: f.type.startsWith("image") ? URL.createObjectURL(f) : undefined,
+        url: f.type.startsWith("video") ? URL.createObjectURL(f) : undefined, // 미리보기 재생용(세션 한정)
         uploading: liveMode, storagePath: null,
       }]);
       uploadAsset(token, f, { kind })
@@ -193,8 +195,8 @@ export function useUserWizard(previewBizId, stepCtl) {
     if (submitting) return;
     if (!(await confirm({ title: "제출하기", message: "입력한 내용으로 추모영상 제작을 제출합니다.\n제출 후에는 수정할 수 없습니다.", confirmLabel: "제출" }))) return;
     setSubmitting(true);
-    // 독사진 3장 — 타이틀(GPT i2i) 1장 + AI 영상(Kling i2v) 2장. 슬라이드 소스와 함께 제출.
-    const aiAssets = aiPhotos.map((u, i) => ({
+    // 독사진 3장 — 타이틀(GPT i2i) 1장 + AI 영상(Kling i2v) 2장. AI 변환 안함이면 생략.
+    const aiAssets = skipAi ? [] : aiPhotos.map((u, i) => ({
       kind: "photo",
       role: i === titleSel ? "title" : "ai_video",
       engine: i === titleSel ? "gpt-image" : "kling",
@@ -207,7 +209,7 @@ export function useUserWizard(previewBizId, stepCtl) {
       ...videos.map((u, i) => ({ kind: "video", role: "memory_video", name: u.name, sizeMB: parseMB(u.size), storagePath: u.storagePath, sortOrder: photos.length + i })),
     ];
     const res = await submitLink(link.token || token, {
-      petName: petName.trim(), titleIndex: titleSel, transDefault: trans, transMap, bgmId: D.BGM[bgm]?.id, letter, metDate, partDate, assets,
+      petName: petName.trim(), titleIndex: titleSel, transDefault: trans, transMap, bgmId: D.BGM[bgm]?.id, letter, metDate, partDate, assets, skipAi,
       privacyAgreed: agreed, marketingAgreed,
     });
     setSubmitting(false);
@@ -219,12 +221,12 @@ export function useUserWizard(previewBizId, stepCtl) {
   // StepBody에 넘기는 화면 상태·핸들러 묶음
   const st = { T, photos: examplePhotos, preview, agreed, setAgreed, marketingAgreed, setMarketingAgreed,
     slidePhotos: photos, videos, PHOTO_MAX, VIDEO_MAX_SEC, removePhoto, removeVideo, addPhoto, addVideo, onPhotoFiles, onVideoFiles, photoRef, videoRef, reorderPhotos, reorderVideos, photoOver, videoSecs, videoOver, videoMeasuring,
-    aiPhotos, addAiPhoto, onAiFiles, removeAiPhoto, aiFileRef, petName, setPetName, trans, setTrans, bgm, setBgm, letter, setLetter, metDate, setMetDate, partDate, setPartDate, titleSel, setTitleSel, transMap, setItemTrans, randomizeTrans, totalMB, overLimit, link, shareUrl, videoStatus, company, openPolicy: () => setPolicyOpen(true) };
+    aiPhotos, addAiPhoto, onAiFiles, removeAiPhoto, aiFileRef, skipAi, setSkipAi, petName, setPetName, trans, setTrans, bgm, setBgm, letter, setLetter, metDate, setMetDate, partDate, setPartDate, titleSel, setTitleSel, transMap, setItemTrans, randomizeTrans, totalMB, overLimit, link, shareUrl, videoStatus, company, openPolicy: () => setPolicyOpen(true) };
 
   const last = STEPS.length - 1;
   const previewStep = last - 1;
-  // AI 변환: 반려동물명 입력 + 독사진 3장 모두 업로드(+업로드 완료)해야 다음 단계로 진행 가능
-  const blocked = (step === 0 && !agreed) || (step === 1 && (!petName.trim() || aiPhotos.length < 3 || aiUploadingNow)) || (step === 2 && (overLimit || photoOver || videoOver || uploadingNow || videoMeasuring)) || (step === previewStep && (submitting || uploadingNow));
+  // AI 변환: 반려동물명 입력 필수 + 독사진 3장(+완료). 단, 「AI 변환 안함」이면 사진 없이 진행.
+  const blocked = (step === 0 && !agreed) || (step === 1 && (!petName.trim() || (!skipAi && (aiPhotos.length < 3 || aiUploadingNow)))) || (step === 2 && (overLimit || photoOver || videoOver || uploadingNow || videoMeasuring)) || (step === previewStep && (submitting || uploadingNow));
 
   return { st, T, step, setStep, last, previewStep, blocked, submitting, liveMode, link, company, partners, doSubmit, policyOpen, setPolicyOpen };
 }

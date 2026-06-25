@@ -46,6 +46,8 @@ export const STATUS = {
 };
 
 // 보호자 제작링크(submission) 상태 라벨 — 고객상세·예약상세 공용(단일 정의).
-export const SUB_LABEL = { draft: "작성 대기", queued: "제작 대기", rendering: "제작 중", done: "완료", failed: "실패", expired: "만료" };
+export const SUB_LABEL = { draft: "작성 대기", queued: "AI 생성 중", rendering: "AI 생성 중", blocks_ready: "편집 대기", compose_queued: "최종 렌더 중", composing: "최종 렌더 중", done: "완료", failed: "실패", expired: "만료" };
+// 진행 중(로딩 스피너 표시) 상태
+export const SUB_LOADING = ["queued", "rendering", "compose_queued", "composing"];
 
 export const RADIUS = 4;
