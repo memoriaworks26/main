@@ -6,7 +6,7 @@
 // 라이브(env 설정)면 Supabase, 아니면 목업으로 동일 인터페이스 폴백.
 // ─────────────────────────────────────────────────────────────
 import { getClient, BACKEND_LIVE, UPLOAD_BUCKET, SUPABASE_URL, SUPABASE_ANON } from "./supabase.js";
-import { imageToJpeg } from "./media.js";
+import { imageToJpeg, downscaleVideo } from "./media.js";
 
 // URL에서 토큰 추출: /u/<token> 경로 또는 ?t=<token> 쿼리. 없으면 null(데모).
 export function getToken() {
@@ -64,9 +64,14 @@ export async function fetchLinkConfig(token) {
 // 파일 1건 업로드. 반환: { storagePath, name, sizeMB, kind }.
 //   사진: 업로드 전 JPEG 통일. 업로드는 이어올리기(tus resumable)+진행률, 실패 시 표준 업로드로 폴백(회귀 0).
 //   onProgress(pct): 0~100 진행률 콜백(선택).
-export async function uploadAsset(token, file, { kind, onProgress } = {}) {
-  if (kind === "photo") file = await imageToJpeg(file); // 사진은 업로드 전 JPEG 통일(HEIC·WebP 등 정규화)
-  const sizeMB = +(file.size / 1048576).toFixed(1);
+export async function uploadAsset(token, file, { kind, onProgress, onStage } = {}) {
+  if (kind === "photo") file = await imageToJpeg(file);   // 사진은 업로드 전 JPEG 통일(HEIC·WebP 등 정규화)
+  if (kind === "video") {                                 // 영상은 1080p 다운스케일(과대해상도·대용량만, 실패 시 원본)
+    onStage?.("compress");
+    file = await downscaleVideo(file);
+    onStage?.("upload");
+  }
+  const sizeMB = +(file.size / 1048576).toFixed(1);       // 다운스케일 후 크기 반영
   if (!BACKEND_LIVE || !token) {
     return { storagePath: `demo/${file.name}`, name: file.name, sizeMB, kind };
   }

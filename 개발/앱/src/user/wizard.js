@@ -163,8 +163,12 @@ export function useUserWizard(previewBizId, stepCtl) {
         url: f.type.startsWith("video") ? URL.createObjectURL(f) : undefined, // 미리보기 재생용(세션 한정)
         uploading: liveMode, storagePath: null,
       }]);
-      uploadAsset(token, f, { kind, onProgress: (pct) => setList((p) => p.map((u) => (u.id === id ? { ...u, progress: pct } : u))) })
-        .then((res) => setList((p) => p.map((u) => (u.id === id ? { ...u, uploading: false, progress: 100, storagePath: res.storagePath } : u))))
+      uploadAsset(token, f, {
+        kind,
+        onProgress: (pct) => setList((p) => p.map((u) => (u.id === id ? { ...u, progress: pct } : u))),
+        onStage: (s) => setList((p) => p.map((u) => (u.id === id ? { ...u, stage: s } : u))),
+      })
+        .then((res) => setList((p) => p.map((u) => (u.id === id ? { ...u, uploading: false, progress: 100, stage: null, storagePath: res.storagePath } : u))))
         .catch((err) => { setList((p) => p.filter((u) => u.id !== id)); toast(err.message || "업로드 실패"); });
       // 영상은 첫 프레임 썸네일 + 재생 길이(초)를 비동기로 채운다(길이 합산·상한 검사에 사용)
       if (kind === "video") {

@@ -77,7 +77,9 @@ function UploadGrid({ items, withTrans, st, onAdd, onFiles, inputRef, onRemove, 
                 {u.uploading && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5" style={{ background: "rgba(0,0,0,.45)" }}>
                     <Loader2 className="h-4 w-4 animate-spin text-white" />
-                    {u.progress != null && <span className="text-[9px] font-bold tabular-nums text-white">{u.progress}%</span>}
+                    {u.stage === "compress"
+                      ? <span className="text-[9px] font-bold text-white">압축 중</span>
+                      : u.progress != null && <span className="text-[9px] font-bold tabular-nums text-white">{u.progress}%</span>}
                   </div>
                 )}
                 <button onClick={() => onRemove(u.id)} className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full outline-none transition hover:opacity-80" style={{ background: "rgba(0,0,0,.5)", color: "#fff" }} aria-label="삭제"><X className="h-2.5 w-2.5" /></button>

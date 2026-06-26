@@ -84,6 +84,80 @@ export const grabVideoFrame = (file) =>
     v.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
   });
 
+// 업로드 전 영상 다운스케일(1080p) — 용량↓ = 업로드 시간↓. 오디오 보존.
+//   ⚠️ 실험적 · 기기/브라우저 지원 편차 큼. 다음이면 "원본 그대로" 반환(회귀 0):
+//      · 영상 아님 / 작은 용량(<40MB) / 이미 1080p 이하 / MediaRecorder·captureStream 미지원
+//      · 어떤 단계든 실패 / 결과가 원본보다 안 작음
+//   방식: <video> 네이티브 디코드(아이폰 HEVC 포함) → 캔버스 1080p 드로잉 → MediaRecorder 인코딩,
+//        오디오는 WebAudio(MediaElementSource→MediaStreamDestination)로 캡처(엘리먼트는 무음).
+//   비고: 실시간 처리(영상 길이만큼 소요) — 추억영상 상한 90초라 허용. 대용량·4K에서만 작동해 이득.
+const DOWNSCALE_MIN_BYTES = 40 * 1024 * 1024;
+export async function downscaleVideo(file, { maxW = 1920, maxH = 1080 } = {}) {
+  try {
+    if (!file || !file.type?.startsWith("video/") || file.size < DOWNSCALE_MIN_BYTES) return file;
+    if (typeof MediaRecorder === "undefined" || typeof HTMLCanvasElement === "undefined"
+        || !HTMLCanvasElement.prototype.captureStream) return file;
+
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    video.preload = "auto"; video.playsInline = true; video.muted = false;
+    video.src = url;
+    await new Promise((res, rej) => { video.onloadedmetadata = res; video.onerror = () => rej(new Error("load")); });
+
+    const sw = video.videoWidth, sh = video.videoHeight;
+    if (!sw || !sh || (sw <= maxW && sh <= maxH)) { URL.revokeObjectURL(url); return file; } // 이미 충분히 작음
+    const scale = Math.min(maxW / sw, maxH / sh);
+    const tw = Math.round((sw * scale) / 2) * 2, th = Math.round((sh * scale) / 2) * 2;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = tw; canvas.height = th;
+    const ctx2d = canvas.getContext("2d");
+
+    // 오디오 캡처(무음 출력) — muted여도 신호 보존. 실패하면 영상만(무음).
+    let audioTracks = [], actx = null;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) {
+        actx = new AC();
+        const dest = actx.createMediaStreamDestination();
+        actx.createMediaElementSource(video).connect(dest); // ctx.destination 미연결 → 사용자에겐 무음
+        audioTracks = dest.stream.getAudioTracks();
+      }
+    } catch { audioTracks = []; }
+
+    const cstream = canvas.captureStream(30);
+    const out = new MediaStream([cstream.getVideoTracks()[0], ...audioTracks]);
+    const mime = ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm", "video/mp4"]
+      .find((m) => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m));
+    if (!mime) { URL.revokeObjectURL(url); actx?.close(); return file; }
+
+    const rec = new MediaRecorder(out, { mimeType: mime, videoBitsPerSecond: Math.min(8e6, tw * th * 4) });
+    const chunks = [];
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    const stopped = new Promise((res) => { rec.onstop = res; });
+
+    rec.start(1000);
+    if (actx?.state === "suspended") { try { await actx.resume(); } catch { /* */ } }
+    let drawing = true;
+    const draw = () => { if (!drawing) return; ctx2d.drawImage(video, 0, 0, tw, th); requestAnimationFrame(draw); };
+    await video.play();          // 자동재생 거부되면 throw → catch → 원본
+    draw();
+    await new Promise((res) => { video.onended = res; });
+    drawing = false;
+    rec.stop();
+    await stopped;
+    actx?.close();
+    URL.revokeObjectURL(url);
+
+    const blob = new Blob(chunks, { type: mime.split(";")[0] });
+    if (!blob.size || blob.size >= file.size) return file; // 이득 없으면 원본
+    const base = (file.name || "video").replace(/\.[^.]+$/, "");
+    return new File([blob], `${base}_1080p.${mime.includes("mp4") ? "mp4" : "webm"}`, { type: blob.type });
+  } catch {
+    return file; // 어떤 실패든 원본 업로드(회귀 0)
+  }
+}
+
 // 업로드 전 이미지 정규화 — 무엇이 들어와도(HEIC·WebP·PNG…) JPEG로 통일. 힉스필드 입력 안정성 + 용량 절감.
 //   · EXIF 회전 보정(아이폰 사진 눕는 문제) — createImageBitmap의 imageOrientation으로 픽셀에 회전 반영
 //   · 장축 상한(maxEdge)으로 과대 원본 폭주 방지 → URL fetch 크기제한/타임아웃 회피
