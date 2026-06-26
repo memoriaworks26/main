@@ -58,8 +58,8 @@ export function useUserWizard(previewBizId, stepCtl) {
     files.forEach((f, k) => {
       const id = "ai-" + Date.now() + "-" + k;
       setAiPhotos((p) => [...p, { id, name: f.name, thumb: f.type.startsWith("image") ? URL.createObjectURL(f) : undefined, uploading: liveMode, storagePath: null }]);
-      uploadAsset(token, f, { kind: "photo" })
-        .then((res) => setAiPhotos((p) => p.map((u) => (u.id === id ? { ...u, uploading: false, storagePath: res.storagePath } : u))))
+      uploadAsset(token, f, { kind: "photo", onProgress: (pct) => setAiPhotos((p) => p.map((u) => (u.id === id ? { ...u, progress: pct } : u))) })
+        .then((res) => setAiPhotos((p) => p.map((u) => (u.id === id ? { ...u, uploading: false, progress: 100, storagePath: res.storagePath } : u))))
         .catch((err) => { setAiPhotos((p) => p.filter((u) => u.id !== id)); toast(err.message || "업로드 실패"); });
     });
     e.target.value = "";
@@ -163,13 +163,14 @@ export function useUserWizard(previewBizId, stepCtl) {
         url: f.type.startsWith("video") ? URL.createObjectURL(f) : undefined, // 미리보기 재생용(세션 한정)
         uploading: liveMode, storagePath: null,
       }]);
-      uploadAsset(token, f, { kind })
-        .then((res) => setList((p) => p.map((u) => (u.id === id ? { ...u, uploading: false, storagePath: res.storagePath } : u))))
+      uploadAsset(token, f, { kind, onProgress: (pct) => setList((p) => p.map((u) => (u.id === id ? { ...u, progress: pct } : u))) })
+        .then((res) => setList((p) => p.map((u) => (u.id === id ? { ...u, uploading: false, progress: 100, storagePath: res.storagePath } : u))))
         .catch((err) => { setList((p) => p.filter((u) => u.id !== id)); toast(err.message || "업로드 실패"); });
       // 영상은 첫 프레임 썸네일 + 재생 길이(초)를 비동기로 채운다(길이 합산·상한 검사에 사용)
       if (kind === "video") {
-        grabVideoFrame(f).then((thumb) => { if (thumb) setList((p) => p.map((u) => (u.id === id ? { ...u, thumb } : u))); });
-        grabVideoDuration(f).then((dur) => setList((p) => p.map((u) => (u.id === id ? { ...u, dur } : u))));
+        // .catch로 무해한 실패(코덱·웹뷰 제약)를 흡수 — 전역 unhandledrejection 오탐 방지.
+        grabVideoFrame(f).then((thumb) => { if (thumb) setList((p) => p.map((u) => (u.id === id ? { ...u, thumb } : u))); }).catch(() => {});
+        grabVideoDuration(f).then((dur) => setList((p) => p.map((u) => (u.id === id ? { ...u, dur } : u)))).catch(() => {});
       }
     });
     e.target.value = "";
@@ -195,27 +196,33 @@ export function useUserWizard(previewBizId, stepCtl) {
     if (submitting) return;
     if (!(await confirm({ title: "제출하기", message: "입력한 내용으로 추모영상 제작을 제출합니다.\n제출 후에는 수정할 수 없습니다.", confirmLabel: "제출" }))) return;
     setSubmitting(true);
-    // 독사진 3장 — 타이틀(GPT i2i) 1장 + AI 영상(Kling i2v) 2장. AI 변환 안함이면 생략.
-    const aiAssets = skipAi ? [] : aiPhotos.map((u, i) => ({
-      kind: "photo",
-      role: i === titleSel ? "title" : "ai_video",
-      engine: i === titleSel ? "gpt-image" : "kling",
-      name: u.name, storagePath: u.storagePath, sortOrder: i,
-    }));
-    // 추억 슬라이드 사진(앞) → 추억 영상(뒤) 순서. sortOrder는 사진 다음에 영상이 이어지도록 연속 부여.
-    const assets = [
-      ...aiAssets,
-      ...photos.map((u, i) => ({ kind: "photo", role: "slide_photo", name: u.name, sizeMB: parseMB(u.size), storagePath: u.storagePath, sortOrder: i })),
-      ...videos.map((u, i) => ({ kind: "video", role: "memory_video", name: u.name, sizeMB: parseMB(u.size), storagePath: u.storagePath, sortOrder: photos.length + i })),
-    ];
-    const res = await submitLink(link.token || token, {
-      petName: petName.trim(), titleIndex: titleSel, transDefault: trans, transMap, bgmId: D.BGM[bgm]?.id, letter, metDate, partDate, assets, skipAi,
-      privacyAgreed: agreed, marketingAgreed,
-    });
-    setSubmitting(false);
-    if (!res.ok) { toast(res.error || "제출에 실패했습니다. 다시 시도해 주세요."); return; }
-    setVideoStatus(res.status || "queued");
-    setStep(STEPS.length - 1);
+    // 카톡 인앱 등 제약 웹뷰에서 제출 중 예외가 나도 흰화면/멈춤 없이 안내 토스트로 복구.
+    try {
+      // 독사진 3장 — 타이틀(GPT i2i) 1장 + AI 영상(Kling i2v) 2장. AI 변환 안함이면 생략.
+      const aiAssets = skipAi ? [] : aiPhotos.map((u, i) => ({
+        kind: "photo",
+        role: i === titleSel ? "title" : "ai_video",
+        engine: i === titleSel ? "gpt-image" : "kling",
+        name: u.name, storagePath: u.storagePath, sortOrder: i,
+      }));
+      // 추억 슬라이드 사진(앞) → 추억 영상(뒤) 순서. sortOrder는 사진 다음에 영상이 이어지도록 연속 부여.
+      const assets = [
+        ...aiAssets,
+        ...photos.map((u, i) => ({ kind: "photo", role: "slide_photo", name: u.name, sizeMB: parseMB(u.size), storagePath: u.storagePath, sortOrder: i })),
+        ...videos.map((u, i) => ({ kind: "video", role: "memory_video", name: u.name, sizeMB: parseMB(u.size), storagePath: u.storagePath, sortOrder: photos.length + i })),
+      ];
+      const res = await submitLink(link.token || token, {
+        petName: petName.trim(), titleIndex: titleSel, transDefault: trans, transMap, bgmId: D.BGM[bgm]?.id, letter, metDate, partDate, assets, skipAi,
+        privacyAgreed: agreed, marketingAgreed,
+      });
+      if (!res.ok) { toast(res.error || "제출에 실패했습니다. 다시 시도해 주세요."); return; }
+      setVideoStatus(res.status || "queued");
+      setStep(STEPS.length - 1);
+    } catch (e) {
+      toast("제출 중 오류가 발생했습니다. 다시 시도해 주세요. (" + (e?.message || e) + ")");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   // StepBody에 넘기는 화면 상태·핸들러 묶음

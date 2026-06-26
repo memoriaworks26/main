@@ -11,6 +11,10 @@ const ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
 // 업로드 버킷 이름(스토리지). 마이그레이션의 버킷명과 일치해야 함.
 export const UPLOAD_BUCKET = "memoria-uploads";
 
+// 이어올리기(tus resumable) 업로드용 — 엔드포인트/헤더 구성에 필요.
+export const SUPABASE_URL = URL;
+export const SUPABASE_ANON = ANON;
+
 // 설정이 둘 다 있을 때만 라이브. 그 외엔 목업 모드.
 export const BACKEND_LIVE = Boolean(URL && ANON);
 

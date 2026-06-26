@@ -75,7 +75,10 @@ function UploadGrid({ items, withTrans, st, onAdd, onFiles, inputRef, onRemove, 
                 )}
                 <span className="absolute left-0.5 top-0.5 flex h-3.5 min-w-[14px] items-center justify-center rounded-full px-1 text-[9px] font-bold text-white" style={{ background: GOLD_D }}>{i + 1}</span>
                 {u.uploading && (
-                  <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,.35)" }}><Loader2 className="h-4 w-4 animate-spin text-white" /></div>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5" style={{ background: "rgba(0,0,0,.45)" }}>
+                    <Loader2 className="h-4 w-4 animate-spin text-white" />
+                    {u.progress != null && <span className="text-[9px] font-bold tabular-nums text-white">{u.progress}%</span>}
+                  </div>
                 )}
                 <button onClick={() => onRemove(u.id)} className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full outline-none transition hover:opacity-80" style={{ background: "rgba(0,0,0,.5)", color: "#fff" }} aria-label="삭제"><X className="h-2.5 w-2.5" /></button>
                 {u.kind === "video" && u.dur != null && (
@@ -329,7 +332,10 @@ export function StepBody({ step, st }) {
                     ? <img src={photo.thumb} alt="" className="absolute inset-0 h-full w-full object-cover" />
                     : <span className="absolute inset-0 flex items-center justify-center" style={{ background: "#f0ebe0" }}><Image className="h-6 w-6" style={{ color: GOLD_D, opacity: .5 }} /></span>}
                   {photo.uploading && (
-                    <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(0,0,0,.35)" }}><Loader2 className="h-5 w-5 animate-spin text-white" /></div>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5" style={{ background: "rgba(0,0,0,.45)" }}>
+                      <Loader2 className="h-5 w-5 animate-spin text-white" />
+                      {photo.progress != null && <span className="text-[10px] font-bold tabular-nums text-white">{photo.progress}%</span>}
+                    </div>
                   )}
                   {on && <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full" style={{ background: GOLD }}><Check className="h-2.5 w-2.5 text-white" strokeWidth={3} /></span>}
                 </button>

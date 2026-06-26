@@ -5,7 +5,7 @@
 //   submitLink  : 위저드 입력 일괄 제출 → status='queued'(렌더 큐잉, 워커는 후속)
 // 라이브(env 설정)면 Supabase, 아니면 목업으로 동일 인터페이스 폴백.
 // ─────────────────────────────────────────────────────────────
-import { getClient, BACKEND_LIVE, UPLOAD_BUCKET } from "./supabase.js";
+import { getClient, BACKEND_LIVE, UPLOAD_BUCKET, SUPABASE_URL, SUPABASE_ANON } from "./supabase.js";
 import { imageToJpeg } from "./media.js";
 
 // URL에서 토큰 추출: /u/<token> 경로 또는 ?t=<token> 쿼리. 없으면 null(데모).
@@ -62,22 +62,53 @@ export async function fetchLinkConfig(token) {
 }
 
 // 파일 1건 업로드. 반환: { storagePath, name, sizeMB, kind }.
-// 라이브가 아니면 업로드를 건너뛰고 합성 경로만 돌려준다(목업 동작 유지).
-export async function uploadAsset(token, file, { kind }) {
-  if (kind === "photo") file = await imageToJpeg(file); // A: 사진은 업로드 전 JPEG 통일(HEIC·WebP 등 정규화)
+//   사진: 업로드 전 JPEG 통일. 업로드는 이어올리기(tus resumable)+진행률, 실패 시 표준 업로드로 폴백(회귀 0).
+//   onProgress(pct): 0~100 진행률 콜백(선택).
+export async function uploadAsset(token, file, { kind, onProgress } = {}) {
+  if (kind === "photo") file = await imageToJpeg(file); // 사진은 업로드 전 JPEG 통일(HEIC·WebP 등 정규화)
   const sizeMB = +(file.size / 1048576).toFixed(1);
   if (!BACKEND_LIVE || !token) {
     return { storagePath: `demo/${file.name}`, name: file.name, sizeMB, kind };
   }
-  const sb = getClient();
   // 파일명 충돌 방지 — UUID(동시 다중선택 업로드 시 같은 ms+짧은랜덤 충돌로 400 나던 것 차단).
   const uniq = (globalThis.crypto?.randomUUID?.() || (Date.now() + "-" + Math.random().toString(36).slice(2, 10)));
   const path = `${token}/${uniq}.${ext(file.name)}`;
-  const { error } = await sb.storage.from(UPLOAD_BUCKET).upload(path, file, {
-    contentType: file.type || undefined, upsert: false,
-  });
-  if (error) throw new Error("업로드 실패: " + error.message);
+  try {
+    await tusUpload(file, path, onProgress);            // 이어올리기 + 진행률
+  } catch {
+    // tus 실패 → 표준 업로드 폴백(엔드포인트 이슈 등에도 업로드는 보장). 진행률은 미표시.
+    const { error } = await getClient().storage.from(UPLOAD_BUCKET).upload(path, file, { contentType: file.type || undefined, upsert: true });
+    if (error) throw new Error("업로드 실패: " + error.message);
+  }
   return { storagePath: path, name: file.name, sizeMB, kind };
+}
+
+// tus(resumable) 업로드 — 6MB 청크·자동재시도·중단 후 이어올리기·진행률. 보호자는 anon 키(세션 있으면 그 토큰).
+function tusUpload(file, objectName, onProgress) {
+  return new Promise((resolve, reject) => {
+    import("tus-js-client").then(async (mod) => {
+      const Upload = mod.Upload || mod.default?.Upload;
+      if (!Upload) return reject(new Error("tus 모듈 로드 실패"));
+      let authToken = SUPABASE_ANON;
+      try { const { data } = await getClient().auth.getSession(); if (data?.session?.access_token) authToken = data.session.access_token; } catch { /* anon */ }
+      const upload = new Upload(file, {
+        endpoint: `${SUPABASE_URL}/storage/v1/upload/resumable`,
+        retryDelays: [0, 1000, 3000, 6000, 12000],
+        headers: { authorization: `Bearer ${authToken}`, apikey: SUPABASE_ANON, "x-upsert": "true" },
+        uploadDataDuringCreation: true,
+        removeFingerprintOnSuccess: true,
+        chunkSize: 6 * 1024 * 1024,                       // Supabase 요구 청크 크기(6MB)
+        metadata: { bucketName: UPLOAD_BUCKET, objectName, contentType: file.type || "application/octet-stream", cacheControl: "3600" },
+        onError: reject,
+        onProgress: (sent, total) => { if (onProgress && total) onProgress(Math.min(100, Math.round((sent / total) * 100))); },
+        onSuccess: () => resolve(),
+      });
+      upload.findPreviousUploads().then((prev) => {
+        if (prev && prev.length) upload.resumeFromPreviousUpload(prev[0]);
+        upload.start();
+      }).catch(() => upload.start());
+    }).catch(reject);
+  });
 }
 
 // 위저드 입력 일괄 제출.
