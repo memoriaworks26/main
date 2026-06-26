@@ -16,7 +16,5 @@ insert into memoria.ai_prompts (id, target, name, body, active) values
   ('pr-title-ink-2',    '이미지2', '한지 수묵 (격조·정적)',     '전통 수묵담채화풍, 한지 번짐과 먹색, 여백의 미',                false)
 on conflict (id) do nothing;
 
--- 해당 target에 활성 프롬프트가 아직 없으면 '따뜻한 햇살'을 기본 활성으로(이미 있으면 안 건드림).
-update memoria.ai_prompts a set active = true
- where a.id in ('pr-title-warm-1', 'pr-title-warm-2')
-   and not exists (select 1 from memoria.ai_prompts b where b.target = a.target and b.active);
+-- active는 콘솔 프롬프트 관리에서 운영자가 직접 선택(기존 활성 선택을 건드리지 않도록 자동 활성화 안 함).
+-- 운영 적용은 service_role+PostgREST로 직접 insert 완료(2026-06-26). 이 파일은 다른 환경 재현·기록용.
