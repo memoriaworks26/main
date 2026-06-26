@@ -5,6 +5,7 @@ import { Image as ImageIcon, Music, Upload, Plus, RefreshCw, Trash2, ArrowRightL
 import { SERIF, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS } from "../theme.js";
 import { DateField, Modal } from "../ui.jsx";
 import { toast } from "../toast.jsx";
+import { confirm } from "../confirm.jsx";
 import * as D from "../data.js";
 import { useStore, actions } from "../store.js";
 import { BLOCK_ICON, KIND_LABEL, blockTrans, exampleLetter, SLIDE_PHOTOS, SLIDE_PER, TITLE_SYSTEM_TEXT } from "./blocks.js";
@@ -86,7 +87,7 @@ function AssetCard({ label, hint, asset, kind = "image", generating, onGenerate,
                   {v.selected && <span className="absolute left-0.5 bottom-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full" style={{ background: GOLD }}><Check className="h-2.5 w-2.5 text-white" strokeWidth={3} /></span>}
                 </button>
                 {onDeleteVersion && history.length > 1 && (
-                  <button onClick={() => onDeleteVersion(v.id)} title="이 버전 삭제" className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full outline-none" style={{ background: "rgba(0,0,0,.55)", color: "#fff" }}><X className="h-2.5 w-2.5" strokeWidth={2.5} /></button>
+                  <button onClick={async () => { if (await confirm({ message: "이 내역을 삭제할까요? 되돌릴 수 없습니다.", danger: true })) onDeleteVersion(v.id); }} title="이 버전 삭제" className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full outline-none" style={{ background: "rgba(0,0,0,.55)", color: "#fff" }}><X className="h-2.5 w-2.5" strokeWidth={2.5} /></button>
                 )}
               </div>
             ))}
