@@ -1,6 +1,6 @@
 // 편집기 — 오른쪽 속성 패널(PropPanel) + 보조(PromptPicker·PromptModal·GenHistory).
 // 선택(sel)에 따라 블록/전환/음악의 편집 컨트롤을 보여준다. 편집값은 상위(VideoEditor)의 edits로 컨트롤드.
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Image as ImageIcon, Music, Upload, Plus, RefreshCw, Trash2, ArrowRightLeft, Check, Type, SlidersHorizontal, X, Film, Download, Loader2 } from "lucide-react";
 import { SERIF, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS } from "../theme.js";
 import { DateField, Modal } from "../ui.jsx";
@@ -130,23 +130,37 @@ function PromptCard({ p }) {
   );
 }
 
-// AI 문구(프롬프트) 관리 모달 — 실데이터 CRUD.
-function PromptModal({ open, onClose }) {
+// 기본 프롬프트 관리 모달 — 타깃별(이미지1·이미지2·AI영상) 「기본」 선택(=활성 지정) + CRUD.
+//   「기본」으로 고른 프롬프트가 보호자 요청 시 자동 생성(1차 API 호출)에 사용됨. 편집기·편집컨펌 페이지 공용(export).
+export function PromptModal({ open, onClose }) {
   const store = useStore();
-  const [addTarget, setAddTarget] = useState("이미지1");
+  useEffect(() => { if (open) actions.reloadPrompts(); }, [open]); // 편집기 밖(편집컨펌)에서 열어도 최신 목록 보장
   return (
-    <Modal open={open} onClose={onClose} width={480}>
+    <Modal open={open} onClose={onClose} width={500}>
       <div className="flex items-center justify-between px-4" style={{ height: 48, borderBottom: "1px solid " + LINE }}>
-        <span className="text-[14px] font-bold" style={{ color: INK }}>프롬프트 관리</span>
-        <div className="flex items-center gap-1.5">
-          <select value={addTarget} onChange={(e) => setAddTarget(e.target.value)} className="px-2 py-1 text-[11.5px] outline-none" style={{ background: "#fff", border: "1px solid " + LINE2, borderRadius: 4, color: INK }}>{PROMPT_TARGETS.map((t) => <option key={t}>{t}</option>)}</select>
-          <button onClick={() => actions.savePrompt({ target: addTarget, name: "새 프롬프트", body: "" })} className="flex items-center gap-1 text-[12px] font-semibold" style={{ color: GOLD }}><Plus className="h-3.5 w-3.5" /> 추가</button>
-        </div>
+        <span className="text-[14px] font-bold" style={{ color: INK }}>기본 프롬프트 관리</span>
+        <button onClick={onClose} className="p-1" style={{ color: FAINT }}><X className="h-4 w-4" /></button>
       </div>
-      <div className="max-h-[58vh] space-y-2 overflow-y-auto px-4 py-3">
-        {store.prompts.length === 0 && <div className="py-6 text-center text-[12px]" style={{ color: FAINT }}>프롬프트가 없습니다 — 위 「추가」로 만드세요.</div>}
-        {store.prompts.map((p) => <PromptCard key={p.id} p={p} />)}
-        <p className="mt-1 text-[11.5px] leading-relaxed" style={{ color: FAINT }}>※ 여기선 프롬프트 추가·수정·삭제만. 실제 사용할 프롬프트는 각 블록(이미지1·이미지2·AI영상)의 드롭다운에서 선택합니다.</p>
+      <div className="max-h-[64vh] space-y-4 overflow-y-auto px-4 py-3">
+        {PROMPT_TARGETS.map((t) => {
+          const list = store.prompts.filter((p) => p.target === t);
+          const active = list.find((p) => p.active) || list[0];
+          return (
+            <div key={t}>
+              <div className="mb-2 flex items-center gap-2">
+                <span className="shrink-0 px-1.5 py-[1px] text-[11px] font-bold" style={{ background: "#e9eef5", color: "#3f5e87", borderRadius: 3 }}>{t}</span>
+                <span className="shrink-0 text-[11.5px] font-semibold" style={{ color: MUTE }}>기본</span>
+                <select value={active?.id || ""} onChange={(e) => actions.setPromptActive(e.target.value, t)} className="min-w-0 flex-1 px-2 py-1 text-[11.5px] outline-none" style={{ background: "#fff", border: "1px solid " + LINE2, borderRadius: 4, color: INK }}>
+                  {list.length === 0 && <option value="">없음 — 「추가」로 생성</option>}
+                  {list.map((p) => <option key={p.id} value={p.id}>{p.name}{p.active ? " ✓(기본)" : ""}</option>)}
+                </select>
+                <button onClick={() => actions.savePrompt({ target: t, name: "새 프롬프트", body: "" })} className="flex shrink-0 items-center gap-1 text-[12px] font-semibold" style={{ color: GOLD }}><Plus className="h-3.5 w-3.5" /> 추가</button>
+              </div>
+              {list.length > 0 && <div className="space-y-2">{list.map((p) => <PromptCard key={p.id} p={p} />)}</div>}
+            </div>
+          );
+        })}
+        <p className="text-[11.5px] leading-relaxed" style={{ color: FAINT }}>※ 「기본」으로 고른 프롬프트가 보호자 요청 시 자동 생성(1차 API)에 사용됩니다. 편집기에서는 건별로 다른 프롬프트를 골라 재생성할 수 있습니다.</p>
       </div>
       <div className="px-4 py-2.5" style={{ borderTop: "1px solid " + LINE }}>
         <button onClick={onClose} className="w-full py-2 text-[13px] font-bold" style={{ background: GOLD, color: "#fff", borderRadius: RADIUS }}>닫기</button>

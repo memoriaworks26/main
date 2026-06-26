@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import {
   ChevronRight, Clock, FolderOpen, Plus, Search, UserPlus, X,
-  Check, PlayCircle, RefreshCw, Film, Loader2,
+  Check, PlayCircle, RefreshCw, Film, Loader2, SlidersHorizontal,
 } from "lucide-react";
 import { SERIF, SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS, SUB_LABEL, SUB_LOADING } from "../theme.js";
 import { Tag, Btn, PageHeader } from "../ui.jsx";
@@ -11,6 +11,7 @@ import { confirm } from "../confirm.jsx";
 import { matchQuery } from "../lib/util.js";
 import * as D from "../data.js";
 import { SearchSelect } from "./shared.jsx";
+import { PromptModal } from "../editor/props.jsx"; // 기본 프롬프트 관리(타깃별 활성=보호자 자동 생성에 사용)
 
 const CONFIRM_C = "#6d5aa6"; // 컨펌 대기(렌더·검수) 강조색 — theme STATUS.confirm와 동일
 
@@ -155,6 +156,7 @@ export function Production({ onOpenEditor, account }) {
   const [tab, setTab] = useState("review");
   const [pf, setPf] = useState("all");
   const [review, setReview] = useState(null); // 검수 창에 띄운 예약(컨펌 대기 · 렌더 완료 건)
+  const [promptMgr, setPromptMgr] = useState(false); // 기본 프롬프트 관리 모달
   const st = (r) => r.status;
   const me = account?.name;
   const claim = (id) => { actions.setReservationAssignee(id, me); actions.setReservationStatus(id, "rendering"); }; // 받기 → 작업 중
@@ -179,8 +181,11 @@ export function Production({ onOpenEditor, account }) {
   return (
     <div style={{ maxWidth: 700 }}>
       <PageHeader title="편집·컨펌" sub="전 파트너사 유입 영상 — 먼저 요청된 순 처리 큐" right={
-        <SearchSelect value={pf} onChange={setPf} placeholder="전체 파트너사"
-          options={[{ value: "all", label: "전체 파트너사" }, ...partners.filter((p) => p.active).map((p) => ({ value: p.name, label: p.name }))]} />
+        <div className="flex items-center gap-2">
+          <Btn size="sm" variant="neutral" onClick={() => setPromptMgr(true)}><SlidersHorizontal className="h-3.5 w-3.5" /> 기본 프롬프트</Btn>
+          <SearchSelect value={pf} onChange={setPf} placeholder="전체 파트너사"
+            options={[{ value: "all", label: "전체 파트너사" }, ...partners.filter((p) => p.active).map((p) => ({ value: p.name, label: p.name }))]} />
+        </div>
       } />
 
       {/* 상태 탭 */}
@@ -275,6 +280,7 @@ export function Production({ onOpenEditor, account }) {
 
       {review && <ReviewModal r={review} videoUrl={submissionFor(s, review.id)?.videoUrl} finalMB={videoFor(s, review.id)?.finalMB}
         readOnly={review.status === "published"} onConfirm={() => doConfirm(review)} onRemake={() => doRemake(review)} onClose={() => setReview(null)} />}
+      <PromptModal open={promptMgr} onClose={() => setPromptMgr(false)} />
     </div>
   );
 }
