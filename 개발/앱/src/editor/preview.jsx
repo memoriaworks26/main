@@ -74,7 +74,7 @@ function MediaView({ media, onTime }) {
   if (media.kind === "images")
     return <img src={media.urls[idx % media.urls.length]} alt="" className="absolute inset-0 h-full w-full object-contain" style={{ background: "#000" }} />;
   if (media.kind === "videos")
-    return <video src={media.urls[0]} controls playsInline className="absolute inset-0 h-full w-full" style={{ background: "#000" }} onTimeUpdate={onTime} />;
+    return <video src={media.urls[0]} controls playsInline preload="metadata" className="absolute inset-0 h-full w-full" style={{ background: "#000" }} onTimeUpdate={onTime} />;
   if (media.kind === "letter") {
     // 아래 → 위 크레딧 스크롤. 끝에 처음 만난 날 / 무지개다리 건넌 날을 크게.
     const dur = Math.max(14, Math.round((media.text || "").length / 12) + 12); // 글 길이에 비례

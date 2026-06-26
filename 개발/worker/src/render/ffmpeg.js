@@ -115,7 +115,7 @@ export async function compose({ segments, bgmPath, bgmVol = 70, bgmFadeIn = 1, b
       memRanges.push([offs[i], offs[i] + durs[i]]);
       if (await hasAudio(segments[i].path)) memAudio.push({ src: segments[i].path, start: offs[i] });
     }
-    if (!bgmPath && memAudio.length === 0) { await fs.copyFile(concat, outPath); return outPath; } // 무음
+    if (!bgmPath && memAudio.length === 0) { await ff(["-y", "-i", concat, "-c", "copy", "-movflags", "+faststart", outPath]); return outPath; } // 무음(+faststart 리먹스)
 
     const args = ["-y", "-i", concat]; const fc = []; const mix = [];
     memAudio.forEach((m, j) => {
@@ -134,7 +134,7 @@ export async function compose({ segments, bgmPath, bgmVol = 70, bgmFadeIn = 1, b
       fc.push(`${bg}[bg]`); mix.push("[bg]");
     }
     fc.push(`${mix.join("")}amix=inputs=${mix.length}:normalize=0:duration=longest[aout]`);
-    args.push("-filter_complex", fc.join(";"), "-map", "0:v:0", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-t", total.toFixed(2), outPath);
+    args.push("-filter_complex", fc.join(";"), "-map", "0:v:0", "-map", "[aout]", "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "-t", total.toFixed(2), outPath);
     await ff(args);
     return outPath;
   } finally {
@@ -155,8 +155,8 @@ export async function makeTitleVideo(img1, img2, caption, fontFile, out) {
   // ① 이미지1 14초(천천히 3초 페이드인 + 자막 서서히). xfade offset10+dur4=14 안에 들어와야 함. ② 이미지2 10초.
   await ff(["-y", "-loop", "1", "-t", "14", "-i", img1, "-vf", `${FIT},fade=t=in:st=0:d=3${cap}`, "-r", String(FPS), ...ENC, seg1]);
   await ff(["-y", "-loop", "1", "-t", "10", "-i", img2, "-vf", FIT, "-r", String(FPS), ...ENC, seg2]);
-  // 10초 지점에서 ②로 크로스페이드(천천히 4초) → 총 ~19초
-  await ff(["-y", "-i", seg1, "-i", seg2, "-filter_complex", "[0][1]xfade=transition=fade:duration=4:offset=10,format=yuv420p", "-r", String(FPS), ...ENC, out]);
+  // 10초 지점에서 ②로 크로스페이드(천천히 4초) → 총 ~19초. +faststart: moov를 앞으로(편집기 미리보기 즉시 재생)
+  await ff(["-y", "-i", seg1, "-i", seg2, "-filter_complex", "[0][1]xfade=transition=fade:duration=4:offset=10,format=yuv420p", "-r", String(FPS), ...ENC, "-movflags", "+faststart", out]);
   return out;
 }
 
