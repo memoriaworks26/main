@@ -15,6 +15,10 @@ const cfg = loadConfig();
 const BASE = "https://platform.higgsfield.ai";
 // 인증키 우선순위: main(오늘 추가) … → sub(기존). 앞 키가 크레딧소진/인증오류면 다음 키로 폴백.
 const CREDS = cfg.higgsfield.keys;
+// 모든 결과물 16:9 고정 — 이미지(seedream)·영상(kling) 출력 비율을 가로 16:9로 강제(편집기·최종 렌더가 1920×1080).
+//   env로 조정. 모델이 해당 옵션 키를 거부(400/422)하면 옵션을 빼고 1회 폴백 → 비율 강제는 best-effort, 생성 자체는 막지 않음.
+const IMG_SIZE = process.env.HIGGSFIELD_IMG_SIZE || "2048x1152"; // 16:9 (width_and_height enum)
+const VID_ASPECT = process.env.HIGGSFIELD_VID_ASPECT || "16:9";  // aspect_ratio
 const authHeader = (c) => ({
   Authorization: `Key ${c.key}:${c.secret}`,
   "Content-Type": "application/json",
@@ -46,6 +50,17 @@ async function submit(path, params) {
   throw lastErr; // 모든 키 소진/오류
 }
 
+// 출력옵션(16:9 등)을 붙여 제출하되, 모델이 옵션 키를 거부(400/422)하면 옵션을 빼고 1회 폴백.
+//   → 비율 강제는 best-effort. 옵션 비호환이 생성 실패로 번지지 않도록 안전장치(라이브 파라미터 미검증 대비).
+async function submitWithOpts(path, baseParams, opts) {
+  try {
+    return await submit(path, { ...baseParams, ...opts });
+  } catch (e) {
+    if (/실패\(4(00|22)\)/.test(e.message)) return await submit(path, baseParams);
+    throw e;
+  }
+}
+
 // 폴링(실측): GET /v1/job-sets/{id} → jobs[0].status, jobs[0].results.raw.url. submit가 쓴 키로 조회.
 async function poll(id, cred, { timeoutMs = 300000, intervalMs = 5000 } = {}) {
   const start = Date.now();
@@ -71,7 +86,7 @@ export async function generateTitleImage({ prompt, imageRefUrl, imageRefUrls }) 
   const urls = (imageRefUrls && imageRefUrls.length ? imageRefUrls : [imageRefUrl]).filter(Boolean);
   if (!urls.length) throw new Error("Seedream: 입력 사진 필요");
   const params = { prompt, input_images: urls.map((u) => ({ type: "image_url", image_url: u })) };
-  const { id, cred } = await submit("/v1/text2image/seedream", params);
+  const { id, cred } = await submitWithOpts("/v1/text2image/seedream", params, { width_and_height: IMG_SIZE }); // 16:9 강제
   return poll(id, cred);
 }
 
@@ -83,6 +98,6 @@ export async function generateMemoryVideo({ prompt, imageUrl, imageUrls }) {
   const params = { prompt, input_image: { type: "image_url", image_url: url } };
   // Kling 영상생성은 수 분 소요 — 폴링 타임아웃 길게(기본 12분, 리퍼 15분보다 짧게). env로 조정.
   const timeoutMs = Number(process.env.HIGGSFIELD_POLL_MS) || 720000;
-  const { id, cred } = await submit("/v1/image2video/kling", params);
+  const { id, cred } = await submitWithOpts("/v1/image2video/kling", params, { aspect_ratio: VID_ASPECT }); // 16:9 강제
   return poll(id, cred, { timeoutMs });
 }
