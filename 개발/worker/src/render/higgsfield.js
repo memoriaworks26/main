@@ -17,8 +17,10 @@ const BASE = "https://platform.higgsfield.ai";
 const CREDS = cfg.higgsfield.keys;
 // 모든 결과물 16:9 고정 — 이미지(seedream)·영상(kling) 출력 비율을 가로 16:9로 강제(편집기·최종 렌더가 1920×1080).
 //   env로 조정. 모델이 해당 옵션 키를 거부(400/422)하면 옵션을 빼고 1회 폴백 → 비율 강제는 best-effort, 생성 자체는 막지 않음.
-const IMG_SIZE = process.env.HIGGSFIELD_IMG_SIZE || "2048x1152"; // 16:9 (width_and_height enum)
-const VID_ASPECT = process.env.HIGGSFIELD_VID_ASPECT || "16:9";  // aspect_ratio
+//   ※ Seedream은 aspect_ratio+resolution(width_and_height는 Soul 전용 — 실측: width_and_height는 무시돼 4:3로 나옴).
+const IMG_ASPECT = process.env.HIGGSFIELD_IMG_ASPECT || "16:9"; // seedream aspect_ratio
+const IMG_RES = process.env.HIGGSFIELD_IMG_RES || "2K";         // seedream resolution
+const VID_ASPECT = process.env.HIGGSFIELD_VID_ASPECT || "16:9"; // kling aspect_ratio
 const authHeader = (c) => ({
   Authorization: `Key ${c.key}:${c.secret}`,
   "Content-Type": "application/json",
@@ -86,7 +88,7 @@ export async function generateTitleImage({ prompt, imageRefUrl, imageRefUrls }) 
   const urls = (imageRefUrls && imageRefUrls.length ? imageRefUrls : [imageRefUrl]).filter(Boolean);
   if (!urls.length) throw new Error("Seedream: 입력 사진 필요");
   const params = { prompt, input_images: urls.map((u) => ({ type: "image_url", image_url: u })) };
-  const { id, cred } = await submitWithOpts("/v1/text2image/seedream", params, { width_and_height: IMG_SIZE }); // 16:9 강제
+  const { id, cred } = await submitWithOpts("/v1/text2image/seedream", params, { aspect_ratio: IMG_ASPECT, resolution: IMG_RES }); // 16:9 강제
   return poll(id, cred);
 }
 
