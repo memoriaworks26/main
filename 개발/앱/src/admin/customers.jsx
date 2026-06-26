@@ -48,9 +48,21 @@ export const renderCustomerCell = (r, k) =>
   r[k];
 
 // 추모영상 카드 — 고객관리 상세 · 파트너 예약 상세 공용(두 화면 동일 보장).
-// status 기준 슬레이트 라벨 + 발행 시 다운로드(미발행은 disabled) + HQ 안내.
+// 발행 완료 건은 최종본(memoria-final) 미리보기 재생 + 다운로드. 미발행은 status 슬레이트 라벨.
 export function MemorialVideoCard({ status, file, requestedAt, video }) {
   const vlabel = status === "published" ? "발행 완료" : status === "confirm" ? "컨펌 대기" : status === "review" ? "접수 대기" : "제작 중";
+  const published = status === "published";
+  // [미리보기] 발행 완료 건만 — 다운로드와 동일 소스(finalPath)로 매번 새 서명URL 발급(만료 없는 재생).
+  const [preview, setPreview] = useState(null); // null=미시도/로딩중 · ""=불가 · url=재생가능
+  useEffect(() => {
+    if (!published || !video?.finalPath) { setPreview(""); return; }
+    let alive = true;
+    setPreview(null);
+    storage.signedUrl(storage.BUCKETS.final, video.finalPath)
+      .then((url) => { if (alive) setPreview(url); })
+      .catch(() => { if (alive) setPreview(""); });
+    return () => { alive = false; };
+  }, [published, video?.finalPath]);
   // [QA] 실 다운로드 — videos.finalPath 서명URL + 감사로그. 경로 없으면 안내.
   const dl = () => {
     if (!video?.finalPath) { toast("아직 다운로드할 최종본이 없습니다."); return; }
@@ -59,10 +71,16 @@ export function MemorialVideoCard({ status, file, requestedAt, video }) {
   };
   return (
     <Card title="추모영상">
-      <div className="relative flex items-center justify-center" style={{ aspectRatio: "16/9", background: "#2a323d", borderRadius: RADIUS }}>
-        <span className="text-[12px]" style={{ color: "#aab2bf" }}>{vlabel}</span>
+      <div className="relative flex items-center justify-center overflow-hidden" style={{ aspectRatio: "16/9", background: "#2a323d", borderRadius: RADIUS }}>
+        {published && preview ? (
+          <video src={preview} controls playsInline preload="metadata" className="absolute inset-0 h-full w-full" style={{ background: "#000" }} />
+        ) : published && preview === null && video?.finalPath ? (
+          <span className="text-[12px]" style={{ color: "#aab2bf" }}>미리보기 불러오는 중…</span>
+        ) : (
+          <span className="text-[12px]" style={{ color: "#aab2bf" }}>{vlabel}</span>
+        )}
       </div>
-      {status === "published" ? (
+      {published ? (
         <div className="mt-2.5 flex items-center justify-between gap-2">
           <span className="min-w-0 truncate text-[11.5px] tabular-nums" style={{ color: MUTE, fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>{file}</span>
           <Btn size="sm" onClick={dl}><Download className="h-3.5 w-3.5" /> 다운로드</Btn>
