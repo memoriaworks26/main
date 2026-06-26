@@ -1,8 +1,9 @@
 // ─────────────────────────────────────────────────────────────
 // 워커 스토리지 — service_role(RLS 우회). 소스 서명URL·원격 다운로드·최종본 업로드.
 // ─────────────────────────────────────────────────────────────
-import { promises as fs, createReadStream } from "node:fs";
+import { promises as fs, createReadStream, createWriteStream } from "node:fs";
 import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import sharp from "sharp";
 import { sb } from "./supabase.js";
 
@@ -34,11 +35,12 @@ export async function safeImageUrl(bucket, path, sec = 3600) {
   return signedUrl(bucket, out, sec);
 }
 
-// 원격 URL(서명URL·Higgsfield 결과) → 로컬 파일.
+// 원격 URL(서명URL·Higgsfield 결과) → 로컬 파일. 응답을 디스크로 스트리밍(긴 원본도 RAM에 통째 안 올림 → OOM 방지).
 export async function downloadTo(url, dest) {
   const res = await fetch(url);
   if (!res.ok) throw new Error("다운로드 실패(" + res.status + "): " + url.slice(0, 80));
-  await fs.writeFile(dest, Buffer.from(await res.arrayBuffer()));
+  if (!res.body) { await fs.writeFile(dest, Buffer.from(await res.arrayBuffer())); return dest; } // 폴백
+  await pipeline(Readable.fromWeb(res.body), createWriteStream(dest));
   return dest;
 }
 
@@ -49,15 +51,15 @@ export async function uploadFinal(path, fileBuffer, contentType = "video/mp4") {
   return path;
 }
 
-// 최종본 스트리밍 업로드 — 파일을 디스크→스트림으로 PUT(메모리에 통째로 안 적재).
+// 스트리밍 업로드(임의 버킷) — 파일을 디스크→스트림으로 PUT(메모리에 통째로 안 적재).
 //   긴/대용량 영상에서 fs.readFile로 인한 RAM 폭증(OOM)을 제거. Content-Length는 stat으로 고정 전송.
 //   supabase-js .upload(Buffer)는 전체를 메모리에 올리므로, 여기선 Storage REST에 직접 스트림 PUT.
-export async function uploadFinalStream(path, filePath, contentType = "video/mp4") {
+export async function uploadStream(bucket, path, filePath, contentType = "application/octet-stream") {
   const { size } = await fs.stat(filePath);
   const base = (process.env.SUPABASE_URL || "").replace(/\/+$/, "");
   const key = process.env.SUPABASE_SERVICE_KEY;
   if (!base || !key) throw new Error("스트리밍 업로드: SUPABASE_URL/SERVICE_KEY 누락");
-  const url = `${base}/storage/v1/object/memoria-final/${encodeURI(path)}`;
+  const url = `${base}/storage/v1/object/${bucket}/${encodeURI(path)}`;
   const body = Readable.toWeb(createReadStream(filePath));
   const res = await fetch(url, {
     method: "POST",
@@ -72,8 +74,13 @@ export async function uploadFinalStream(path, filePath, contentType = "video/mp4
     body,
     duplex: "half",
   });
-  if (!res.ok) throw new Error(`최종본 스트리밍 업로드 실패(${res.status}): ` + (await res.text().catch(() => "")).slice(0, 200));
+  if (!res.ok) throw new Error(`스트리밍 업로드 실패(${bucket} ${res.status}): ` + (await res.text().catch(() => "")).slice(0, 200));
   return path;
+}
+
+// 최종본(memoria-final) 스트리밍 업로드.
+export async function uploadFinalStream(path, filePath, contentType = "video/mp4") {
+  return uploadStream("memoria-final", path, filePath, contentType);
 }
 
 // 임의 버킷 업로드(블록 생성 결과물 등).

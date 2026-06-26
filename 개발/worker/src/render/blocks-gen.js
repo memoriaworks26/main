@@ -13,7 +13,7 @@ import * as st from "../storage.js";
 import { loadConfig } from "../config.js";
 import { log } from "../log.js";
 import { generateTitleImage, generateMemoryVideo } from "./higgsfield.js";
-import { makeTitleVideo } from "./ffmpeg.js";
+import { makeTitleVideo, faststartRemux } from "./ffmpeg.js";
 
 const FONT = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../assets/NotoSansKR-Regular.otf");
 
@@ -32,11 +32,38 @@ async function activePrompt(target) {
   return data ? { body: data.body || null, refImage: data.ref_image || null } : null;
 }
 
+// 보호자 원본 영상 정규화 — faststart 리먹스(무손실, 재인코딩 X)로 편집기 미리보기 즉시 재생.
+//   이미 정규화된(/norm/) 건 건너뜀(멱등). 실패(코덱 비호환 등)해도 best-effort로 원본 유지(최종 compose에서 어차피 재인코딩).
+//   다운로드·업로드 모두 스트리밍 → 30분 원본도 RAM에 통째 안 올림(OOM 없음).
+async function normalizeMemoryVideos(job, assets) {
+  const vids = (assets || []).filter((a) => a.role === "memory_video" && a.kind === "video" && a.storage_path && !a.storage_path.includes("/norm/"));
+  if (!vids.length) return 0;
+  let n = 0;
+  for (const a of vids) {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mw-norm-"));
+    try {
+      const ext = (a.storage_path.split(".").pop() || "mp4").toLowerCase();
+      const src = path.join(dir, `in.${ext}`), out = path.join(dir, "out.mp4");
+      await st.downloadTo(await st.signedUrl(cfg.uploadBucket, a.storage_path, 3600), src);
+      await faststartRemux(src, out);
+      const np = `${job.token}/norm/${crypto.randomUUID().slice(0, 8)}.mp4`;
+      await st.uploadStream(cfg.uploadBucket, np, out, "video/mp4");
+      await db.from("submission_assets").update({ storage_path: np }).eq("id", a.id);
+      n++; log.info(`  추억영상 faststart 정규화 → ${np}`);
+    } catch (e) {
+      log.warn(`  추억영상 정규화 건너뜀(${a.id}): ${e.message}`);
+    } finally { await fs.rm(dir, { recursive: true, force: true }); }
+  }
+  return n;
+}
+
 export async function generateBlocks(job, assets) {
   if (cfg.stub) {
     log.info(`  [stub] generate-blocks job=${job.id} target=${job.regen_target || "all"}`);
     return { count: 0 };
   }
+  // 보호자 원본 영상 faststart 정규화(미리보기 즉시 재생) — skip_ai 여부·target과 무관하게 항상(멱등).
+  await normalizeMemoryVideos(job, assets);
   const token = job.token;
   const name = job.pet_name || "";
   const photos = assets.filter((a) => a.kind === "photo" && a.storage_path);

@@ -174,6 +174,13 @@ export async function letterScrollSegment(text, fontFile, out) {
   return { path: out, dur };
 }
 
+// faststart 리먹스 — 재인코딩 없이(스트림 복사, 무손실) moov atom을 파일 앞으로.
+//   보호자 원본 영상이 브라우저 미리보기에서 전체 다운로드 없이 즉시 재생되게. 코덱 비호환이면 호출측에서 throw 처리.
+export async function faststartRemux(inPath, outPath) {
+  await ff(["-y", "-i", inPath, "-c", "copy", "-movflags", "+faststart", outPath]);
+  return outPath;
+}
+
 // 단색 배경 이미지(편지 장면 등) 1920x1080.
 export async function makeSolid(color, out) {
   await ff(["-y", "-f", "lavfi", "-i", `color=c=${color}:s=${W}x${H}`, "-frames:v", "1", out]);
