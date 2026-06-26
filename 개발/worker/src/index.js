@@ -3,13 +3,22 @@
 //   node src/index.js --once   1건만 처리하고 종료(테스트/CI)
 import { loadConfig } from "./config.js";
 import { log } from "./log.js";
-import { claimJob, claimComposeJob, fetchAssets, completeJob, completeBlocks, failJob, failCompose, requeueStale } from "./queue.js";
+import { claimJob, claimComposeJob, fetchAssets, completeJob, completeBlocks, failJob, failCompose, requeueStale, touchHeartbeat } from "./queue.js";
 import { composeFinal } from "./render/index.js";
 import { generateBlocks } from "./render/blocks-gen.js";
 
 const cfg = loadConfig();
 const ONCE = process.argv.includes("--once");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// 진행 중 작업 생존 신호 — 2분마다 render_heartbeat_at 갱신(reaper stale=15분 창보다 훨씬 짧게).
+//   긴 합성/생성이 멈춘 것으로 오판돼 중복·튐 나는 것 방지. 반환된 stop()을 finally에서 호출.
+const HEARTBEAT_MS = +(process.env.HEARTBEAT_MS || 120000);
+function startHeartbeat(id) {
+  const iv = setInterval(() => { touchHeartbeat(id).catch((e) => log.warn("하트비트 경고: " + e.message)); }, HEARTBEAT_MS);
+  if (iv.unref) iv.unref();
+  return () => clearInterval(iv);
+}
 
 let stopping = false;
 process.on("SIGINT", () => { log.warn("종료 요청(SIGINT) — 현재 작업 후 정지"); stopping = true; });
@@ -21,6 +30,7 @@ async function processOne() {
   const genJob = await claimJob();
   if (genJob) {
     log.info(`gen   job=${genJob.id} attempt=${genJob.render_attempts} reserv=${genJob.reservation_id || "-"}`);
+    const stop = startHeartbeat(genJob.id);
     try {
       const assets = await fetchAssets(genJob);
       const res = await generateBlocks(genJob, assets);
@@ -29,13 +39,14 @@ async function processOne() {
     } catch (e) {
       const status = await failJob(genJob, e);
       log.error(`fail-gen job=${genJob.id} (${status}) ${e.message}`);
-    }
+    } finally { stop(); }
     return true;
   }
   // 2단계: 최종 합성(관리자 「최종 렌더」) → done
   const cJob = await claimComposeJob();
   if (cJob) {
     log.info(`compose job=${cJob.id} reserv=${cJob.reservation_id || "-"}`);
+    const stop = startHeartbeat(cJob.id);
     try {
       const assets = await fetchAssets(cJob);
       const result = await composeFinal(cJob, assets);
@@ -44,7 +55,7 @@ async function processOne() {
     } catch (e) {
       await failCompose(cJob, e);
       log.error(`fail-compose job=${cJob.id} ${e.message}`);
-    }
+    } finally { stop(); }
     return true;
   }
   return false;

@@ -1,7 +1,8 @@
 // ─────────────────────────────────────────────────────────────
 // 워커 스토리지 — service_role(RLS 우회). 소스 서명URL·원격 다운로드·최종본 업로드.
 // ─────────────────────────────────────────────────────────────
-import { promises as fs } from "node:fs";
+import { promises as fs, createReadStream } from "node:fs";
+import { Readable } from "node:stream";
 import sharp from "sharp";
 import { sb } from "./supabase.js";
 
@@ -41,10 +42,37 @@ export async function downloadTo(url, dest) {
   return dest;
 }
 
-// 최종본 업로드(memoria-final).
+// 최종본 업로드(memoria-final) — 작은 결과물용(버퍼). 긴 영상은 uploadFinalStream 사용.
 export async function uploadFinal(path, fileBuffer, contentType = "video/mp4") {
   const { error } = await sb.storage.from("memoria-final").upload(path, fileBuffer, { upsert: true, contentType });
   if (error) throw new Error("최종본 업로드 실패: " + error.message);
+  return path;
+}
+
+// 최종본 스트리밍 업로드 — 파일을 디스크→스트림으로 PUT(메모리에 통째로 안 적재).
+//   긴/대용량 영상에서 fs.readFile로 인한 RAM 폭증(OOM)을 제거. Content-Length는 stat으로 고정 전송.
+//   supabase-js .upload(Buffer)는 전체를 메모리에 올리므로, 여기선 Storage REST에 직접 스트림 PUT.
+export async function uploadFinalStream(path, filePath, contentType = "video/mp4") {
+  const { size } = await fs.stat(filePath);
+  const base = (process.env.SUPABASE_URL || "").replace(/\/+$/, "");
+  const key = process.env.SUPABASE_SERVICE_KEY;
+  if (!base || !key) throw new Error("스트리밍 업로드: SUPABASE_URL/SERVICE_KEY 누락");
+  const url = `${base}/storage/v1/object/memoria-final/${encodeURI(path)}`;
+  const body = Readable.toWeb(createReadStream(filePath));
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      apikey: key,
+      "Content-Type": contentType,
+      "Content-Length": String(size),
+      "x-upsert": "true",
+      "cache-control": "3600",
+    },
+    body,
+    duplex: "half",
+  });
+  if (!res.ok) throw new Error(`최종본 스트리밍 업로드 실패(${res.status}): ` + (await res.text().catch(() => "")).slice(0, 200));
   return path;
 }
 

@@ -31,6 +31,12 @@ export async function failCompose(job, err) {
     .update({ status: "failed", render_error: String(err?.message || err).slice(0, 500) }).eq("id", job.id);
 }
 
+// 하트비트 — 진행 중 작업의 생존 신호(render_heartbeat_at 갱신). reaper 오발(중복/튐) 방지.
+export async function touchHeartbeat(id) {
+  const { error } = await db.rpc("touch_render_heartbeat", { p_id: id });
+  if (error) throw new Error("하트비트 실패: " + error.message);
+}
+
 // 멈춘(rendering) 렌더 복구 — N분 이상 정지 시 재큐(또는 시도초과면 failed). 처리 건수 반환.
 export async function requeueStale(minutes, maxAttempts) {
   const { data, error } = await db.rpc("requeue_stale_renders", { p_minutes: minutes, p_max_attempts: maxAttempts });

@@ -114,9 +114,9 @@ export async function composeFinal(job, assets) {
     const out = path.join(dir, "final.mp4");
     await compose({ segments: segs, fontFile: FONT, bgmPath, bgmVol, bgmFadeIn, bgmFadeOut, outPath: out });
     const finalPath = `${partnerId || "unknown"}/${job.id}_final.mp4`;
-    const buf = await fs.readFile(out);
-    await st.uploadFinal(finalPath, buf, "video/mp4");
-    const finalMB = +(buf.length / (1024 * 1024)).toFixed(1);
+    const { size } = await fs.stat(out);                 // RAM에 통째로 안 올림 — 크기는 stat으로
+    await st.uploadFinalStream(finalPath, out, "video/mp4"); // 디스크→스트림 PUT(긴 영상 OOM 방지)
+    const finalMB = +(size / (1024 * 1024)).toFixed(1);
     const exp = expiryFor(endDate);
     const videoUrl = await st.signedUrl(cfg.finalBucket, finalPath, exp.sec);
     log.info(`  합성 완료 job=${job.id} segs=${segs.length} ${finalMB}MB exp=${exp.at} → ${finalPath}`);

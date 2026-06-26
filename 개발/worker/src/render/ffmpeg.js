@@ -64,8 +64,9 @@ function letterCaption(text, fontFile) {
 }
 const capFor = (cap, isLetter, fontFile) => (isLetter ? letterCaption(cap, fontFile) : caption(cap, fontFile));
 
-// 메모리/CPU 가볍게(작은 컨테이너 OOM 방지): ultrafast preset + threads 1.
-const ENC = ["-c:v", "libx264", "-preset", "ultrafast", "-threads", "1", "-pix_fmt", "yuv420p", "-an"];
+// ultrafast preset + threads 0(가용 코어 전부) — 긴 영상도 인코딩이 코어수만큼 빨라져 reaper 창 안에 들어옴.
+//   (대용량 RAM 폭증의 주범은 인코딩이 아니라 최종본 fs.readFile였고, 그건 스트리밍 업로드로 제거 → threads 풀어도 안전)
+const ENC = ["-c:v", "libx264", "-preset", "ultrafast", "-threads", "0", "-pix_fmt", "yuv420p", "-an"];
 async function imageSegment(src, dur, out, cap, fontFile, isLetter) {
   await ff(["-y", "-loop", "1", "-t", String(dur), "-i", src, "-vf", FIT + capFor(cap, isLetter, fontFile), "-r", String(FPS), ...ENC, out]);
 }
