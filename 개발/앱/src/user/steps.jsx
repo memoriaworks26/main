@@ -17,7 +17,7 @@ function SlideCanvas({ frames }) {
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
     const ctx = cv.getContext("2d"); const W = cv.width, H = cv.height;
-    const imgs = frames.map((src) => { const im = new Image(); im.src = src; return im; });
+    const imgs = frames.map((src) => { const im = new window.Image(); im.src = src; return im; }); // window.Image — lucide-react의 Image 아이콘 import와 이름충돌 회피(전역 생성자 명시)
     const drawCover = (im) => {
       const ir = im.naturalWidth / im.naturalHeight, cr = W / H; let w, h, x, y;
       if (ir > cr) { h = H; w = H * ir; x = (W - w) / 2; y = 0; } else { w = W; h = W / ir; x = 0; y = (H - h) / 2; }
