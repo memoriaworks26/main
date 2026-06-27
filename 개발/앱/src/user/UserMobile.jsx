@@ -58,7 +58,8 @@ export default function UserMobile({ previewBizId, step: stepProp, onStep }) {
           <div className="px-5 py-5" style={{ minHeight: 360 }}><StepBody step={step} st={st} /></div>
           {/* 하단 네비 — 첫 화면(동의)에는 '이전' 숨김 */}
           <div className="flex items-center justify-between gap-2 px-5 py-4" style={{ borderTop: "1px solid " + LINE }}>
-            {step === 0 ? <span /> : (
+            {/* 제출 후(라이브·최종화면)엔 '이전' 숨김 — 뒤로가 재편집·재제출로 꼬이는 것 차단. 재진입 시도 resolveLink가 최종화면 고정. */}
+            {(step === 0 || (liveMode && step === last)) ? <span /> : (
               <button onClick={() => setStep((s) => Math.max(0, s - 1))}
                 className="flex items-center gap-1 px-3 py-2 text-[13px] font-semibold"
                 style={{ color: MUTE }}>

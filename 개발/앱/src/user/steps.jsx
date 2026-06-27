@@ -18,19 +18,20 @@ function SlideCanvas({ frames }) {
     const cv = ref.current; if (!cv) return;
     const ctx = cv.getContext("2d"); const W = cv.width, H = cv.height;
     const imgs = frames.map((src) => { const im = new window.Image(); im.src = src; return im; }); // window.Image — lucide-react의 Image 아이콘 import와 이름충돌 회피(전역 생성자 명시)
-    const drawCover = (im) => {
+    // contain(fit) — 절대 crop 안 함. 전체가 보이도록 맞추고 남는 쪽은 여백(배경색). 세로사진=좌우 여백, 가로사진=상하 여백.
+    const drawContain = (im) => {
       const ir = im.naturalWidth / im.naturalHeight, cr = W / H; let w, h, x, y;
-      if (ir > cr) { h = H; w = H * ir; x = (W - w) / 2; y = 0; } else { w = W; h = W / ir; x = 0; y = (H - h) / 2; }
+      if (ir > cr) { w = W; h = W / ir; x = 0; y = (H - h) / 2; } else { h = H; w = H * ir; x = (W - w) / 2; y = 0; }
       ctx.drawImage(im, x, y, w, h);
     };
     const PER = 2600, FADE = 700; let raf; const t0 = performance.now();
     const frame = (now) => {
       const n = imgs.length;
-      ctx.fillStyle = "#1c232c"; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H); // 여백색 = 최종 영상 ffmpeg pad(검정)과 일치(WYSIWYG)
       if (n) {
         const e = now - t0, idx = Math.floor(e / PER) % n, prev = (idx - 1 + n) % n, a = Math.min(1, (e % PER) / FADE);
-        if (n > 1 && imgs[prev].complete && imgs[prev].naturalWidth) drawCover(imgs[prev]);
-        if (imgs[idx].complete && imgs[idx].naturalWidth) { ctx.globalAlpha = n > 1 ? a : 1; drawCover(imgs[idx]); ctx.globalAlpha = 1; }
+        if (n > 1 && imgs[prev].complete && imgs[prev].naturalWidth) drawContain(imgs[prev]);
+        if (imgs[idx].complete && imgs[idx].naturalWidth) { ctx.globalAlpha = n > 1 ? a : 1; drawContain(imgs[idx]); ctx.globalAlpha = 1; }
       }
       raf = requestAnimationFrame(frame);
     };
