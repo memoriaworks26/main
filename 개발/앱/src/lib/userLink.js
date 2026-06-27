@@ -82,7 +82,8 @@ export async function uploadAsset(token, file, { kind, onProgress, onStage } = {
     await tusUpload(file, path, onProgress);            // 이어올리기 + 진행률
   } catch {
     // tus 실패 → 표준 업로드 폴백(엔드포인트 이슈 등에도 업로드는 보장). 진행률은 미표시.
-    const { error } = await getClient().storage.from(UPLOAD_BUCKET).upload(path, file, { contentType: file.type || undefined, upsert: true });
+    // upsert:false — 보호자(anon) RLS는 INSERT만 허용(덮어쓰기=UPDATE 권한 없음). 경로가 매번 UUID라 충돌도 없음.
+    const { error } = await getClient().storage.from(UPLOAD_BUCKET).upload(path, file, { contentType: file.type || undefined, upsert: false });
     if (error) throw new Error("업로드 실패: " + error.message);
   }
   return { storagePath: path, name: file.name, sizeMB, kind };
@@ -99,7 +100,7 @@ function tusUpload(file, objectName, onProgress) {
       const upload = new Upload(file, {
         endpoint: `${SUPABASE_URL}/storage/v1/upload/resumable`,
         retryDelays: [0, 1000, 3000, 6000, 12000],
-        headers: { authorization: `Bearer ${authToken}`, apikey: SUPABASE_ANON, "x-upsert": "true" },
+        headers: { authorization: `Bearer ${authToken}`, apikey: SUPABASE_ANON, "x-upsert": "false" }, // anon RLS=INSERT만(덮어쓰기 불가). UUID 경로라 충돌 없음 → upsert 불필요
         uploadDataDuringCreation: true,
         removeFingerprintOnSuccess: true,
         chunkSize: 6 * 1024 * 1024,                       // Supabase 요구 청크 크기(6MB)
