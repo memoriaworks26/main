@@ -1,0 +1,9 @@
+project_id = "mgybnsidmnzjfqtucfhl"
+
+# 사이니지 라즈베리파이 — 파이는 Supabase 유저가 아니라 자체 디바이스 토큰으로 인증.
+# 따라서 JWT 검증 비활성(함수 내부에서 enroll_code/device_token_hash로 직접 검증).
+[functions.device-enroll]
+verify_jwt = false
+
+[functions.device-sync]
+verify_jwt = false

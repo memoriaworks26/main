@@ -17,6 +17,7 @@ class Player:
     def show_standby(self): raise NotImplementedError
     def set_notice(self, text): pass
     def set_volume(self, volume, muted): pass
+    def set_paused(self, paused): pass
     def restart(self): pass
     def stop(self): pass
 
@@ -36,6 +37,7 @@ class DryRunPlayer(Player):
     def show_standby(self): self._set("STANDBY(대기화면)")
     def set_notice(self, text): log.info("[화면] 알림문구: %s", text)
     def set_volume(self, volume, muted): log.info("[화면] 음량=%s 음소거=%s", volume, muted)
+    def set_paused(self, paused): log.info("[화면] %s", "일시정지(프레임 고정)" if paused else "재생")
     def restart(self): log.info("[화면] 플레이어 재시작")
     def stop(self): log.info("[화면] 정지")
 
@@ -79,12 +81,19 @@ class MpvPlayer(Player):
     def show_standby(self): self._load(self.standby_path, "standby")
 
     def set_notice(self, text):
-        # 간이 오버레이(추후 파이에서 ASS osd-overlay로 고도화)
-        self._cmd("show-text", text, 3600000)
+        # 간이 오버레이(추후 파이에서 ASS osd-overlay로 고도화). 빈 문자열=해제.
+        if text:
+            self._cmd("show-text", text, 3600000)
+        else:
+            self._cmd("show-text", "", 0)
 
     def set_volume(self, volume, muted):
         self._cmd("set_property", "volume", max(0, min(100, int(volume or 0))))
         self._cmd("set_property", "mute", bool(muted))
+
+    def set_paused(self, paused):
+        # mpv pause=현재 프레임에서 정지(검은화면 금지 원칙 유지). 재생 시 이어서.
+        self._cmd("set_property", "pause", bool(paused))
 
     def restart(self):
         self._cmd("quit")

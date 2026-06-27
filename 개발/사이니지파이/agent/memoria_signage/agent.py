@@ -22,6 +22,7 @@ class Agent:
         self.token = None
         self.current_video_id = None
         self.last_volume = None
+        self.last_paused = None
 
     # ── 등록(토큰 확보) ──
     def ensure_token(self):
@@ -61,6 +62,12 @@ class Agent:
         if vol != self.last_volume:
             self.player.set_volume(resp.get("volume"), resp.get("muted"))
             self.last_volume = vol
+
+        # 정지/재생(변경 시에만) — 라이브컨트롤 정지=현재 프레임 일시정지
+        paused = bool(resp.get("paused"))
+        if paused != self.last_paused:
+            self.player.set_paused(paused)
+            self.last_paused = paused
 
         # 일회성 명령
         if resp.get("cmd"):

@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
 
   // 토큰 해시로 디바이스 조회
   const { data: dev } = await mem.from("signage_devices")
-    .select("id, partner_id, room_id, mode, volume, muted, orientation, pending_cmd")
+    .select("id, partner_id, room_id, mode, volume, muted, orientation, pending_cmd, paused")
     .eq("device_token_hash", await sha256hex(token)).maybeSingle();
   if (!dev) return json(401, { error: "unauthorized device" });
 
@@ -117,6 +117,7 @@ Deno.serve(async (req) => {
   return json(200, {
     ok: true, device: dev.id, mode,
     volume: dev.volume, muted: dev.muted, orientation: dev.orientation || "landscape",
+    paused: dev.paused ?? false,   // 라이브컨트롤 정지/재생 — 파이가 현재 프레임에서 일시정지
     cmd: dev.pending_cmd ?? null,
     content, ...(notice ? { notice } : {}),
   });

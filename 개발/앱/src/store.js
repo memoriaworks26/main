@@ -423,7 +423,11 @@ export const actions = {
     if (LIVE) { signage.updateDevice(id, { mode }).then(() => set((s) => ({ devices: mapById(s.devices, id, { mode }) }))).catch((e) => toast("모드 저장 실패: " + e.message)); return; }
     set((s) => ({ devices: mapById(s.devices, id, { mode }) }));
   },
-  setDevicePlay: (id, play) => set((s) => ({ devices: mapById(s.devices, id, { play }) })),
+  setDevicePlay: (id, play) => {
+    const paused = play !== "playing";   // 정지=일시정지(파이가 device-sync로 받아 mpv pause)
+    if (LIVE) { signage.updateDevice(id, { paused }).then(() => set((s) => ({ devices: mapById(s.devices, id, { play, paused }) }))).catch((e) => toast("재생상태 저장 실패: " + e.message)); return; }
+    set((s) => ({ devices: mapById(s.devices, id, { play, paused }) }));
+  },
   setDeviceVolume: (id, volume) => {
     if (LIVE) { signage.updateDevice(id, { volume, muted: volume === 0 }).then(() => set((s) => ({ devices: mapById(s.devices, id, { volume, muted: volume === 0 }) }))).catch((e) => toast("음량 저장 실패: " + e.message)); return; }
     set((s) => ({ devices: mapById(s.devices, id, { volume, muted: volume === 0 }) }));

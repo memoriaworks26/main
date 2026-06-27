@@ -79,6 +79,11 @@ def main(argv=None):
     player = DryRunPlayer() if testing else MpvPlayer()
     reboot = (lambda: log.info("[테스트] reboot 호출됨")) if testing else None
 
+    # 네트워크 보장 — 랜선이면 즉시 통과, 와이파이 미설정이면 캡티브 포털로 현장 입력(실모드만).
+    if not testing and server:
+        from .netsetup import ensure_network, NmcliWifi
+        ensure_network(prov, NmcliWifi(), player, server + "/device-sync")
+
     try:
         Agent(cfg, api, cache, player, poll=POLL_INTERVAL, reboot=reboot).run(once=a.once)
     except KeyboardInterrupt:

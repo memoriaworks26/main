@@ -10,6 +10,7 @@ const need = () => { const d = db(); if (!d) throw new Error("백엔드 미연�
 const mapDevice = (r) => ({
   id: r.id, partnerId: r.partner_id, partner: r.partner?.name, roomId: r.room_id, room: r.room_label,
   status: r.status, playing: r.playing, mode: r.mode,
+  paused: r.paused, play: r.paused ? "stopped" : "playing",   // 정지/재생 상태(DB paused 기준)
   volume: r.volume, muted: r.muted, ip: r.ip, lastComm: r.last_comm,
   enrolled: !!r.device_token_hash, enrollCode: r.enroll_code,    // 토큰해시 값은 노출 X(불리언만)
   pendingCmd: r.pending_cmd, orientation: r.orientation, currentVideoId: r.current_video_id,
@@ -52,11 +53,11 @@ export async function sendCommand(id, cmd) {
   if (error) throw new Error("명령 실패: " + error.message);
 }
 
-// mode/volume/muted/playing/status만 DB 반영(play 등 전송제어 상태는 store 전용).
+// mode/volume/muted/playing/status/paused만 DB 반영(파이가 device-sync로 받아 적용).
 export async function updateDevice(id, patch) {
   const d = need();
   const row = {};
-  for (const k of ["mode", "volume", "muted", "playing", "status"]) if (patch[k] !== undefined) row[k] = patch[k];
+  for (const k of ["mode", "volume", "muted", "playing", "status", "paused"]) if (patch[k] !== undefined) row[k] = patch[k];
   if (!Object.keys(row).length) return;
   const { error } = await d.from("signage_devices").update(row).eq("id", id);
   if (error) throw new Error(error.message);
