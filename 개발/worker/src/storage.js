@@ -44,13 +44,6 @@ export async function downloadTo(url, dest) {
   return dest;
 }
 
-// 최종본 업로드(memoria-final) — 작은 결과물용(버퍼). 긴 영상은 uploadFinalStream 사용.
-export async function uploadFinal(path, fileBuffer, contentType = "video/mp4") {
-  const { error } = await sb.storage.from("memoria-final").upload(path, fileBuffer, { upsert: true, contentType });
-  if (error) throw new Error("최종본 업로드 실패: " + error.message);
-  return path;
-}
-
 // 스트리밍 업로드(임의 버킷) — 파일을 디스크→스트림으로 PUT(메모리에 통째로 안 적재).
 //   긴/대용량 영상에서 fs.readFile로 인한 RAM 폭증(OOM)을 제거. Content-Length는 stat으로 고정 전송.
 //   supabase-js .upload(Buffer)는 전체를 메모리에 올리므로, 여기선 Storage REST에 직접 스트림 PUT.

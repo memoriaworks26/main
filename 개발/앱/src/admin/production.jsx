@@ -156,7 +156,7 @@ export function Production({ onOpenEditor, account }) {
   const [tab, setTab] = useState("review");
   const [pf, setPf] = useState("all");
   const [review, setReview] = useState(null); // 검수 창에 띄운 예약(컨펌 대기 · 렌더 완료 건)
-  const [promptMgr, setPromptMgr] = useState(false); // 기본 프롬프트 관리 모달
+  const [promptModal, setPromptModal] = useState(false); // 기본 프롬프트 관리 모달
   const st = (r) => r.status;
   const me = account?.name;
   const claim = (id) => { actions.setReservationAssignee(id, me); actions.setReservationStatus(id, "rendering"); }; // 받기 → 작업 중
@@ -182,7 +182,7 @@ export function Production({ onOpenEditor, account }) {
     <div style={{ maxWidth: 700 }}>
       <PageHeader title="편집·컨펌" sub="전 파트너사 유입 영상 — 먼저 요청된 순 처리 큐" right={
         <div className="flex items-center gap-2">
-          <Btn size="sm" variant="neutral" onClick={() => setPromptMgr(true)}><SlidersHorizontal className="h-3.5 w-3.5" /> 기본 프롬프트</Btn>
+          <Btn size="sm" variant="neutral" onClick={() => setPromptModal(true)}><SlidersHorizontal className="h-3.5 w-3.5" /> 기본 프롬프트</Btn>
           <SearchSelect value={pf} onChange={setPf} placeholder="전체 파트너사"
             options={[{ value: "all", label: "전체 파트너사" }, ...partners.filter((p) => p.active).map((p) => ({ value: p.name, label: p.name }))]} />
         </div>
@@ -280,7 +280,7 @@ export function Production({ onOpenEditor, account }) {
 
       {review && <ReviewModal r={review} videoUrl={submissionFor(s, review.id)?.videoUrl} finalMB={videoFor(s, review.id)?.finalMB}
         readOnly={review.status === "published"} onConfirm={() => doConfirm(review)} onRemake={() => doRemake(review)} onClose={() => setReview(null)} />}
-      <PromptModal open={promptMgr} onClose={() => setPromptMgr(false)} />
+      <PromptModal open={promptModal} onClose={() => setPromptModal(false)} />
     </div>
   );
 }

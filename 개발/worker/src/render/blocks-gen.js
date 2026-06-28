@@ -74,7 +74,6 @@ export async function generateBlocks(job, assets) {
   const aiSel = photos.filter((a) => a.role === "ai_video" && a.selected).sort(_bySort);
   const aiPhotos = aiSel.length ? aiSel : photos.filter((a) => a.role === "ai_video").sort(_bySort);
   const sign = (a) => st.safeImageUrl(cfg.uploadBucket, a.storage_path, 3600); // B: 힉스필드 안전 포맷(jpg/png) 보장
-  const del = (role, sort) => { let q = db.from("submission_assets").delete().eq("submission_id", job.id).eq("role", role); if (sort != null) q = q.eq("sort_order", sort); return q; };
   const ins = (row) => db.from("submission_assets").insert(row);
   // 버전 히스토리 — 삭제 대신 기존 비활성(selected=false) + 새 버전 활성 삽입. 기존본도 나중에 선택 가능.
   const deselect = (role, sort) => { let q = db.from("submission_assets").update({ selected: false }).eq("submission_id", job.id).eq("role", role); if (sort != null) q = q.eq("sort_order", sort); return q; };
