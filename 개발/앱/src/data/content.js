@@ -11,11 +11,13 @@ export const CONTENT = [
   { id: "ct-7", kind: "photo", partner: "펫포레스트 추모관", name: "추모액자_내추럴.png", meta: "투명 PNG", size: "1.0MB" },
 ];
 
-// BGM 라이브러리 — 실제 음원. 미리듣기=웹 번들(public/bgm/*.mp3, src), 최종 렌더=memoria-content 동일본(bgm 테이블 storage_path). 관리자는 곡 교체 가능.
+// BGM 라이브러리 — 실제 음원(퍼블릭도메인 클래식 피아노). 미리듣기=웹 번들(public/bgm/*.mp3, src),
+//   최종 렌더=memoria-content 동일본(bgm 테이블 storage_path). 관리자는 콘텐츠 허브에서 곡 교체 가능.
+//   출처: Wikimedia Commons · 모두 Public Domain(작곡·연주 PD, 출처표기 불필요) — 라우드니스 정규화 후 MP3.
 export const BGM = [
-  { id: "b-1", name: "추모 · 잔잔한 패드", meta: "1:02 · 루프", src: "/bgm/calm.mp3", current: true },
-  { id: "b-2", name: "고요한 현악 패드", meta: "1:02 · 루프", src: "/bgm/strings.mp3", current: false },
-  { id: "b-3", name: "따뜻한 패드", meta: "1:02 · 루프", src: "/bgm/warm.mp3", current: false },
+  { id: "b-1", name: "지노시엔 1번 · 에릭 사티", meta: "3:38 · 피아노", src: "/bgm/gnossienne1.mp3", current: true },
+  { id: "b-2", name: "달빛(클레르 드 륀) · 드뷔시", meta: "4:35 · 피아노", src: "/bgm/clair-de-lune.mp3", current: false },
+  { id: "b-3", name: "지노시엔 3번 · 에릭 사티", meta: "2:42 · 피아노", src: "/bgm/gnossienne3.mp3", current: false },
 ];
 
 // AI 프롬프트 (리스트 선택형 — 타이틀/AI영상)
