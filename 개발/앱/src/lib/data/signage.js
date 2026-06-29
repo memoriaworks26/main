@@ -8,7 +8,8 @@ import { db } from "../supabase.js";
 
 const need = () => { const d = db(); if (!d) throw new Error("백엔드 미연결"); return d; };
 const mapDevice = (r) => ({
-  id: r.id, partnerId: r.partner_id, partner: r.partner?.name, roomId: r.room_id, room: r.room_label,
+  // 호실명: room_id(uuid) 조인 우선, 없으면 옛 room_label(텍스트) 폴백.
+  id: r.id, partnerId: r.partner_id, partner: r.partner?.name, roomId: r.room_id, room: r.room?.name ?? r.room_label ?? null,
   status: r.status, playing: r.playing, mode: r.mode,
   paused: r.paused, play: r.paused ? "stopped" : "playing",   // 정지/재생 상태(DB paused 기준)
   volume: r.volume, muted: r.muted, ip: r.ip, lastComm: r.last_comm,
@@ -19,7 +20,7 @@ const mapDevice = (r) => ({
 
 export async function fetchDevices() {
   const d = need();
-  const { data, error } = await d.from("signage_devices").select("*, partner:partners(name)").order("id");
+  const { data, error } = await d.from("signage_devices").select("*, partner:partners(name), room:rooms(name)").order("id");
   if (error) throw new Error("디바이스 조회 실패: " + error.message);
   return (data || []).map(mapDevice);
 }
@@ -44,6 +45,38 @@ export async function revokeDevice(id) {
   const d = need();
   const { error } = await d.rpc("signage_revoke", { p_device: id });
   if (error) throw new Error("폐기 실패: " + error.message);
+}
+
+// ── 웹 사이니지 디스플레이(브라우저를 호실 TV로) ──
+//   파이의 등록코드 교환(staff 전용 RPC) 대신, 콘솔이 직접 토큰을 만들어 sha256 해시만
+//   디바이스 행에 저장한다. RLS dev_partner_rw/dev_staff_rw 로 파트너·관리자 모두 동작.
+//   평문 토큰은 저장하지 않고 1회 반환 → 콘솔이 /s/<token> 링크로 사용.
+const randHex = (n = 24) =>
+  [...crypto.getRandomValues(new Uint8Array(n))].map((b) => b.toString(16).padStart(2, "0")).join("");
+async function sha256hex(s) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+// 기존 디바이스에 새 웹 토큰 발급(기존 토큰/등록코드 폐기) → 평문 토큰 반환.
+export async function issueWebToken(id) {
+  const d = need();
+  const token = randHex();
+  const { error } = await d.from("signage_devices")
+    .update({ device_token_hash: await sha256hex(token), enroll_code: null, enroll_expires_at: null, status: "online" })
+    .eq("id", id);
+  if (error) throw new Error("웹 토큰 발급 실패: " + error.message);
+  return token;
+}
+// 호실용 웹 디스플레이 디바이스 신규 생성 + 토큰 발급 → { id, token }.
+export async function createWebDisplay({ partnerId, roomId }) {
+  const d = need();
+  const id = "WEB-" + Date.now().toString(36).toUpperCase();
+  const { error } = await d.from("signage_devices").insert({
+    id, partner_id: partnerId, room_id: roomId || null, status: "pending", mode: "대기", orientation: "landscape",
+  });
+  if (error) throw new Error("디스플레이 생성 실패: " + error.message);
+  const token = await issueWebToken(id);
+  return { id, token };
 }
 // 일회성 명령(restart/reboot/refresh/redownload) — 파이가 다음 폴에서 읽고 실행 후 비워짐.
 export async function sendCommand(id, cmd) {

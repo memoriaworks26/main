@@ -18,6 +18,7 @@ import * as system from "./lib/data/system.js";
 import * as accountsData from "./lib/data/accounts.js";
 import * as signage from "./lib/data/signage.js";
 import * as roomsData from "./lib/data/rooms.js";
+import { signageUrlFor } from "./lib/signageLink.js";
 import * as locksData from "./lib/data/locks.js";
 import * as storage from "./lib/storage.js";
 import * as subs from "./lib/data/submissions.js";
@@ -536,6 +537,43 @@ export const actions = {
     if (LIVE) { await signage.revokeDevice(id); set((s) => ({ devices: mapById(s.devices, id, { enrolled: false, enrollCode: null, status: "offline" }) })); return; }
     set((s) => ({ devices: mapById(s.devices, id, { enrolled: false, enrollCode: null, status: "offline" }) }));
   },
+  // 호실 웹 디스플레이 링크 발급 — 호실에 연결된 디바이스가 없으면 새로 만들고,
+  //   있으면 새 토큰 재발급. /s/<token> 절대 URL 반환(콘솔이 복사·열기).
+  issueRoomWebLink: async (room) => {
+    if (LIVE) {
+      const existing = state.devices.find((d) => d.roomId === room.id && d.partnerId === room.partnerId);
+      const token = existing
+        ? await signage.issueWebToken(existing.id)
+        : (await signage.createWebDisplay({ partnerId: room.partnerId, roomId: room.id })).token;
+      const devices = await signage.fetchDevices();
+      set({ devices });
+      return signageUrlFor(token);
+    }
+    // 목업 — 로컬 디바이스 생성(없으면)하고 데모 토큰 링크 반환(디스플레이는 데모 화면).
+    let dev = state.devices.find((d) => d.roomId === room.id && d.partnerId === room.partnerId);
+    const token = "demo" + Math.random().toString(36).slice(2, 10);
+    if (!dev) {
+      const id = "WEB-" + Date.now().toString(36).toUpperCase();
+      const partner = state.partners.find((p) => p.id === room.partnerId);
+      set((s) => ({ devices: [...s.devices, { id, partnerId: room.partnerId, partner: partner?.name, roomId: room.id, room: room.name, status: "online", mode: "대기", volume: 50, muted: false, enrolled: true }] }));
+    } else {
+      set((s) => ({ devices: mapById(s.devices, dev.id, { enrolled: true, status: "online" }) }));
+    }
+    return signageUrlFor(token);
+  },
+
+  // 특정 디바이스에 웹 화면 토큰 재발급(관리자 콘솔용) → /s/<token> URL.
+  issueDeviceWebLink: async (id) => {
+    if (LIVE) {
+      const token = await signage.issueWebToken(id);
+      const devices = await signage.fetchDevices();
+      set({ devices });
+      return signageUrlFor(token);
+    }
+    set((s) => ({ devices: mapById(s.devices, id, { enrolled: true, status: "online" }) }));
+    return signageUrlFor("demo" + Math.random().toString(36).slice(2, 10));
+  },
+
   // 등록 모달용 — 파트너사의 호실 목록(라이브=DB 조회, 목업=시드 필터).
   fetchPartnerRooms: (partnerId) => {
     if (LIVE) return roomsData.fetchRooms(partnerId);

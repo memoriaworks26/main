@@ -72,38 +72,76 @@ function CtrlBtn({ icon, label, color, active, onClick }) {
   );
 }
 
-function LiveCard({ dev }) {
+// 웹 화면 링크 발급/열기/복사 — 호실에 웹 디스플레이를 연결(또는 재발급).
+function WebLinkRow({ room, connected }) {
+  const [busy, setBusy] = useState(false);
+  const [link, setLink] = useState(null);
+  const issue = async () => {
+    setBusy(true);
+    try {
+      const url = await actions.issueRoomWebLink(room);
+      setLink(url);
+      window.open(url, "_blank", "noopener");
+      toast("웹 화면 링크 발급 — 새 탭에서 열렸습니다");
+    } catch (e) { toast(e.message || "발급 실패"); }
+    finally { setBusy(false); }
+  };
+  const copy = async () => {
+    if (!link) return;
+    try { await navigator.clipboard.writeText(link); toast("링크를 복사했습니다"); } catch { toast("복사 실패 — 직접 선택해 복사하세요"); }
+  };
+  return (
+    <div className="mt-2.5 pt-2.5" style={{ borderTop: "1px solid " + LINE }}>
+      <div className="flex items-center gap-1.5">
+        <button onClick={issue} disabled={busy}
+          className="flex flex-1 items-center justify-center gap-1.5 py-2 text-[12px] font-bold outline-none transition focus-visible:ring-1"
+          style={{ borderRadius: RADIUS, border: "1.5px solid " + GOLD, color: busy ? FAINT : GOLD_D, background: GOLD_SOFT }}>
+          <Monitor className="h-3.5 w-3.5" /> {busy ? "발급 중…" : connected ? "새 링크 발급·열기" : "웹 화면 링크 발급·열기"}
+        </button>
+        {link && (
+          <button onClick={copy} className="px-2.5 py-2 text-[12px] font-semibold outline-none transition focus-visible:ring-1"
+            style={{ borderRadius: RADIUS, border: "1px solid " + LINE2, color: INK }}>복사</button>
+        )}
+      </div>
+      {link && <div className="mt-1.5 truncate text-[11px]" style={{ color: FAINT, fontFamily: "ui-monospace, monospace" }} title={link}>{link}</div>}
+      {connected && !link && <div className="mt-1 text-[11px]" style={{ color: FAINT }}>※ 새 링크를 발급하면 기존에 열어둔 화면은 해제됩니다.</div>}
+    </div>
+  );
+}
+
+// 호실 1칸 — 연결된 웹/파이 디스플레이가 있으면 제어, 없으면 링크 발급으로 연결.
+function LiveCard({ room, dev }) {
   const PARTNER = usePartner();
   const { signageSources, signageNotice, reservations } = useStore();
-  const offline = dev.status === "offline";
-  const mode = dev.mode;
-  const play = dev.play || (dev.status === "live" ? "playing" : "stopped");
+  const connected = !!dev && !!dev.enrolled;             // 토큰 발급된(=실제 연결된) 디스플레이
+  const offline = connected && dev.status === "offline";
+  const mode = dev?.mode || "대기";
+  const play = dev?.play || (dev?.status === "live" ? "playing" : "stopped");
   const setMode = (m) => actions.setDeviceMode(dev.id, m);
   const setPlay = (p) => actions.setDevicePlay(dev.id, p);
-  const live = !offline && play === "playing";
+  const live = connected && !offline && play === "playing";
 
   // 모드별 표출 콘텐츠 — 제작영상은 dev.playing, 그 외(광고·대기·알림)는 켜진 소스를 무한 반복
   const activeSrc = signageSources.find((s) => s.cat === mode && s.active);
   const modeLabel = CAT_META[mode]?.label || "제작영상";
-  // 알림 모드: 소스 위에 다음 예약 안내 문구 오버레이
   const noticeText = signageNotice.enabled ? fillNotice(signageNotice.template, nextReservation(reservations, PARTNER.id)) : "";
 
   let slateMain;
-  if (offline) slateMain = "신호 없음";
-  else if (mode === "제작영상") slateMain = dev.playing + (live ? " 재생중" : " 대기");
+  if (!connected) slateMain = "디스플레이 미연결";
+  else if (offline) slateMain = "신호 없음";
+  else if (mode === "제작영상") slateMain = (dev.playing || "제작영상") + (live ? " 재생중" : " 대기");
   else if (activeSrc) slateMain = activeSrc.name + "\n" + modeLabel + (live ? " 무한 반복중" : " 일시정지");
-  else slateMain = modeLabel + " 소스 미등록";
+  else slateMain = modeLabel + " 화면";
 
-  const slateBg = offline ? "#211d18" : live ? "#16231d" : "#1c232c";
-  const showNotice = !offline && mode === "알림" && live && noticeText;
+  const slateBg = !connected ? "#232b35" : offline ? "#211d18" : live ? "#16231d" : "#1c232c";
+  const showNotice = live && mode === "알림" && noticeText;
+  const badge = !connected ? { t: "미연결", bg: "#3a4452", c: "#cfd6df" } : offline ? { t: "오프라인", bg: "#403a33", c: "#d8d0c2" } : { t: "연결됨", bg: "rgba(255,255,255,.92)", c: SIG_GREEN };
 
   return (
     <div className="overflow-hidden" style={{ background: SURFACE, border: "1px solid " + LINE, borderRadius: 8 }}>
       {/* 미리보기 슬레이트 */}
       <div className="relative flex items-center justify-center px-4 text-center" style={{ aspectRatio: "16/9", background: slateBg }}>
-        <span className="absolute left-2.5 top-2.5 px-2 py-[3px] text-[10.5px] font-bold" style={{ borderRadius: 3, background: offline ? "#403a33" : "rgba(255,255,255,.92)", color: offline ? "#d8d0c2" : SIG_GREEN }}>
-          {offline ? "오프라인" : "연결됨"}
-        </span>
+        <span className="absolute left-2.5 top-2.5 px-2 py-[3px] text-[10.5px] font-bold" style={{ borderRadius: 3, background: badge.bg, color: badge.c }}>{badge.t}</span>
         {live && (
           mode === "제작영상" ? (
             <span className="absolute right-2.5 top-2.5 flex items-center gap-1 px-2 py-[3px] text-[10.5px] font-bold text-white" style={{ borderRadius: 3, background: LIVE_GOLD }}>
@@ -115,31 +153,35 @@ function LiveCard({ dev }) {
             </span>
           )
         )}
-        <span className="text-[12.5px]" style={{ color: offline ? "#8a7676" : "rgba(243,239,230,.92)", whiteSpace: "pre-line" }}>{slateMain}</span>
+        <span className="text-[12.5px]" style={{ color: !connected ? "rgba(207,214,223,.85)" : offline ? "#8a7676" : "rgba(243,239,230,.92)", whiteSpace: "pre-line" }}>{slateMain}</span>
         {showNotice && (
-          <span className="absolute inset-x-0 bottom-0 truncate px-3 py-1.5 text-left text-[11px] font-semibold text-white" style={{ background: "rgba(168,120,46,.92)" }}>
-            {noticeText}
-          </span>
+          <span className="absolute inset-x-0 bottom-0 truncate px-3 py-1.5 text-left text-[11px] font-semibold text-white" style={{ background: "rgba(168,120,46,.92)" }}>{noticeText}</span>
         )}
       </div>
 
       {/* 정보 + 제어 */}
       <div className="px-4 py-3.5">
         <div className="mb-0.5 flex items-center gap-2">
-          <span className="text-[15px] font-bold" style={{ color: INK }}>{dev.room}</span>
+          <span className="text-[15px] font-bold" style={{ color: INK }}>{room.name || dev?.id || "호실"}</span>
           {offline && <span className="flex items-center gap-1 text-[12px] font-semibold" style={{ color: STOP_BROWN }}><AlertTriangle className="h-3.5 w-3.5" /> 오프라인</span>}
         </div>
-        <div className="mb-3 text-[12px]" style={{ color: offline ? FAINT : live ? SIG_GREEN : MUTE }}>
-          {offline ? "마지막 통신: " + dev.lastComm : mode === "제작영상" ? (live ? dev.playing + " 재생중" : "대기 모드") : modeLabel + (live ? " 무한 반복" : " 정지")}
+        <div className="mb-3 text-[12px]" style={{ color: !connected ? FAINT : offline ? FAINT : live ? SIG_GREEN : MUTE }}>
+          {!connected ? "웹 화면 링크를 발급해 디스플레이를 연결하세요"
+            : offline ? "마지막 통신: " + (dev.lastComm || "—")
+            : mode === "제작영상" ? (live ? (dev.playing || "제작영상") + " 재생중" : "대기 모드")
+            : modeLabel + (live ? " 무한 반복" : " 정지")}
         </div>
 
-        {offline ? (
+        {!connected ? (
+          <div className="px-3 py-2.5 text-[12.5px]" style={{ background: "#f4f1ea", border: "1px dashed " + LINE2, borderRadius: RADIUS, color: MUTE }}>
+            이 호실에 연결된 화면이 없습니다. 아래 링크를 호실 TV(브라우저)에서 열면 자동 전체화면으로 표출됩니다.
+          </div>
+        ) : offline ? (
           <>
             <div className="mb-2.5 px-3 py-2.5 text-[12.5px]" style={{ background: "#f1ece3", border: "1px solid #e4dcce", borderRadius: RADIUS, color: STOP_BROWN }}>장비가 응답하지 않습니다.</div>
             <div className="space-y-2">
               <button onClick={() => actions.refreshDevices()} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[12.5px] font-bold" style={{ borderRadius: RADIUS, border: "1px solid " + LINE2, color: INK }}><RefreshCw className="h-4 w-4" /> 상태 새로고침</button>
               <button onClick={() => actions.sendDeviceCommand(dev.id, "restart")} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[12.5px] font-bold" style={{ borderRadius: RADIUS, border: "1.5px solid " + SIG_GREEN, color: SIG_GREEN }}><Play className="h-4 w-4" /> 플레이어 재시작</button>
-              <button onClick={() => actions.sendDeviceCommand(dev.id, "reboot")} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[12.5px] font-bold" style={{ borderRadius: RADIUS, border: "1.5px solid " + WARN_AMBER, color: WARN_AMBER }}><Zap className="h-4 w-4" /> 장비 재부팅</button>
             </div>
           </>
         ) : (
@@ -161,6 +203,9 @@ function LiveCard({ dev }) {
             </div>
           </>
         )}
+
+        {/* 웹 화면 링크 — 미연결이면 연결, 연결돼 있으면 재발급·열기 */}
+        <WebLinkRow room={room} connected={connected} />
       </div>
     </div>
   );
@@ -344,17 +389,8 @@ function SourceManager({ sources, onOpen }) {
   );
 }
 
-// ── 라즈베리파이 디바이스 헬스 — 온라인·오프라인·네트워크 끊김 모니터 ──
+// ── 디바이스 헬스 — 호실별 연결/오프라인 모니터 ──
 // 색은 라이브 컨트롤과 동일 웜톤(빨강·버건디 배제, 디자인 가이드).
-
-// 자사 디바이스를 상태별로 분류 (오프라인=네트워크 끊김)
-function deviceHealth(devices, partnerId) {
-  const my = devices.filter((d) => d.partnerId === partnerId);
-  const offline = my.filter((d) => d.status === "offline");
-  const live = my.filter((d) => d.status === "live");
-  const online = my.filter((d) => d.status !== "offline");
-  return { my, offline, live, online };
-}
 
 function StatPill({ label, n, c = MUTE }) {
   return (
@@ -390,28 +426,50 @@ function DeviceAlerts({ offline }) {
 
 export function Live() {
   const PARTNER = usePartner();
-  const { devices, signageSources } = useStore(); // 목 DB — 라이브 컨트롤 ↔ 관리자 사이니지 공유
-  const { my, offline, live, online } = deviceHealth(devices, PARTNER.id);
-  const rows = devices.filter((d) => d.partnerId === PARTNER.id && d.room.includes("호실")).slice(0, 4);
+  const { devices, signageSources, rooms } = useStore(); // 호실 기준 — 디바이스 없어도 호실 카드 노출
+  // 자사 호실 정렬 + 호실↔디바이스 매핑(roomId)
+  const myRooms = rooms.filter((r) => r.partnerId === PARTNER.id).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  const myDevices = devices.filter((d) => d.partnerId === PARTNER.id);
+  // roomId 우선, 없으면(옛/목업 데이터) 호실명으로 매칭
+  const devForRoom = (room) => myDevices.find((d) => (d.roomId && d.roomId === room.id) || (!d.roomId && d.room && d.room === room.name)) || null;
+  const cards = myRooms.map((room) => ({ room, dev: devForRoom(room) }));
+  // 호실에 매칭 안 된 디바이스(호실 미지정 등)도 누락 없이 뒤에 표시
+  const matched = new Set(cards.map((c) => c.dev?.id).filter(Boolean));
+  const orphans = myDevices.filter((d) => !matched.has(d.id))
+    .map((d) => ({ room: { id: d.roomId, partnerId: d.partnerId, name: d.room || d.id }, dev: d }));
+  const allCards = [...cards, ...orphans];
+
+  const connected = allCards.filter((c) => c.dev && c.dev.enrolled && c.dev.status !== "offline");
+  const liveN = connected.filter((c) => (c.dev.play || (c.dev.status === "live" ? "playing" : "stopped")) === "playing");
+  const offlineCards = allCards.filter((c) => c.dev && c.dev.enrolled && c.dev.status === "offline");
+  const unlinked = allCards.filter((c) => !c.dev || !c.dev.enrolled);
+
   const [srcCat, setSrcCat] = useState(null); // 열린 소스 관리 모달 카테고리
   return (
     <div>
-      <PageHeader title="라이브 컨트롤" sub="사이니지를 실시간으로 제어합니다." right={<Btn size="sm" variant="neutral" onClick={() => actions.refreshDevices()}><RefreshCw className="h-3.5 w-3.5" /> 상태 새로고침</Btn>} />
-      {/* 라즈베리파이 디바이스 헬스 — 온라인·오프라인·네트워크 끊김 */}
+      <PageHeader title="라이브 컨트롤" sub="호실별 사이니지 화면을 실시간으로 제어합니다." right={<Btn size="sm" variant="neutral" onClick={() => actions.refreshDevices()}><RefreshCw className="h-3.5 w-3.5" /> 상태 새로고침</Btn>} />
+      {/* 호실 헬스 — 연결·미연결·오프라인 */}
       <div className="mb-4 space-y-2">
         <div className="flex flex-wrap gap-2">
-          <StatPill label="전체" n={my.length} />
-          <StatPill label="재생중" n={live.length} c={LIVE_GOLD} />
-          <StatPill label="연결됨" n={online.length} c={SIG_GREEN} />
-          <StatPill label="오프라인" n={offline.length} c={STOP_BROWN} />
+          <StatPill label="호실" n={myRooms.length} />
+          <StatPill label="재생중" n={liveN.length} c={LIVE_GOLD} />
+          <StatPill label="연결됨" n={connected.length} c={SIG_GREEN} />
+          <StatPill label="미연결" n={unlinked.length} c={STOP_BROWN} />
+          {offlineCards.length > 0 && <StatPill label="오프라인" n={offlineCards.length} c={STOP_BROWN} />}
         </div>
-        <DeviceAlerts offline={offline} />
+        {offlineCards.length > 0 && <DeviceAlerts offline={offlineCards.map((c) => ({ ...c.dev, room: c.room.name }))} />}
         {/* 광고·대기화면·알림 소스 등록/관리(이미지·영상 업로드) */}
         <SourceManager sources={signageSources} onOpen={setSrcCat} />
       </div>
-      <div className="grid grid-cols-4 gap-3">
-        {rows.map((d) => <LiveCard key={d.id} dev={d} />)}
-      </div>
+      {allCards.length === 0 ? (
+        <div className="px-4 py-10 text-center text-[13px]" style={{ background: SURFACE, border: "1px dashed " + LINE2, borderRadius: 8, color: FAINT }}>
+          등록된 호실이 없습니다. 파트너사 대시보드에서 호실을 먼저 추가하세요.
+        </div>
+      ) : (
+        <div className="grid grid-cols-4 gap-3">
+          {allCards.map((c) => <LiveCard key={c.dev?.id || c.room.id || c.room.name} room={c.room} dev={c.dev} />)}
+        </div>
+      )}
       {srcCat && <SourceManagerModal cat={srcCat} onClose={() => setSrcCat(null)} />}
     </div>
   );

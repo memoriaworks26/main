@@ -218,6 +218,36 @@ function CmdBtn({ label, onClick, color = INK }) {
   );
 }
 
+// 웹 화면 링크 — 이 디바이스를 브라우저(웹) 디스플레이로 쓸 링크 발급·열기·복사.
+function WebDisplayLink({ id }) {
+  const [busy, setBusy] = useState(false);
+  const [link, setLink] = useState(null);
+  const issue = async () => {
+    setBusy(true);
+    try {
+      const url = await actions.issueDeviceWebLink(id);
+      setLink(url);
+      window.open(url, "_blank", "noopener");
+      toast("웹 화면 링크 발급 — 새 탭에서 열렸습니다");
+    } catch (e) { toast(e.message || "발급 실패"); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="mt-4">
+      <div className="mb-1.5 text-[11px] font-semibold" style={{ color: FAINT }}>웹 화면(브라우저를 호실 TV로)</div>
+      <div className="flex items-center gap-1.5">
+        <button onClick={issue} disabled={busy} className="flex flex-1 items-center justify-center gap-1.5 py-2 text-[12px] font-bold outline-none transition focus-visible:ring-1"
+          style={{ borderRadius: RADIUS, border: "1.5px solid " + GOLD, color: busy ? FAINT : GOLD_D, background: GOLD_SOFT }}>
+          <Clapperboard className="h-3.5 w-3.5" /> {busy ? "발급 중…" : "웹 화면 링크 발급·열기"}
+        </button>
+        {link && <CopyBtn text={link} />}
+      </div>
+      {link && <div className="mt-1.5 truncate text-[11px]" style={{ color: FAINT, fontFamily: "ui-monospace, monospace" }} title={link}>{link}</div>}
+      <div className="mt-1 text-[11px]" style={{ color: FAINT }}>※ 발급 시 기존 토큰(파이/이전 웹)은 해제됩니다. 호실 TV 브라우저에서 열면 자동 전체화면.</div>
+    </div>
+  );
+}
+
 // 디바이스 관리 모달 — 세팅 가이드·등록코드·명령(재시작/재부팅/새로고침/재다운로드)·재발급·폐기
 function DeviceModal({ dev, onClose }) {
   const devices = useStore().devices;
@@ -275,6 +305,7 @@ function DeviceModal({ dev, onClose }) {
             <div className="mt-2 flex items-center gap-1.5 text-[11px]" style={{ color: FAINT }}>
               <RefreshCw className="h-3 w-3 animate-spin" /> 파이가 켜지면 자동으로 ‘온라인’으로 바뀝니다 (자동 확인 중)
             </div>
+            <WebDisplayLink id={live.id} />
             <div className="mt-3 flex justify-between">
               <CmdBtn label="등록코드 재발급" onClick={reissue} />
               <Btn size="sm" variant="ghost" onClick={onClose}>닫기</Btn>
@@ -295,6 +326,7 @@ function DeviceModal({ dev, onClose }) {
               <CmdBtn label="등록코드 재발급" onClick={reissue} />
               <CmdBtn label="디바이스 폐기" onClick={revoke} color="#a4564b" />
             </div>
+            <WebDisplayLink id={live.id} />
             <div className="mt-4 flex justify-end"><Btn size="sm" variant="ghost" onClick={onClose}>닫기</Btn></div>
           </>
         )}

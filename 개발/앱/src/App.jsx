@@ -8,6 +8,8 @@ import VideoEditor from "./editor.jsx";
 import { ToastHost } from "./toast.jsx";
 import { ConfirmHost } from "./confirm.jsx";
 import { getToken } from "./lib/userLink.js";
+import { getSignageToken } from "./lib/signageLink.js";
+import SignageDisplay from "./signage/Display.jsx";
 import { DEV_PREVIEW } from "./lib/auth.js";
 import AuthGate from "./auth/AuthGate.jsx";
 
@@ -106,6 +108,11 @@ function MockupApp() {
 }
 
 export default function App() {
+  // 0) 사이니지 웹 디스플레이 — /s/<token> 호실 화면(비로그인·전체화면·폴링).
+  if (getSignageToken()) {
+    return <SignageDisplay />;
+  }
+
   // 1) 보호자 토큰 링크 — 비로그인 유저 페이지만.
   if (getToken()) {
     return (
