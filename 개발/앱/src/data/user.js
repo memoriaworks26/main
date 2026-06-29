@@ -22,6 +22,8 @@ export const USER_TEXT = {
   petNameHint: "타이틀(영정) 자막에 그대로 표시됩니다.",
   titleSystemText: "사랑하는", // 타이틀 자막에서 반려동물명 앞에 붙는 시스템 문구(중앙 하단)
   aiGuide: "잘 나온 독사진일수록 결과가 좋아요 — 아이만 또렷하게, 얼굴이 정면.",
+  photoGoodCap: "정면 · 또렷한 전신 · 한 마리",   // 예시사진 하단 문구(좋은 예)
+  photoBadCap: "흐릿함 · 여러 마리",              // 예시사진 하단 문구(피해주세요)
   metDateLabel: "우리 처음 만난 날",
   partDateLabel: "무지개다리 건넌 날",
   letterPlaceholder: "받는이 (예: 내 사랑 몽이에게)\n\n전하고 싶은 마음을 적어주세요.\n\n글쓴이 (예: 엄마가)",

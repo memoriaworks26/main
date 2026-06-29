@@ -127,6 +127,9 @@ function UserLinkTab({ bizUnit, textDraft, setTextDraft, photoDraft, setPhotoDra
   );
 }
 
+// 사업부별로 바꿀 수 있는 용어 — 호실(room)은 고정(못 바꾸게) → 편집 목록·저장에서 제외.
+const EDITABLE_TERMS = D.TERMS.filter((t) => t.key !== "room");
+
 // ── 파트너사 용어 탭 ──────────────────────────────────────────
 function PartnerTermTab({ termDraft, setTermDraft }) {
   const setTerm = (key, value) => setTermDraft((d) => ({ ...d, [key]: value }));
@@ -136,7 +139,7 @@ function PartnerTermTab({ termDraft, setTermDraft }) {
         <div className="grid items-center gap-3 px-4 py-2.5 text-[11.5px] font-bold" style={{ gridTemplateColumns: "150px 1fr 40px", background: "#faf8f3", borderBottom: "1px solid " + LINE, color: MUTE }}>
           <span>개념</span><span>파트너 콘솔 표기</span><span />
         </div>
-        {D.TERMS.map((t, i) => {
+        {EDITABLE_TERMS.map((t, i) => {
           const pv = termDraft[t.key] ?? t.partner;
           const changed = termDraft[t.key] != null && termDraft[t.key] !== t.partner;
           return (
@@ -194,7 +197,7 @@ export function BizUnitSettings() {
   const photoKeys = [...new Set([...Object.keys(photoDraft), ...Object.keys(basePhoto)])];
   const textChanges = textKeys.filter((k) => textVal(textDraft, k) !== textVal(baseText, k));
   const photoChanges = photoKeys.filter((k) => (photoDraft[k] || null) !== (basePhoto[k] || null));
-  const termChanges = D.TERMS.filter((t) => termVal(termDraft, t) !== (baseTerm[t.key]?.partner ?? t.partner));
+  const termChanges = EDITABLE_TERMS.filter((t) => termVal(termDraft, t) !== (baseTerm[t.key]?.partner ?? t.partner));
   const dirty = textChanges.length + photoChanges.length + termChanges.length > 0;
 
   const save = () => {
