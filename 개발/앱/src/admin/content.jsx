@@ -278,11 +278,18 @@ export function ContentHub() {
     setUploads((u) => [...entries, ...u]); // 즉시 행으로 표시
     enqueue(entries);                       // 백그라운드 처리
   };
-  // 인라인 이름 변경 — 음악은 BGM 라이브러리, 그 외는 콘텐츠 자산. 빈값/무변경이면 저장 생략.
-  const startRename = (c) => setEditing({ id: c.id, value: c.name });
-  const saveRename = (c) => {
+  // 인라인 편집(이름 + 귀속) — 음악은 BGM 라이브러리(이름만, 항상 공용). 클립·사진은 이름 + 파트너/공통.
+  //   target: "공통"(공용) | 파트너 id. 빈값/무변경 항목은 저장 생략.
+  const startEdit = (c) => setEditing({ id: c.id, value: c.name, partner: c.shared ? "공통" : c.partnerId });
+  const saveEdit = (c) => {
     const nm = (editing?.value || "").trim();
-    if (nm && nm !== c.name) (c.kind === "audio" ? actions.renameBgm : actions.renameContent)(c.id, nm);
+    if (c.kind === "audio") {
+      if (nm && nm !== c.name) actions.renameBgm(c.id, nm);
+    } else {
+      if (nm && nm !== c.name) actions.renameContent(c.id, nm);
+      const cur = c.shared ? "공통" : c.partnerId;
+      if (editing?.partner && editing.partner !== cur) actions.setContentPartner(c.id, editing.partner);
+    }
     setEditing(null);
   };
   // 음악(BGM)은 공용 라이브러리(memoria.bgm) → 모든 파트너사 공통. 클립·사진은 파트너사별.
@@ -318,11 +325,12 @@ export function ContentHub() {
           <Btn size="sm" onClick={() => fileRef.current?.click()}><Plus className="h-4 w-4" /> 자산 업로드</Btn>
         </div>
       } />
-      {/* 파트너사 베이스 (+ 공통 공용 자산) */}
-      <div className="mb-3 flex items-center gap-2">
+      {/* 파트너사 베이스(+공통 공용 자산) — 표 필터 겸 신규 업로드 대상. */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <span className="text-[12px] font-semibold" style={{ color: MUTE }}>대상</span>
         <SearchSelect value={partner} onChange={setPartner} placeholder="파트너사"
           options={[{ value: "공통", label: "공통 (공용 자산)" }, ...partners.map((p) => ({ value: p.id, label: p.name }))]} />
-        <span className="text-[12px]" style={{ color: FAINT }}>{sorted.length}개</span>
+        <span className="text-[12px]" style={{ color: FAINT }}>{sorted.length}개 · 신규 업로드는 이 대상에 저장(음악은 항상 공용)</span>
       </div>
       <div className="mb-3 flex gap-1.5">
         {tabs.map((x) => (
@@ -378,8 +386,7 @@ export function ContentHub() {
               autoFocus value={editing.value}
               onClick={(e) => e.stopPropagation()}
               onChange={(e) => setEditing((ed) => ({ ...ed, value: e.target.value }))}
-              onKeyDown={(e) => { if (e.key === "Enter") saveRename(c); else if (e.key === "Escape") setEditing(null); }}
-              onBlur={() => saveRename(c)}
+              onKeyDown={(e) => { if (e.key === "Enter") saveEdit(c); else if (e.key === "Escape") setEditing(null); }}
               className="w-full bg-transparent text-[13px] font-semibold outline-none"
               style={{ color: INK, borderBottom: "1px solid " + GOLD_D, minWidth: 160 }} />
           );
@@ -390,7 +397,20 @@ export function ContentHub() {
             </span>
           );
         }
-        if (k === "fmt") return <span style={{ color: MUTE }}>{fmtLabel(c)}</span>;
+        if (k === "fmt") {
+          // 편집 중인 클립·사진은 형식 칸을 귀속(파트너/공통) 선택으로 — 음악은 항상 공용이라 그대로.
+          if (editing?.id === c.id && c.kind !== "audio") return (
+            <select value={editing.partner ?? "공통"}
+              onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}
+              onChange={(e) => setEditing((ed) => ({ ...ed, partner: e.target.value }))}
+              className="bg-white text-[12px] outline-none"
+              style={{ color: INK, border: "1px solid " + LINE, borderRadius: RADIUS, padding: "2px 4px", maxWidth: 150 }}>
+              <option value="공통">공통 (공용)</option>
+              {partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          );
+          return <span style={{ color: MUTE }}>{fmtLabel(c)}</span>;
+        }
         if (k === "len") return <span className="tabular-nums" style={{ color: MUTE }}>{durLabel(c)}</span>;
         if (k === "act") {
           const isBgm = c.kind === "audio";
@@ -398,7 +418,7 @@ export function ContentHub() {
           if (!canEdit) return null;
           if (editing?.id === c.id) return (
             <span className="inline-flex items-center gap-0.5">
-              <button onClick={(e) => { e.stopPropagation(); saveRename(c); }}
+              <button onClick={(e) => { e.stopPropagation(); saveEdit(c); }}
                 className="rounded p-1.5 outline-none transition hover:bg-[#f0ece4]" title="저장" style={{ color: "#2f8f5b" }}>
                 <Check className="h-3.5 w-3.5" />
               </button>
@@ -410,8 +430,8 @@ export function ContentHub() {
           );
           return (
             <span className="inline-flex items-center gap-0.5">
-              <button onClick={(e) => { e.stopPropagation(); startRename(c); }}
-                className="rounded p-1.5 outline-none transition hover:bg-[#f0ece4]" title="이름 변경" style={{ color: FAINT }}>
+              <button onClick={(e) => { e.stopPropagation(); startEdit(c); }}
+                className="rounded p-1.5 outline-none transition hover:bg-[#f0ece4]" title={isBgm ? "이름 변경" : "이름·귀속 변경"} style={{ color: FAINT }}>
                 <Pencil className="h-3.5 w-3.5" />
               </button>
               <button

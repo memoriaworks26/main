@@ -714,6 +714,24 @@ export const actions = {
     }
     set((s) => ({ content: s.content.map((c) => (c.id === id ? { ...c, name: nm } : c)) }));
   },
+  // 콘텐츠 허브 자산 귀속 변경 (클립·사진) — target="공통"이면 공용(shared), 아니면 파트너 id.
+  setContentPartner: (id, target) => {
+    const shared = target === "공통";
+    const partnerId = shared ? null : target;
+    if (!shared && !partnerId) return;
+    const partnerName = shared ? undefined : state.partners.find((p) => p.id === partnerId)?.name;
+    if (!shared && !partnerName) { toast("파트너를 찾을 수 없습니다."); return; }
+    const apply = (s) => ({ content: s.content.map((c) => c.id === id
+      ? (shared ? { ...c, shared: true, partnerId: undefined, partner: undefined }
+                : { ...c, shared: false, partnerId, partner: partnerName }) : c) });
+    if (LIVE) {
+      content.setContentPartner(id, { shared, partnerId })
+        .then(() => set(apply))
+        .catch((e) => toast("귀속 변경 실패: " + e.message));
+      return;
+    }
+    set(apply);
+  },
   // 공용 BGM 삭제 (콘텐츠 허브 음악 탭) — 라이브러리 행·파일 제거 + 템플릿 참조 정리.
   removeBgm: (id) => {
     if (LIVE) {

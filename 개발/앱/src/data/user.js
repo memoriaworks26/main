@@ -35,12 +35,11 @@ export const USER_TEXT = {
 // step: 유저 위저드 단계 인덱스(미리보기 동기화). hint: 다른 도메인 예시.
 export const USER_TEXT_FIELDS = [
   { step: 1, group: "AI 변환 단계", items: [
-    ["title1", "단계 제목", "예: AI 변환 · 영정사진 3장"],
-    ["sub1", "안내문", "‘독사진’ 등 대상 표현"],
     ["petNameLabel", "이름 입력 라벨", "예: 고인 성함"],
-    ["petNameHint", "이름 입력 힌트", "타이틀 자막 안내"],
     ["titleSystemText", "타이틀 시스템 문구", "이름 앞 문구 · 예: 그리운 / 사랑하는"],
     ["aiGuide", "사진 가이드 문구", "‘아이’ 등 대상 표현"],
+    ["photoGoodCap", "예시사진 하단 문구(좋은 예)", "예: 정면 · 또렷한 전신 · 한 마리"],
+    ["photoBadCap", "예시사진 하단 문구(피해주세요)", "예: 흐릿함 · 여러 마리"],
   ]},
   { step: 4, group: "편지 단계", items: [
     ["sub4", "안내문", "‘떠나보낸 아이’ 등 표현"],

@@ -44,3 +44,10 @@ export async function renameContent(id, name) {
   const { error } = await d.from("content_assets").update({ name }).eq("id", id);
   if (error) throw new Error(error.message);
 }
+
+// 자산 귀속 변경 — 공통(shared)↔파트너사 재지정. 스토리지 파일은 그대로(경로=key, 이동 불필요).
+export async function setContentPartner(id, { shared, partnerId }) {
+  const d = need();
+  const { error } = await d.from("content_assets").update({ shared, partner_id: shared ? null : partnerId }).eq("id", id);
+  if (error) throw new Error(error.message);
+}

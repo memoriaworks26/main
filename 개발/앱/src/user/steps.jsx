@@ -331,6 +331,9 @@ export function StepBody({ step, st }) {
             </div>
           );
         })()}
+        {st.slidePhotos.length + st.videos.length === 0 && (
+          <p className="mt-3 text-[11px] font-semibold" style={{ color: warn }}>※ 추억 사진이나 영상을 1개 이상 올려야 다음 단계로 넘어갈 수 있어요.</p>
+        )}
       </div>
     );
   }
@@ -367,7 +370,7 @@ export function StepBody({ step, st }) {
         ) : (
         <>
         {/* 가이드 — 상단(3장 전체에 적용) */}
-        <PhotoExampleGuide good={st.photos.good} bad={st.photos.bad} />
+        <PhotoExampleGuide good={st.photos.good} bad={st.photos.bad} goodCap={st.T.photoGoodCap} badCap={st.T.photoBadCap} />
         <div className="mb-3 px-3 py-2 text-[11px] leading-relaxed" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
           💡 {st.T.aiGuide}
         </div>

@@ -246,7 +246,8 @@ export function useUserWizard(previewBizId, stepCtl, previewOverride) {
   const last = STEPS.length - 1;
   const previewStep = last - 1;
   // AI 변환: 반려동물명 입력 필수 + 독사진 3장(+완료). 단, 「AI 변환 안함」이면 사진 없이 진행.
-  const blocked = (step === 0 && !agreed) || (step === 1 && (!petName.trim() || (!skipAi && (aiPhotos.length < 3 || aiUploadingNow)))) || (step === 2 && (overLimit || photoOver || videoOver || uploadingNow || videoMeasuring)) || (step === previewStep && (submitting || uploadingNow));
+  const noSource = photos.length + videos.length === 0; // 추억 소스(사진·영상) 미업로드 — 1개 이상 올려야 다음 진행
+  const blocked = (step === 0 && !agreed) || (step === 1 && (!petName.trim() || (!skipAi && (aiPhotos.length < 3 || aiUploadingNow)))) || (step === 2 && (noSource || overLimit || photoOver || videoOver || uploadingNow || videoMeasuring)) || (step === previewStep && (submitting || uploadingNow));
 
   return { st, T, step, setStep, last, previewStep, blocked, submitting, liveMode, link, company, partners, doSubmit, policyOpen, setPolicyOpen };
 }

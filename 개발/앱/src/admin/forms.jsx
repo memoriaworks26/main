@@ -127,8 +127,9 @@ function UserLinkTab({ bizUnit, textDraft, setTextDraft, photoDraft, setPhotoDra
   );
 }
 
-// 사업부별로 바꿀 수 있는 용어 — 호실(room)은 고정(못 바꾸게) → 편집 목록·저장에서 제외.
-const EDITABLE_TERMS = D.TERMS.filter((t) => t.key !== "room");
+// 사업부별로 바꿀 수 있는 용어 — 호실(room)·퇴실(checkout)은 고정(못 바꾸게) → 편집 목록·저장에서 제외.
+const FIXED_TERMS = ["room", "checkout"];
+const EDITABLE_TERMS = D.TERMS.filter((t) => !FIXED_TERMS.includes(t.key));
 
 // ── 파트너사 용어 탭 ──────────────────────────────────────────
 function PartnerTermTab({ termDraft, setTermDraft }) {
