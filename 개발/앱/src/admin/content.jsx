@@ -9,13 +9,39 @@ import { useStore, actions } from "../store.js";
 import { confirm } from "../confirm.jsx";
 import { photoThumb, genFrame } from "../lib/media.js";
 import { matchQuery } from "../lib/util.js";
-import * as D from "../data.js";
+import * as storage from "../lib/storage.js";
 import { SearchSelect } from "./shared.jsx";
 
 // id → 안정적인 인덱스(목업 썸네일 장면 선택용)
 const hashId = (id) => { let h = 0; const s = String(id); for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; };
 // 종류별 미리보기 이미지 (음악은 이미지 없음 → null)
 const thumbFor = (c) => c.kind === "audio" ? null : (c.kind === "photo" ? photoThumb(hashId(c.id)) : genFrame("slide", hashId(c.id)));
+
+// 표시용 이미지 src — 실파일(서명URL) 우선, 없거나 실패하면 절차적 목업으로 폴백.
+//   클립=업로드 시 캡처한 썸네일(thumbPath), 사진=원본(storagePath), 음악=이미지 없음(null).
+function useThumbSrc(item) {
+  const path = item.kind === "clip" ? item.thumbPath : item.kind === "photo" ? item.storagePath : null;
+  const [real, setReal] = useState(null);
+  useEffect(() => {
+    if (!path) { setReal(null); return; }
+    let alive = true;
+    storage.signedUrl(storage.BUCKETS.content, path).then((u) => { if (alive) setReal(u); }).catch(() => { if (alive) setReal(null); });
+    return () => { alive = false; };
+  }, [path]);
+  if (item.kind === "audio") return null;
+  return real || thumbFor(item);
+}
+
+// 표 미리보기 셀 — 실 썸네일 로드(서명URL) + 음악 폴백 아이콘 + 클립 재생 뱃지.
+function ThumbCell({ c }) {
+  const src = useThumbSrc(c);
+  return (
+    <span className="relative flex items-center justify-center overflow-hidden" style={{ width: 52, height: 32, borderRadius: 3, background: c.kind === "audio" ? "linear-gradient(135deg,#202b3a,#3f5e87)" : "#1c232c", border: "1px solid " + LINE }}>
+      {src ? <img src={src} alt="" className="h-full w-full object-cover" /> : <Music className="h-4 w-4" style={{ color: "#fff", opacity: 0.85 }} />}
+      {c.kind === "clip" && <span className="absolute flex h-4 w-4 items-center justify-center rounded-full" style={{ background: "rgba(0,0,0,.45)" }}><Play className="h-2 w-2 text-white" style={{ marginLeft: 1 }} fill="#fff" /></span>}
+    </span>
+  );
+}
 
 // 콘텐츠 표 — 종류/형식/길이 파생 (meta: "0:10 · 1920×1080" / "3:45 · 128kbps" / "투명 PNG")
 const KIND_RANK = { clip: 0, photo: 1, audio: 2 };
@@ -135,7 +161,15 @@ function ContentPreview({ item, onClose }) {
   const ctxRef = useRef(null);
   const oscRef = useRef([]);
   const isAudio = item.kind === "audio";
-  const src = thumbFor(item);
+  const src = useThumbSrc(item);
+  // 음악 실파일 재생용 서명URL — 있으면 합성음(목업) 대신 진짜 <audio>로 재생.
+  const [audioUrl, setAudioUrl] = useState(null);
+  useEffect(() => {
+    if (!isAudio || !item.storagePath) { setAudioUrl(null); return; }
+    let alive = true;
+    storage.signedUrl(storage.BUCKETS.content, item.storagePath).then((u) => { if (alive) setAudioUrl(u); }).catch(() => { if (alive) setAudioUrl(null); });
+    return () => { alive = false; };
+  }, [isAudio, item.storagePath]);
 
   const stop = () => {
     oscRef.current.forEach((o) => { try { o.stop(); } catch { /* already stopped */ } });
@@ -182,15 +216,20 @@ function ContentPreview({ item, onClose }) {
       <div className="px-5 py-4">
         <div className="relative flex items-center justify-center overflow-hidden" style={{ aspectRatio: "16/9", background: isAudio ? "linear-gradient(135deg,#202b3a,#3f5e87)" : "#1c232c", borderRadius: RADIUS }}>
           {isAudio ? (
-            <div className="flex flex-col items-center gap-3">
+            <div className="flex w-full flex-col items-center gap-3 px-6">
               <div className="flex items-end gap-1" style={{ height: 36 }}>
                 {[14, 26, 18, 32, 22, 30, 16].map((h, i) => (
                   <span key={i} style={{ width: 4, height: h, background: "rgba(255,255,255,.85)", borderRadius: 2, transformOrigin: "bottom", animation: playing ? `mw-eq .9s ${i * 0.08}s ease-in-out infinite alternate` : "none", opacity: playing ? 1 : 0.5 }} />
                 ))}
               </div>
-              <button onClick={playing ? stop : play} className="flex h-11 w-11 items-center justify-center rounded-full outline-none transition hover:scale-105" style={{ background: "#fff", color: NAVY }}>
-                {playing ? <Pause className="h-5 w-5" fill={NAVY} /> : <Play className="h-5 w-5" style={{ marginLeft: 2 }} fill={NAVY} />}
-              </button>
+              {audioUrl ? (
+                <audio src={audioUrl} controls className="w-full" style={{ height: 36 }}
+                  onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} />
+              ) : (
+                <button onClick={playing ? stop : play} className="flex h-11 w-11 items-center justify-center rounded-full outline-none transition hover:scale-105" style={{ background: "#fff", color: NAVY }}>
+                  {playing ? <Pause className="h-5 w-5" fill={NAVY} /> : <Play className="h-5 w-5" style={{ marginLeft: 2 }} fill={NAVY} />}
+                </button>
+              )}
             </div>
           ) : (
             <>
@@ -209,7 +248,9 @@ function ContentPreview({ item, onClose }) {
           <div><div className="text-[11px]" style={{ color: FAINT }}>길이</div><div className="tabular-nums" style={{ color: INK }}>{durLabel(item)}</div></div>
         </div>
         {item.size && <div className="mt-2 text-[11.5px]" style={{ color: FAINT }}>용량 {item.size}</div>}
-        <p className="mt-3 text-[11px]" style={{ color: FAINT }}>※ 목업 미리보기 — 실제 파일은 본운영에서 업로드 자산으로 표시됩니다.</p>
+        {(isAudio ? !audioUrl : !item.storagePath) && (
+          <p className="mt-3 text-[11px]" style={{ color: FAINT }}>※ 미리보기는 예시입니다 — 실제 업로드 파일이 있으면 그대로 표시·재생됩니다.</p>
+        )}
       </div>
     </Modal>
   );
@@ -217,15 +258,15 @@ function ContentPreview({ item, onClose }) {
 
 export function ContentHub() {
   const tabs = ["전체", "영상", "이미지", "음악"];
-  const { content, partners: allPartners } = useStore();
+  const { content, bgm, partners: allPartners } = useStore();
   const [partner, setPartner] = useState(allPartners.find((p) => p.active)?.name || allPartners[0].name);
   const [t, setT] = useState("전체");
   const [q, setQ] = useState("");
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState(null); // 미리보기 중인 자산
   const partners = allPartners.filter((p) => p.active);
-  // 음악(BGM)은 공용 라이브러리 → 모든 파트너사 공통. 클립·사진은 파트너사별.
-  const items = content.concat(D.BGM.map((b) => ({ id: b.id, kind: "audio", name: b.name, meta: b.meta, size: "", shared: true })));
+  // 음악(BGM)은 공용 라이브러리(memoria.bgm) → 모든 파트너사 공통. 클립·사진은 파트너사별.
+  const items = content.concat(bgm.map((b) => ({ id: b.id, kind: "audio", name: b.name, meta: b.meta, size: b.size || "", shared: true, storagePath: b.storagePath })));
   const filtered = items
     .filter((c) => partner === "공통" ? c.shared : (c.partner === partner || c.shared))
     .filter((c) => t === "전체" || (t === "영상" && c.kind === "clip") || (t === "이미지" && c.kind === "photo") || (t === "음악" && c.kind === "audio"))
@@ -266,15 +307,7 @@ export function ContentHub() {
       </div>
       <Table cols={cols} rows={rows} empty="자산이 없습니다" sort={sort} onSortChange={onSortChange} onRowClick={(c) => setPreview(c)} renderCell={(c, k) => {
         if (k === "idx") return <span className="tabular-nums" style={{ color: FAINT }}>{c.idx}</span>;
-        if (k === "thumb") {
-          const src = thumbFor(c);
-          return (
-            <span className="relative flex items-center justify-center overflow-hidden" style={{ width: 52, height: 32, borderRadius: 3, background: c.kind === "audio" ? "linear-gradient(135deg,#202b3a,#3f5e87)" : "#1c232c", border: "1px solid " + LINE }}>
-              {src ? <img src={src} alt="" className="h-full w-full object-cover" /> : <Music className="h-4 w-4" style={{ color: "#fff", opacity: 0.85 }} />}
-              {c.kind === "clip" && <span className="absolute flex h-4 w-4 items-center justify-center rounded-full" style={{ background: "rgba(0,0,0,.45)" }}><Play className="h-2 w-2 text-white" style={{ marginLeft: 1 }} fill="#fff" /></span>}
-            </span>
-          );
-        }
+        if (k === "thumb") return <ThumbCell c={c} />;
         if (k === "kind") {
           const Icon = KIND_ICON[c.kind] || Clapperboard;
           return <span className="inline-flex items-center gap-1.5 text-[12.5px]" style={{ color: MUTE }}><Icon className="h-3.5 w-3.5" style={{ color: KIND_ICON_C[c.kind], opacity: 0.7 }} />{KIND_LABEL[c.kind] || "—"}</span>;
@@ -288,10 +321,15 @@ export function ContentHub() {
         if (k === "fmt") return <span style={{ color: MUTE }}>{fmtLabel(c)}</span>;
         if (k === "len") return <span className="tabular-nums" style={{ color: MUTE }}>{durLabel(c)}</span>;
         if (k === "act") {
-          const canDelete = content.some((x) => x.id === c.id);
+          const isBgm = c.kind === "audio";
+          const canDelete = isBgm ? bgm.some((b) => b.id === c.id) : content.some((x) => x.id === c.id);
           return canDelete ? (
             <button
-              onClick={async (e) => { e.stopPropagation(); if (await confirm({ title: "자산 삭제", message: `"${c.name}" 자산을 삭제합니다.`, danger: true })) actions.removeContent(c.id); }}
+              onClick={async (e) => {
+                e.stopPropagation();
+                if (await confirm({ title: isBgm ? "음악 삭제" : "자산 삭제", message: `"${c.name}"${isBgm ? " 음악을" : " 자산을"} 삭제합니다.`, danger: true }))
+                  isBgm ? actions.removeBgm(c.id) : actions.removeContent(c.id);
+              }}
               className="rounded p-1.5 outline-none transition hover:bg-[#f0ece4]"
               title="삭제" style={{ color: FAINT }}>
               <Trash2 className="h-3.5 w-3.5" />

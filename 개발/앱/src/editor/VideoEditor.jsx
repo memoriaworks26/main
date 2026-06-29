@@ -8,12 +8,15 @@ import { toast } from "../toast.jsx";
 import { confirm } from "../confirm.jsx";
 import * as D from "../data.js";
 import { useStore, actions, submissionFor } from "../store.js";
+import { BACKEND_LIVE } from "../lib/supabase.js";
+import { DEV_PREVIEW } from "../lib/auth.js";
 import { buildBlocks, buildRenderPlan } from "./blocks.js";
 import { BlockList, Timeline } from "./timeline.jsx";
 import { Preview } from "./preview.jsx";
 import { PropPanel } from "./props.jsx";
 
 const EMPTY = []; // 안정 참조(미노출 없음 기본값) — useMemo 의존성 흔들림 방지
+const LIVE = BACKEND_LIVE && !DEV_PREVIEW; // store와 동일 기준 — 라이브에서만 DB 영속
 
 // ── 메인 ───────────────────────────────────────────────────────
 export default function VideoEditor({ reservation, onClose }) {
@@ -24,11 +27,11 @@ export default function VideoEditor({ reservation, onClose }) {
     const tpl = (partner && store.templates[partner.id]) || store.templates[D.DEFAULT_TEMPLATE_ID] || { bgm: null, blocks: [] };
     return {
       blocks: buildBlocks(tpl, store.content, reservation),
-      bgmName: (D.BGM.find((b) => b.id === tpl.bgm) || {}).name || "배경 음악",
+      bgmName: (store.bgm.find((b) => b.id === tpl.bgm) || {}).name || "배경 음악", // 실 공용 BGM 라이브러리 기준
       // 파트너 스코프 통일 — 이름 매칭 우선, 없으면 reservation.partnerId. BGM 등 템플릿 쓰기에 이 값을 사용.
       partnerId: (partner && partner.id) || reservation?.partnerId || null,
     };
-  }, [store.partners, store.templates, store.content, reservation]);
+  }, [store.partners, store.templates, store.content, store.bgm, reservation]);
 
   const firstBlockSel = () => ({ scope: "block", kind: blocks[0]?.type || "title", id: blocks[0]?.id });
   const [sel, setSel] = useState(firstBlockSel);
@@ -187,11 +190,13 @@ export default function VideoEditor({ reservation, onClose }) {
   const save = async () => {
     if (!(await confirm({ title: "저장", message: "편집한 내용을 저장합니다.\n다음 「최종 렌더」부터 합성에 반영됩니다." }))) return;
     const subId = media?.submissionId;
-    if (!reservation?.secondJobId && subId) {
-      const render = buildRenderPlan({ orderedVisible: visibleBlocks, edits, subs: editedSubs });
-      try { await actions.saveEditDoc(reservation.id, subId, { v: 1, doc, render }); setSavedDoc(doc); toast("저장되었습니다 — 다음 최종 렌더부터 반영됩니다"); }
-      catch (e) { toast("저장 실패: " + (e.message || e)); }
-    } else { setSavedDoc(doc); toast("저장되었습니다"); } // 2차 가공·미연결은 메모리 저장만
+    // 2차 가공·목업(미연결)은 영속 대상이 없어 메모리 저장만.
+    if (reservation?.secondJobId || !LIVE) { setSavedDoc(doc); toast("저장되었습니다"); return; }
+    // 1차 예약인데 제작 자료(submission)가 아직 안 떴으면 = 저장 불가(거짓 성공 방지).
+    if (!subId) { toast("저장할 수 없습니다 — 보호자 제작 자료를 아직 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."); return; }
+    const render = buildRenderPlan({ orderedVisible: visibleBlocks, edits, subs: editedSubs });
+    try { await actions.saveEditDoc(reservation.id, subId, { v: 1, doc, render }); setSavedDoc(doc); toast("저장되었습니다 — 다음 최종 렌더부터 반영됩니다"); }
+    catch (e) { toast("저장 실패: " + (e.message || e)); }
   };
 
   // 템플릿 변경 등으로 선택한 블록이 사라지면 첫 블록으로 복귀

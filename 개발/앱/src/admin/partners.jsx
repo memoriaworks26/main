@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, STATUS, RADIUS } from "../theme.js";
 import { Tag, Btn, Card, Summary, Table, PageHeader, Modal, CopyBtn, useTableSort } from "../ui.jsx";
-import { useStore, actions, partnerSettle } from "../store.js";
+import { useStore, actions, partnerSettle, ymKST, countReservInMonth } from "../store.js";
 import { confirm } from "../confirm.jsx";
 import { won, parseNum as num } from "../lib/format.js";
 import { matchQuery } from "../lib/util.js";
@@ -272,8 +272,11 @@ function PartnerDetail({ partner: p, onBack, go }) {
 }
 
 export function PartnersManage({ go, onLoginAsPartner }) {
-  const { partners: allPartners, bizUnit, bizUnits } = useStore();
-  const partners = allPartners.filter((p) => p.bizUnit === bizUnit); // 현재 사업부 소속만
+  const { partners: allPartners, bizUnit, bizUnits, reservations } = useStore();
+  const month = ymKST(0);
+  // 현재 사업부 소속만 + [QA] 이번달 예약 수를 store 예약에서 계산해 주입(목업 reservThisMonth 제거).
+  const partners = allPartners.filter((p) => p.bizUnit === bizUnit)
+    .map((p) => ({ ...p, reservThisMonth: countReservInMonth(reservations, month, p.name) }));
   const [sel, setSel] = useState(null);
   const [adding, setAdding] = useState(false);
   const [statusF, setStatusF] = useState("all"); // all | active | inactive

@@ -24,7 +24,18 @@ import * as subs from "./lib/data/submissions.js";
 import * as vids from "./lib/data/videos.js";
 import * as promptsData from "./lib/data/prompts.js";
 import * as bgmData from "./lib/data/bgm.js";
+import { grabVideoFrame } from "./lib/media.js";
 import { toast } from "./toast.jsx";
+
+// data URL(JPEG) → Blob — 캡처한 클립 썸네일을 스토리지 업로드용으로 변환.
+const dataUrlToBlob = (u) => {
+  const [head, b64] = u.split(",");
+  const mime = (/:(.*?);/.exec(head) || [])[1] || "image/jpeg";
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+};
 
 // 라이브(로그인+백엔드) = DB hydrate·write-through. DEV_PREVIEW = 기존 목업 시드.
 // [Phase4 배선] 배선된 도메인만 라이브에서 빈 시드로 시작해 DB에서 채움.
@@ -68,6 +79,7 @@ let state = {
   settlementDeposits: LIVE ? [] : D.SETTLEMENT_DEPOSITS.map((d) => ({ ...d })), // 입금 내역 [Phase4-5b 배선]
   statements: LIVE ? [] : D.STATEMENTS.map((x) => ({ ...x })),                 // 거래명세서 [Phase4-5b 배선]
   content: LIVE ? [] : D.CONTENT.map((c) => ({ ...c })),  // 콘텐츠 허브 자산 [Phase4-4b 배선]
+  bgm: LIVE ? [] : D.BGM.map((b) => ({ ...b, kind: "audio", shared: true })),  // 공용 BGM 라이브러리(콘텐츠 허브 음악 탭)
   company: { ...D.COMPANY },                            // 회사정보 — 고객센터 연락처 등 편집값(설정 ↔ 유저링크 공유)
 };
 
@@ -95,6 +107,11 @@ export const bizPartners = (s) => s.partners.filter((p) => p.bizUnit === s.bizUn
 export const bizPartnerNames = (s) => new Set(bizPartners(s).map((p) => p.name));
 // 현재 사업부 예약(고객) — 소속 파트너의 예약만
 export const bizReservations = (s) => { const names = bizPartnerNames(s); return s.reservations.filter((r) => names.has(r.partner)); };
+// 연월 "YYYY-MM"(KST). off로 전월(-1) 등 상대월 계산. — "이번달 예약" 집계 단일 기준.
+export const ymKST = (off = 0) => { const d = new Date(Date.now() + 9 * 3600 * 1000); d.setUTCMonth(d.getUTCMonth() + off); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`; };
+// 특정 월(YYYY-MM)의 예약 수 — partnerName 주면 그 파트너만. reservation.date(reserve_date) 기준.
+export const countReservInMonth = (reservations, month, partnerName) =>
+  reservations.filter((r) => (!partnerName || r.partner === partnerName) && String(r.date || "").startsWith(month)).length;
 // [QA-P1] 파트너 정산 집계(매출건·청구·입금·미수금) — 단일 기준(대시보드·파트너상세·정산 공용).
 export const partnerSettle = (s, partnerName) => {
   const items = s.settlementItems.filter((i) => i.partner === partnerName);
@@ -138,8 +155,16 @@ export const actions = {
   hydrateTemplates: (templates) => set({ templates }),
   // [Phase4-4b] 콘텐츠 허브 적재.
   hydrateContent: (content) => set({ content }),
+  hydrateBgm: (bgm) => set({ bgm }),
   // [Phase4-8] 스토리지 보존정책 적재.
   hydrateStorageClasses: (storageClasses) => set({ storageClasses }),
+  // 스토리지 사용량 새로고침 — 발행영상·보존정책 재조회(용량은 영상에서 실측 계산).
+  refreshStorage: () => {
+    if (!LIVE) { toast("사용량을 새로고침했습니다"); return; }
+    Promise.all([vids.fetchVideos(), system.fetchStorageClasses()])
+      .then(([videos, storageClasses]) => { set({ videos, storageClasses }); toast("사용량을 새로고침했습니다"); })
+      .catch((e) => toast("새로고침 실패: " + e.message));
+  },
   // [Phase3b] 관리자 계정(staff) 적재.
   hydrateAccounts: (accounts) => set({ accounts }),
   // [Phase4-6] 사이니지 디바이스 적재.
@@ -245,6 +270,18 @@ export const actions = {
   },
   // [QA-P1] 발행 영상 적재(staff/collab — 기간별 다운로드·용량).
   hydrateVideos: (videos) => set({ videos }),
+  // 발행 영상 삭제(기간별 다운로드 화면) — DB 행 삭제 + 스토리지 파일 정리(best-effort).
+  removeVideos: (ids) => {
+    const drop = (s) => { const rm = new Set(ids); return { videos: s.videos.filter((v) => !rm.has(v.id)) }; };
+    if (LIVE) {
+      const paths = state.videos.filter((v) => ids.includes(v.id)).flatMap((v) => [v.finalPath, v.sourcePath].filter(Boolean));
+      vids.deleteVideos(ids)
+        .then(() => { set(drop); if (paths.length) storage.removeFiles(storage.BUCKETS.final, paths).catch(() => {}); })
+        .catch((e) => toast("영상 삭제 실패: " + e.message));
+      return;
+    }
+    set(drop);
+  },
   issueSubmission: (reservation) => {
     if (LIVE) {
       return subs.issueSubmission({ reservationId: reservation.id, petName: reservation.deceased, partnerName: reservation.partner })
@@ -407,6 +444,13 @@ export const actions = {
       return;
     }
     set((s) => ({ accounts: s.accounts.filter((a) => a.id !== id) }));
+  },
+  // 비밀번호 초기화(임시비번 = 아이디/ID코드) — edge function. UI는 결과만 토스트.
+  resetAccountPw: (id) => {
+    if (!LIVE) { toast("초기 비밀번호(아이디와 동일)로 초기화되었습니다"); return; }
+    accountsData.resetPassword(id)
+      .then(() => toast("초기 비밀번호(아이디와 동일)로 초기화되었습니다"))
+      .catch((e) => toast("비밀번호 초기화 실패: " + e.message));
   },
   setAccountPerms: (id, perms) => {
     if (LIVE) {
@@ -603,17 +647,43 @@ export const actions = {
 
   // 콘텐츠 허브 자산 (즉시 추가 → 템플릿 클립 드롭다운·허브에 즉시 반영) [Phase4-4b 배선]
   addContent: (asset) => {
+    // 음악(BGM)은 공용 라이브러리(memoria.bgm)로 — 파트너 템플릿 미지정. 클립·사진과 다른 저장소.
+    if (asset.kind === "audio") {
+      if (LIVE) {
+        if (!asset.file) { toast("음악 파일을 선택해 주세요."); return; }
+        bgmData.uploadBgm(null, asset.file, asset.meta)
+          .then((b) => set((s) => ({ bgm: [b, ...s.bgm] })))
+          .catch((e) => toast("음악 업로드 실패: " + e.message));
+        return;
+      }
+      set((s) => ({ bgm: [{ id: asset.id, kind: "audio", name: asset.name, meta: asset.meta, shared: true }, ...s.bgm] }));
+      return;
+    }
     if (LIVE) {
-      if (asset.kind === "audio") { toast("음악(BGM) 추가는 추후 지원됩니다."); return; }
       const pid = asset.shared ? null : state.partners.find((p) => p.name === asset.partner)?.id;
       if (!asset.shared && !pid) { toast("파트너를 찾을 수 없습니다."); return; }
-      const insert = (storagePath, size) => content.addContent({ ...asset, storagePath, size: size || asset.size }, pid)
+      const insert = (storagePath, size, thumbPath) => content.addContent({ ...asset, storagePath, thumbPath, size: size || asset.size }, pid)
         .then((a) => set((s) => ({ content: [a, ...s.content] })))
         .catch((e) => toast("자산 추가 실패: " + e.message));
       if (asset.file) {
         const path = `${asset.shared ? "shared" : pid}/${asset.id}.${storage.extOf(asset.file.name)}`;
         const size = `${(asset.file.size / 1048576).toFixed(1)}MB`;
-        storage.uploadFile(storage.BUCKETS.content, path, asset.file).then(() => insert(path, size)).catch((e) => toast("업로드 실패: " + e.message));
+        (async () => {
+          await storage.uploadFile(storage.BUCKETS.content, path, asset.file);
+          // 클립은 첫 프레임을 캡처해 썸네일로 함께 저장(실패해도 업로드는 진행 — 절차적 폴백).
+          let thumbPath = null;
+          if (asset.kind === "clip") {
+            try {
+              const frame = await grabVideoFrame(asset.file);
+              if (frame) {
+                const tp = `${asset.shared ? "shared" : pid}/${asset.id}.thumb.jpg`;
+                await storage.uploadFile(storage.BUCKETS.content, tp, dataUrlToBlob(frame));
+                thumbPath = tp;
+              }
+            } catch { /* 썸네일 캡처 실패는 무시 */ }
+          }
+          return insert(path, size, thumbPath);
+        })().catch((e) => toast("업로드 실패: " + e.message));
       } else { insert(null); }
       return;
     }
@@ -627,6 +697,16 @@ export const actions = {
       return;
     }
     set((s) => ({ content: s.content.filter((c) => c.id !== id) }));
+  },
+  // 공용 BGM 삭제 (콘텐츠 허브 음악 탭) — 라이브러리 행·파일 제거 + 템플릿 참조 정리.
+  removeBgm: (id) => {
+    if (LIVE) {
+      bgmData.deleteBgm(id)
+        .then(() => set((s) => ({ bgm: s.bgm.filter((b) => b.id !== id) })))
+        .catch((e) => toast("음악 삭제 실패: " + e.message));
+      return;
+    }
+    set((s) => ({ bgm: s.bgm.filter((b) => b.id !== id) }));
   },
 
   // 유저 입력 폼 (파트너별 선택항목 설정 — key별 patch) [Phase4-7 배선]

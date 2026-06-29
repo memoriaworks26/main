@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { toast } from "../toast.jsx";
 import { confirm } from "../confirm.jsx";
 import { grabVideoFrame, grabVideoDuration } from "../lib/media.js";
-import { getToken, resolveLink, fetchLinkConfig, uploadAsset, submitLink, shareUrlFor } from "../lib/userLink.js";
+import { getToken, resolveLink, fetchLinkConfig, uploadAsset, submitLink, shareUrlFor, bgmPreviewUrl } from "../lib/userLink.js";
 import { BACKEND_LIVE } from "../lib/supabase.js";
 import { useStore, userTextOf } from "../store.js";
 import * as D from "../data.js";
@@ -115,6 +115,9 @@ export function useUserWizard(previewBizId, stepCtl) {
   const cfg = (!preview && liveMode) ? linkConfig : null;
   const T = { ...userTextOf(store, bizForText), ...(cfg?.user_text || {}) };
   const examplePhotos = cfg?.user_photos || store.userPhotos[bizForText] || {};
+  // 배경 음악 선택지 — 실 보호자 링크면 토큰 사업부의 공용 BGM 라이브러리(linkConfig.bgm), 아니면 데모 시드.
+  //   cfg 로드 전/데모/미리보기는 D.BGM 폴백. 라이브러리가 비어도 그대로 빈 목록(목 곡 노출 방지).
+  const bgmList = cfg?.bgm || D.BGM;
   const company = cfg ? {
     ...store.company,
     csPhone: cfg.cs_phone ?? store.company.csPhone,
@@ -216,7 +219,7 @@ export function useUserWizard(previewBizId, stepCtl) {
         ...videos.map((u, i) => ({ kind: "video", role: "memory_video", name: u.name, sizeMB: parseMB(u.size), storagePath: u.storagePath, sortOrder: photos.length + i })),
       ];
       const res = await submitLink(link.token || token, {
-        petName: petName.trim(), titleIndex: titleSel, transDefault: trans, transMap, bgmId: D.BGM[bgm]?.id, letter, metDate, partDate, assets, skipAi,
+        petName: petName.trim(), titleIndex: titleSel, transDefault: trans, transMap, bgmId: bgmList[bgm]?.id, letter, metDate, partDate, assets, skipAi,
         privacyAgreed: agreed, marketingAgreed,
       });
       if (!res.ok) { toast(res.error || "제출에 실패했습니다. 다시 시도해 주세요."); return; }
@@ -232,7 +235,7 @@ export function useUserWizard(previewBizId, stepCtl) {
   // StepBody에 넘기는 화면 상태·핸들러 묶음
   const st = { T, photos: examplePhotos, preview, agreed, setAgreed, marketingAgreed, setMarketingAgreed,
     slidePhotos: photos, videos, PHOTO_MAX, VIDEO_MAX_SEC, removePhoto, removeVideo, addPhoto, addVideo, onPhotoFiles, onVideoFiles, photoRef, videoRef, reorderPhotos, reorderVideos, photoOver, videoSecs, videoOver, videoMeasuring,
-    aiPhotos, addAiPhoto, onAiFiles, removeAiPhoto, aiFileRef, skipAi, setSkipAi, petName, setPetName, trans, setTrans, bgm, setBgm, letter, setLetter, metDate, setMetDate, partDate, setPartDate, titleSel, setTitleSel, transMap, setItemTrans, randomizeTrans, totalMB, overLimit, link, shareUrl, videoStatus, company, openPolicy: () => setPolicyOpen(true) };
+    aiPhotos, addAiPhoto, onAiFiles, removeAiPhoto, aiFileRef, skipAi, setSkipAi, petName, setPetName, trans, setTrans, bgm, setBgm, bgmList, signBgm: bgmPreviewUrl, letter, setLetter, metDate, setMetDate, partDate, setPartDate, titleSel, setTitleSel, transMap, setItemTrans, randomizeTrans, totalMB, overLimit, link, shareUrl, videoStatus, company, openPolicy: () => setPolicyOpen(true) };
 
   const last = STEPS.length - 1;
   const previewStep = last - 1;

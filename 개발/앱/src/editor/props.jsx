@@ -217,6 +217,7 @@ function GenHistory({ results = [] }) {
 
 export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, reservation, partnerId, bgmName, media, onGenerate, sel }) {
   const [promptModal, setPromptModal] = useState(false); // AI 문구 관리 모달
+  const _store = useStore();                    // BGM 설정(파트너 템플릿) — 훅은 early-return 위에서 무조건 호출(hooks 규칙)
   let item;
   if (sel.scope === "block") item = blocks.find((b) => b.id === sel.id);
   else if (sel.scope === "trans") item = { effect: blockTrans(sel.id) };
@@ -251,7 +252,6 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
   // 편집값(컨트롤드) — 전환은 "trans-"+id, 음악은 "audio" 키로 보관
   const transKey = "trans-" + sel.id;
   const effect = (edits[transKey] && edits[transKey].effect) || blockTrans(sel.id);
-  const _store = useStore();                    // BGM 설정(파트너 템플릿)
   const _pid = partnerId || reservation?.partnerId; // 파트너 스코프 통일(VideoEditor가 이름매칭으로 해결한 id 우선)
   const _tb = (_pid && _store.templates?.[_pid]) || {};
   const bgmVol = _tb.bgmVol ?? 70, bgmFadeIn = _tb.bgmFadeIn ?? 1, bgmFadeOut = _tb.bgmFadeOut ?? 2;
@@ -448,15 +448,12 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
         )}
 
         {k === "subtitle" && (() => {
-          const fontVal = D.SUBTITLE_FONTS.find((f) => f.css === item.font)?.css || D.SUBTITLE_FONTS[0].css;
+          const fontVal = D.SUBTITLE_FONTS[0].css; // 렌더는 단일 폰트(NotoSansKR) — 미리보기 표시용 기본값
           const size = item.size ?? 48;
           return (
           <>
             <Field label="자막 글자"><textarea rows={3} value={item.text ?? ""} onChange={(e) => onEdit(item.id, { text: e.target.value })} className="w-full resize-none p-3 text-[13.5px] leading-relaxed outline-none" style={{ ...inputStyle, height: "auto", fontFamily: fontVal }} /></Field>
-            <div className="grid grid-cols-2 gap-2">
-              <Field label="폰트"><select className={inputCls} style={inputStyle} value={fontVal} onChange={(e) => onEdit(item.id, { font: e.target.value })}>{D.SUBTITLE_FONTS.map((f) => <option key={f.name} value={f.css}>{f.name}</option>)}</select></Field>
-              <Field label="위치"><select className={inputCls} style={inputStyle} value={item.xPct != null ? "직접배치" : (item.pos || "하단")} onChange={(e) => onEdit(item.id, { pos: e.target.value, xPct: null, yPct: null })}>{item.xPct != null && <option value="직접배치">직접배치(드래그)</option>}{D.SUBTITLE_POS.map((p) => <option key={p}>{p}</option>)}</select></Field>
-            </div>
+            <Field label="위치"><select className={inputCls} style={inputStyle} value={item.xPct != null ? "직접배치" : (item.pos || "하단")} onChange={(e) => onEdit(item.id, { pos: e.target.value, xPct: null, yPct: null })}>{item.xPct != null && <option value="직접배치">직접배치(드래그)</option>}{D.SUBTITLE_POS.map((p) => <option key={p}>{p}</option>)}</select></Field>
             <Field label={`글자 크기 (${size}px)`}>
               <div className="flex items-center gap-2">
                 <input type="range" min="20" max="80" step="1" value={size} onChange={(e) => onEdit(item.id, { size: +e.target.value })} className="flex-1" style={{ accentColor: GOLD }} />
@@ -482,17 +479,17 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
 
         {k === "transition" && (
           <>
+            {/* 렌더가 지원하는 효과만 노출 — 페이드/없음. (디졸브·슬라이드 등은 합성 미지원이라 제거) */}
             <Field label="장면이 바뀌는 효과">
               <div className="grid grid-cols-2 gap-2">
-                {D.TRANSITION_TYPES.map((t) => (
+                {["페이드", "없음"].map((t) => (
                   <button key={t} onClick={() => onEdit(transKey, { effect: t })} className="flex h-16 flex-col items-center justify-center gap-1 text-[13px] font-bold" style={{ background: effect === t ? GOLD_SOFT : "#fff", border: "1.5px solid " + (effect === t ? GOLD : LINE2), borderRadius: 6, color: effect === t ? GOLD_D : MUTE }}>
                     <ArrowRightLeft className="h-4 w-4" /> {t}
                   </button>
                 ))}
               </div>
             </Field>
-            <Field label="효과 길이"><select className={inputCls} style={inputStyle} value={(edits[transKey] && edits[transKey].len) || "0.5초 (기본)"} onChange={(e) => onEdit(transKey, { len: e.target.value })}><option>0.3초</option><option>0.5초 (기본)</option><option>1.0초</option></select></Field>
-            <button onClick={() => { onEdit(transKey, { effect: "없음" }); toast("장면 전환 효과를 뺐습니다"); }} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-semibold" style={{ border: "1px solid " + LINE2, borderRadius: RADIUS, color: MUTE }}><Trash2 className="h-4 w-4" /> 효과 빼기</button>
+            <p className="text-[11.5px] leading-relaxed" style={{ color: FAINT }}>※ 장면 사이를 부드럽게 잇는 페이드로 합성됩니다.</p>
           </>
         )}
 

@@ -115,9 +115,12 @@ export function StepBody({ step, st }) {
     if (a) { try { a.pause(); a.currentTime = 0; } catch { /* noop */ } }
     setPlayingBgm(null);
   };
-  const playPreview = (bi) => {
+  const playPreview = async (bi) => {
     stopPreview();
-    const src = D.BGM[bi] && D.BGM[bi].src;
+    const item = st.bgmList[bi];
+    // 정적 데모곡은 src, 실 라이브러리 곡은 storage_path를 anon 서명URL로 변환해 재생.
+    let src = item?.src;
+    if (!src && item?.storage_path && st.signBgm) src = await st.signBgm(item.storage_path);
     if (!src) return;
     try {
       let a = audioElRef.current;
@@ -358,7 +361,12 @@ export function StepBody({ step, st }) {
       <div>
         <Title sub={st.T.sub3}>배경 음악</Title>
         <div className="space-y-2">
-          {D.BGM.map((b, i) => {
+          {st.bgmList.length === 0 && (
+            <div className="px-3 py-4 text-center text-[12.5px]" style={{ background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS, color: FAINT }}>
+              등록된 배경 음악이 없습니다. 담당자에게 문의해 주세요.
+            </div>
+          )}
+          {st.bgmList.map((b, i) => {
             const on = st.bgm === i;
             const playing = playingBgm === i;
             return (
@@ -436,7 +444,7 @@ export function StepBody({ step, st }) {
           {!st.skipAi && <div className="flex justify-between"><span>AI 영상 변환</span><span style={{ color: INK }}>나머지 2장 (앞·뒤)</span></div>}
           {st.skipAi && <div className="flex justify-between"><span>AI 변환</span><span style={{ color: INK }}>사용 안 함</span></div>}
           <div className="flex justify-between"><span>장면 전환</span><span style={{ color: INK }}>{Object.keys(st.transMap).length > 0 ? "개별 설정" : TRANSITIONS[st.trans]?.ko}</span></div>
-          <div className="flex justify-between"><span>배경 음악</span><span style={{ color: INK }}>{D.BGM[st.bgm].name}</span></div>
+          <div className="flex justify-between"><span>배경 음악</span><span style={{ color: INK }}>{st.bgmList[st.bgm]?.name || "선택 안 함"}</span></div>
         </div>
       </div>
     );

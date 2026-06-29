@@ -63,19 +63,47 @@ async function submitWithOpts(path, baseParams, opts) {
   }
 }
 
-// 폴링(실측): GET /v1/job-sets/{id} → jobs[0].status, jobs[0].results.raw.url. submit가 쓴 키로 조회.
+// 완료 상태/실패 상태 — 라이브 응답이 문서와 다를 수 있어 동의어를 관대하게 인정.
+const DONE_STATES = new Set(["completed", "succeeded", "success", "done", "finished"]);
+const FAIL_STATES = new Set(["failed", "error", "errored", "nsfw", "canceled", "cancelled", "rejected"]);
+// 미디어 URL처럼 보이는 문자열(확장자 기준, 쿼리 허용).
+const MEDIA_URL = /^https?:\/\/\S+\.(mp4|mov|webm|m4v|png|jpe?g|webp|gif)(\?|#|$)/i;
+// 완료 잡에서 결과 URL 추출 — 응답 형태가 문서와 다를 수 있어 여러 후보 경로를 관대하게 탐색.
+//   1) 알려진 키(results.raw/min/url, result, output[], url 등) → 2) 잡 객체 전체에서 미디어 URL 깊이 탐색.
+function deepFindUrl(o, seen = new Set()) {
+  if (!o || typeof o !== "object" || seen.has(o)) return null;
+  seen.add(o);
+  for (const v of Object.values(o)) if (typeof v === "string" && MEDIA_URL.test(v)) return v;
+  for (const v of Object.values(o)) if (v && typeof v === "object") { const f = deepFindUrl(v, seen); if (f) return f; }
+  return null;
+}
+function pickUrl(job) {
+  const r = job?.results ?? job?.result ?? job?.output ?? null;
+  const arr0 = (x) => Array.isArray(x) ? (x[0]?.url ?? (typeof x[0] === "string" ? x[0] : null)) : null;
+  const cands = [
+    r?.raw?.url, r?.min?.url, r?.url,
+    typeof r?.raw === "string" ? r.raw : null,
+    typeof r?.min === "string" ? r.min : null,
+    arr0(r), arr0(job?.output), arr0(job?.results),
+    job?.url, job?.video_url, job?.image_url,
+  ].filter((u) => typeof u === "string" && /^https?:\/\//.test(u));
+  return cands[0] || deepFindUrl(job);
+}
+
+// 폴링: GET /v1/job-sets/{id} → jobs[0].status + 결과 URL. submit가 쓴 키로 조회.
 async function poll(id, cred, { timeoutMs = 300000, intervalMs = 5000 } = {}) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const res = await fetch(`${BASE}/v1/job-sets/${id}`, { headers: authHeader(cred) });
     const d = await res.json().catch(() => ({}));
-    const job = (d.jobs && d.jobs[0]) || {};
-    if (job.status === "completed") {
-      const url = job.results?.raw?.url || job.results?.min?.url;
-      if (!url) throw new Error("higgsfield: 완료됐으나 결과 URL 없음 — " + JSON.stringify(job).slice(0, 200));
+    const job = (d.jobs && d.jobs[0]) || d || {};
+    const status = String(job.status || job.state || "").toLowerCase();
+    if (DONE_STATES.has(status)) {
+      const url = pickUrl(job);
+      if (!url) throw new Error("higgsfield: 완료됐으나 결과 URL 없음 — " + JSON.stringify(job).slice(0, 400));
       return url;
     }
-    if (job.status === "failed" || job.status === "nsfw") throw new Error("higgsfield 생성 실패: " + job.status);
+    if (FAIL_STATES.has(status)) throw new Error("higgsfield 생성 실패: " + status);
     await new Promise((r) => setTimeout(r, intervalMs));
   }
   throw new Error("higgsfield 폴링 타임아웃");

@@ -358,8 +358,8 @@ export function AccountsManage({ account }) {
     setName(""); setLoginId(""); setPhone(""); setPw(""); setRole("worker"); setAdding(false);
   };
   const removeAcct = async (r) => { if (!(await confirmDialog({ title: "계정 삭제", message: `${r.name}(${r.loginId}) 계정을 삭제합니다.\n삭제 후에는 복구할 수 없습니다.`, danger: true }))) return; actions.removeAccount(r.id); if (editId === r.id) setEditId(null); };
-  // 비밀번호 재설정 (목업) — 초기 비밀번호로 초기화 → 첫 로그인 시 변경
-  const resetPw = async (r) => { if (!(await confirmDialog({ title: "비밀번호 초기화", message: `${r.name}(${r.loginId}) 계정의 비밀번호를 초기 비밀번호로 초기화합니다.\n첫 로그인 시 비밀번호 변경이 필요합니다.`, confirmLabel: "초기화" }))) return; toast("초기 비밀번호로 초기화되었습니다"); };
+  // 비밀번호 재설정 — 초기 비밀번호(아이디/ID코드)로 초기화 → 첫 로그인 시 변경. edge function 실배선.
+  const resetPw = async (r) => { if (!(await confirmDialog({ title: "비밀번호 초기화", message: `${r.name}(${r.loginId}) 계정의 비밀번호를 초기 비밀번호로 초기화합니다.\n첫 로그인 시 비밀번호 변경이 필요합니다.`, confirmLabel: "초기화" }))) return; actions.resetAccountPw(r.id); };
   const togglePerm = (id, key) => actions.toggleAccountPerm(id, key);
   const setAllPerms = (id, on) => actions.setAccountPerms(id, on ? [...D.GRANTABLE_PERMS] : []);
 

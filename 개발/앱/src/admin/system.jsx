@@ -311,19 +311,19 @@ function PeriodDownload({ canDelete = true, finalOnly = false }) {
   const [partner, setPartner] = useState("all");
   const [target, setTarget] = useState("final"); // final | source | both
   const [sel, setSel] = useState(() => new Set());
-  const [deleted, setDeleted] = useState(() => new Set()); // 삭제된 자산(목업 — 로컬 상태)
 
   const partnerOpts = [{ value: "all", label: "전체 파트너사" }, ...partners.map((p) => ({ value: p.id, label: p.name }))];
   const rows = videos
-    .filter((v) => !deleted.has(v.id) && (partner === "all" || v.partnerId === partner) && (!from || v.date >= from) && (!to || v.date <= to))
+    .filter((v) => (partner === "all" || v.partnerId === partner) && (!from || v.date >= from) && (!to || v.date <= to))
     .sort((a, b) => String(b.datetime).localeCompare(String(a.datetime)));
 
   const ids = rows.map((r) => r.id);
   const allOn = ids.length > 0 && ids.every((id) => sel.has(id));
   const toggle = (id) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const toggleAll = () => setSel((s) => { const n = new Set(s); allOn ? ids.forEach((id) => n.delete(id)) : ids.forEach((id) => n.add(id)); return n; });
+  // 실삭제 — DB 행 + 스토리지 파일(store 액션). 목록은 store.videos 갱신으로 자동 반영.
   const removeIds = (delIds) => {
-    setDeleted((d) => { const n = new Set(d); delIds.forEach((id) => n.add(id)); return n; });
+    actions.removeVideos(delIds);
     setSel((s) => { const n = new Set(s); delIds.forEach((id) => n.delete(id)); return n; });
   };
   const deleteSel = async () => {
@@ -460,11 +460,17 @@ export function Storage() {
   const usedGB = +(videos.reduce((a, v) => a + (v.sizeMB || 0) + (v.srcMB || 0), 0) / 1024).toFixed(1);
   const s = { used: usedGB, total: 1024, unit: "GB" };
   const pct = s.total ? Math.min(100, Math.round((s.used / s.total) * 100)) : 0;
+  // [QA] 클래스별 용량·개수 실측 — final(최종본)·source(원본)는 videos에서 집계. temp(중간 산출물)는 미추적(—).
+  const gb = (mb) => +(mb / 1024).toFixed(1);
+  const stat = {
+    final: { gb: gb(videos.reduce((a, v) => a + (v.sizeMB || 0), 0)), files: videos.filter((v) => v.finalPath || v.sizeMB).length },
+    source: { gb: gb(videos.reduce((a, v) => a + (v.srcMB || 0), 0)), files: videos.filter((v) => v.srcMB || v.sourcePath).length },
+  };
   const setRet = (key, retention) => actions.setRetention(key, retention);
 
   return (
     <div>
-      <PageHeader title="스토리지" sub="Cloudflare R2 — 자산 보존 정책 · 기간별 선택 다운로드 (egress 0 · 서명 URL)" right={<Btn size="sm" variant="ghost" onClick={() => toast("사용량을 새로고침했습니다")}><RefreshCw className="h-3.5 w-3.5" /> 사용량 새로고침</Btn>} />
+      <PageHeader title="스토리지" sub="Cloudflare R2 — 자산 보존 정책 · 기간별 선택 다운로드 (egress 0 · 서명 URL)" right={<Btn size="sm" variant="ghost" onClick={() => actions.refreshStorage()}><RefreshCw className="h-3.5 w-3.5" /> 사용량 새로고침</Btn>} />
 
       {/* 총 사용량 */}
       <Card title={`총 사용량 ${s.used}${s.unit} / ${s.total}${s.unit} (${pct}%)`}>
@@ -481,11 +487,12 @@ export function Storage() {
       <div className="grid grid-cols-3 gap-3">
         {classes.map((c) => {
           const isNum = typeof c.retention === "number";
+          const st = stat[c.key];  // final/source는 실측, 그 외(temp)는 미추적
           return (
             <div key={c.key} className="flex flex-col px-4 py-3.5" style={{ background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS }}>
               <div className="text-[13px] font-bold" style={{ color: INK }}>{c.name}</div>
               <div className="mt-0.5 text-[11.5px]" style={{ color: FAINT }}>{c.desc}</div>
-              <div className="mt-2 text-[12px]" style={{ color: MUTE }}>{c.sizeGB} GB · <span className="tabular-nums">{c.files.toLocaleString()}</span>개</div>
+              <div className="mt-2 text-[12px]" style={{ color: MUTE }}>{st ? `${st.gb} GB · ` : ""}<span className="tabular-nums">{st ? st.files.toLocaleString() + "개" : "사용량 미추적"}</span></div>
               <div className="mt-3 flex items-center gap-1.5 border-t pt-3" style={{ borderColor: LINE }}>
                 <button onClick={() => setRet(c.key, "permanent")} className="px-2.5 py-1.5 text-[12px] font-semibold" style={{ borderRadius: RADIUS, background: !isNum ? GOLD_SOFT : "#fff", color: !isNum ? GOLD_D : MUTE, border: "1px solid " + (!isNum ? GOLD_SOFT : LINE2) }}>영구</button>
                 <button onClick={() => setRet(c.key, isNum ? c.retention : 30)} className="px-2.5 py-1.5 text-[12px] font-semibold" style={{ borderRadius: RADIUS, background: isNum ? GOLD_SOFT : "#fff", color: isNum ? GOLD_D : MUTE, border: "1px solid " + (isNum ? GOLD_SOFT : LINE2) }}>기간</button>
@@ -497,7 +504,7 @@ export function Storage() {
                 )}
               </div>
               <button onClick={() => toast(c.name + " 백업 다운로드를 시작합니다")} className="mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-[12.5px] font-semibold" style={{ borderRadius: RADIUS, border: "1px solid " + LINE2, color: GOLD_D }}>
-                <Download className="h-3.5 w-3.5" /> 백업 다운로드 ({c.sizeGB} GB)
+                <Download className="h-3.5 w-3.5" /> 백업 다운로드 ({st ? st.gb : "—"} GB)
               </button>
             </div>
           );

@@ -86,7 +86,14 @@ async function reaperLoop() {
 async function main() {
   log.info(`렌더 워커 시작 — stub=${cfg.stub} concurrency=${cfg.concurrency} interval=${cfg.pollMs}ms maxAttempts=${cfg.maxAttempts} stale=${cfg.staleMinutes}m once=${ONCE}`);
   // [QA] 배포 안전장치 — STUB가 켜진 채 운영되면 보호자에게 가짜(stub) 영상이 전달됨.
-  if (cfg.stub) log.warn("⚠️ WORKER_STUB=ON — 실제 렌더 없이 stub 결과를 반환합니다. 운영 배포 시 반드시 WORKER_STUB=0 으로 실행하세요.");
+  //   운영(NODE_ENV=production)에서는 경고로 끝내지 않고 아예 기동 거부(가짜 영상 유출 차단).
+  if (cfg.stub) {
+    if (process.env.NODE_ENV === "production") {
+      log.error("치명적: WORKER_STUB=1 인데 NODE_ENV=production — 보호자에게 가짜(stub) 영상이 전달됩니다. 기동을 거부합니다. WORKER_STUB=0 으로 실행하세요.");
+      process.exit(2);
+    }
+    log.warn("⚠️ WORKER_STUB=ON — 실제 렌더 없이 stub 결과를 반환합니다. 운영 배포 시 반드시 WORKER_STUB=0 으로 실행하세요.");
+  }
   if (ONCE) {
     await requeueStale(cfg.staleMinutes, cfg.maxAttempts).catch((e) => log.error("리퍼 오류: " + e.message));
     const did = await processOne();

@@ -110,20 +110,23 @@ export async function composeFinal(job, assets) {
       const { data: r } = await db.from("reservations").select("partner_id, end_date").eq("id", job.reservation_id).maybeSingle();
       partnerId = r?.partner_id || null; endDate = r?.end_date || null;
     }
-    // BGM — 파트너 템플릿의 bgm_id → bgm.storage_path(memoria-content) 있으면 다운로드 + 볼륨·페이드 설정.
-    let bgmPath = null, bgmVol = 70, bgmFadeIn = 1, bgmFadeOut = 2;
+    // BGM — 보호자가 위저드에서 고른 곡(submissions.bgm_id) 우선, 없거나 미해결이면 파트너 템플릿 기본곡으로 폴백.
+    //   볼륨·페이드는 곡과 무관한 파트너 믹싱 설정이라 항상 템플릿 값(없으면 기본).
+    let bgmPath = null, bgmVol = 70, bgmFadeIn = 1, bgmFadeOut = 2, tplBgmId = null;
     if (partnerId) {
       const { data: tpl } = await db.from("templates").select("bgm_id, bgm_volume, bgm_fade_in, bgm_fade_out").eq("partner_id", partnerId).maybeSingle();
-      if (tpl) {
-        bgmVol = tpl.bgm_volume ?? 70; bgmFadeIn = Number(tpl.bgm_fade_in ?? 1); bgmFadeOut = Number(tpl.bgm_fade_out ?? 2);
-        if (tpl.bgm_id) {
-          const { data: bgm } = await db.from("bgm").select("storage_path").eq("id", tpl.bgm_id).maybeSingle();
-          if (bgm?.storage_path) {
-            try { bgmPath = path.join(dir, "bgm.mp3"); await st.downloadTo(await st.signedUrl("memoria-content", bgm.storage_path, 3600), bgmPath); log.info(`  BGM 적용(vol ${bgmVol}) → ${bgm.storage_path}`); }
-            catch (e) { bgmPath = null; log.warn("  BGM 다운로드 실패(무음 진행): " + e.message); }
-          }
-        }
-      }
+      if (tpl) { bgmVol = tpl.bgm_volume ?? 70; bgmFadeIn = Number(tpl.bgm_fade_in ?? 1); bgmFadeOut = Number(tpl.bgm_fade_out ?? 2); tplBgmId = tpl.bgm_id || null; }
+    }
+    // 후보 우선순위: 보호자 선택(job.bgm_id) → 템플릿 기본(tplBgmId). 첫 '유효 음원'에서 멈춤(팬텀/구 id는 자동 스킵).
+    for (const id of [...new Set([job.bgm_id, tplBgmId].filter(Boolean))]) {
+      const { data: bgm } = await db.from("bgm").select("storage_path").eq("id", id).maybeSingle();
+      if (!bgm?.storage_path) continue; // 해당 id에 음원 없음 → 다음 후보로
+      try {
+        bgmPath = path.join(dir, "bgm.mp3");
+        await st.downloadTo(await st.signedUrl("memoria-content", bgm.storage_path, 3600), bgmPath);
+        log.info(`  BGM 적용(vol ${bgmVol}, ${id === job.bgm_id ? "보호자선택" : "템플릿기본"}) → ${bgm.storage_path}`);
+      } catch (e) { bgmPath = null; log.warn("  BGM 다운로드 실패(무음 진행): " + e.message); }
+      break; // 유효 음원을 찾았으면(다운로드 성공/실패 무관) 폴백하지 않음
     }
 
     const out = path.join(dir, "final.mp4");

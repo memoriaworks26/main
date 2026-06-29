@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────
 // 시스템 설정 데이터 계층 — 스토리지 보존정책(storage_classes). memoria(RLS, storage perm).
-//   용량 통계(sizeGB/files/used/total)는 실스토리지 연동(Phase 6) 전까지 placeholder.
+//   클래스별 용량/개수는 UI(Storage)가 발행영상(videos)에서 실측 계산 — 여기선 보존정책만 반환.
 // ─────────────────────────────────────────────────────────────
 import { db } from "../supabase.js";
 

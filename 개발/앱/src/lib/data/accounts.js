@@ -40,3 +40,5 @@ export const provisionStaff = ({ name, loginId, role, perms }) =>
   invoke({ kind: "staff", name, loginId, role, perms });
 export const provisionPartner = (partnerId) => invoke({ kind: "partner", partnerId });
 export const deleteAccount = (authUserId) => invoke({ kind: "delete", authUserId });
+// 비밀번호 초기화(임시비번 = 아이디/ID코드) — 마스터만. 반환: { ok, tempPassword }.
+export const resetPassword = (authUserId) => invoke({ kind: "reset", authUserId });

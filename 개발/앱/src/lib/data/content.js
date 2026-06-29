@@ -6,7 +6,8 @@ import { db } from "../supabase.js";
 
 const need = () => { const d = db(); if (!d) throw new Error("백엔드 미연결"); return d; };
 const mapAsset = (r) => ({
-  id: r.id, kind: r.kind, name: r.name, meta: r.meta, size: r.size_label, storagePath: r.storage_path,
+  id: r.id, kind: r.kind, name: r.name, meta: r.meta, size: r.size_label,
+  storagePath: r.storage_path, thumbPath: r.thumb_path,
   ...(r.shared ? { shared: true } : { partner: r.partner?.name }),
 });
 
@@ -24,6 +25,7 @@ export async function addContent(asset, partnerId) {
     size_label: asset.size ?? null, shared: !!asset.shared,
     partner_id: asset.shared ? null : partnerId,
     storage_path: asset.storagePath ?? null,
+    thumb_path: asset.thumbPath ?? null,
   };
   const { data, error } = await d.from("content_assets").insert(row).select("*, partner:partners(name)").single();
   if (error) throw new Error(error.message);

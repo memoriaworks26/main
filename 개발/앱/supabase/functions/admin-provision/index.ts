@@ -79,6 +79,25 @@ Deno.serve(async (req) => {
     return json(200, { ok: true, authUserId: created.user.id, tempPassword: String(p.id_code).trim() });
   }
 
+  // ── 비밀번호 초기화(임시비번 = 아이디/ID코드) — 대상 신원으로 초기비번 산출 후 변경 ──
+  if (body.kind === "reset") {
+    if (!body.authUserId) return json(400, { error: "authUserId 필요" });
+    // staff면 login_id, 아니면 partner_members → partners.id_code 가 초기비번.
+    const { data: staff } = await mem.from("staff").select("login_id").eq("auth_user_id", body.authUserId).maybeSingle();
+    let tempPw: string | null = staff?.login_id ?? null;
+    if (!tempPw) {
+      const { data: pm } = await mem.from("partner_members").select("partner_id").eq("auth_user_id", body.authUserId).maybeSingle();
+      if (pm?.partner_id) {
+        const { data: p } = await mem.from("partners").select("id_code").eq("id", pm.partner_id).maybeSingle();
+        tempPw = p?.id_code ?? null;
+      }
+    }
+    if (!validId(tempPw)) return json(400, { error: "대상 계정의 초기 비밀번호(아이디/ID코드)를 확인할 수 없습니다" });
+    const { error } = await admin.auth.admin.updateUserById(body.authUserId, { password: String(tempPw).trim() });
+    if (error) return json(400, { error: error.message });
+    return json(200, { ok: true, tempPassword: String(tempPw).trim() });
+  }
+
   // ── 계정 삭제(auth 유저 삭제 → staff/partner_members CASCADE) ──
   if (body.kind === "delete") {
     if (!body.authUserId) return json(400, { error: "authUserId 필요" });

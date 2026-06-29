@@ -118,7 +118,7 @@ function InstantAddClip({ partner, onAdded }) {
 
 export function Templates() {
   const s = useStore();
-  const { templates: storeTpls, content } = s;
+  const { templates: storeTpls, content, bgm: bgmLib } = s;
   const allPartners = bizPartners(s); // 현재 사업부 파트너만
   const [tpls, setTpls] = useState(storeTpls); // 저장 전 초안 (전체 템플릿 맵)
   const dirty = JSON.stringify(tpls) !== JSON.stringify(storeTpls);
@@ -155,13 +155,14 @@ export function Templates() {
           const blocks = tpl.blocks || [];
           const total = blocks.reduce((s, b) => s + (D.elementDef(b.type)?.dur || 0), 0);
           const clipCount = blocks.filter((b) => b.type === "clip").length;
-          const bgm = D.BGM.find((b) => b.id === tpl.bgm);
+          const bgm = bgmLib.find((b) => b.id === tpl.bgm);
           // 콘텐츠 허브: 해당 파트너 영상(clip) + 이미지(photo)
           const assetOpts = content
             .filter((c) => (c.kind === "clip" || c.kind === "photo") && c.partner === p.name)
             .map((c) => ({ value: c.id, label: (c.kind === "clip" ? "🎬 영상 · " : "🖼 이미지 · ") + c.name }));
           const noHub = assetOpts.length === 0;
-          const bgmOpts = D.BGM.map((b) => ({ value: b.id, label: b.name + (b.meta ? "  ·  " + b.meta : "") }));
+          // BGM 옵션 — 실 공용 라이브러리(콘텐츠 허브 음악 탭과 동일 소스). 워커는 templates.bgm_id로 조회하므로 실 id 필수.
+          const bgmOpts = bgmLib.map((b) => ({ value: b.id, label: b.name + (b.meta ? "  ·  " + b.meta : "") }));
           // 추가 가능한 요소: 기본 요소는 미사용 시에만, 클립은 항상
           const usedBase = new Set(blocks.filter((b) => b.type !== "clip").map((b) => b.type));
           const addable = D.TEMPLATE_ELEMENTS.filter((e) => e.repeatable || !usedBase.has(e.type));

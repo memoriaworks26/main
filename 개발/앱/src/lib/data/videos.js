@@ -28,3 +28,12 @@ export async function fetchVideos() {
   if (error) throw new Error("발행 영상 조회 실패: " + error.message);
   return (data || []).map(mapVideo);
 }
+
+// 발행 영상 행 삭제(staff RLS — videos_staff_rw). 스토리지 파일 정리는 store 액션이 best-effort로 처리.
+export async function deleteVideos(ids) {
+  if (!ids?.length) return [];
+  const d = need();
+  const { error } = await d.from("videos").delete().in("id", ids);
+  if (error) throw new Error("영상 삭제 실패: " + error.message);
+  return ids;
+}

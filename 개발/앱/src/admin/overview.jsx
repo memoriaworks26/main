@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { SURFACE, LINE2, GOLD, GOLD_D, INK, FAINT } from "../theme.js";
 import { Btn, Card, MetricRow, PageHeader, Table } from "../ui.jsx";
-import { useStore, actions, bizSettleTotals } from "../store.js";
+import { useStore, actions, bizSettleTotals, ymKST, countReservInMonth } from "../store.js";
 import { CUSTOMER_COLS, toCustomerRow, renderCustomerCell } from "./customers.jsx";
 import { man } from "../lib/format.js";
 
@@ -18,7 +18,10 @@ export function Dashboard({ go }) {
   const reservations = store.reservations.filter((r) => bizNames.has(r.partner));
   const total = partners.length;
   const active = partners.filter((p) => p.active).length;
-  const resv = partners.reduce((s, p) => s + p.reservThisMonth, 0);
+  // [QA] 이번달 예약 = store 예약에서 현재 월 집계(목업 reservThisMonth 제거). 전월 대비 실차이 표기.
+  const resv = countReservInMonth(reservations, ymKST(0));
+  const resvPrev = countReservInMonth(reservations, ymKST(-1));
+  const resvDelta = resv - resvPrev;
   // [QA-P1] 정산 합계 = store 매출건·입금에서 집계(목업 제거, 정산페이지와 동일 기준)
   const { billed, unpaid } = bizSettleTotals(store);
   // 고객관리와 같은 리스트 · 최신순(예약일 내림차순) 상위 5건
@@ -33,7 +36,7 @@ export function Dashboard({ go }) {
       <div className="mb-4">
         <MetricRow fit items={[
           { label: "전체 파트너사", value: total, sub: `활성 ${active}개` },
-          { label: "이번달 예약", value: resv + "건", sub: "전월 대비 +3" },
+          { label: "이번달 예약", value: resv + "건", sub: `전월 대비 ${resvDelta >= 0 ? "+" : ""}${resvDelta}` },
           { label: "이번달 매출", value: man(billed), sub: "VAT 포함" },
           { label: "미수금", value: man(unpaid), sub: "확인 필요", accent: "#9a6a1c" },
         ]} />

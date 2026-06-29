@@ -60,7 +60,18 @@ export async function fetchLinkConfig(token) {
     const sb = getClient();
     const { data, error } = await sb.rpc("get_user_link_config", { p_token: token });
     if (error || !data) return null;
-    return data; // { cs_phone, cs_hours, consent_privacy, consent_marketing, privacy_policy, privacy_officer, terms, user_text, user_photos }
+    return data; // { cs_phone, cs_hours, consent_privacy, consent_marketing, privacy_policy, privacy_officer, terms, user_text, user_photos, bgm:[{id,name,meta,storage_path}] }
+  } catch { return null; }
+}
+
+// 보호자(anon) BGM 미리듣기 — 'bgm/' 폴더 anon SELECT(0045) 덕에 서명URL 발급 가능. 실패하면 null(미리듣기 생략).
+export async function bgmPreviewUrl(storagePath) {
+  if (!BACKEND_LIVE || !storagePath) return null;
+  try {
+    const sb = getClient();
+    const { data, error } = await sb.storage.from("memoria-content").createSignedUrl(storagePath, 600);
+    if (error) return null;
+    return data?.signedUrl || null;
   } catch { return null; }
 }
 
