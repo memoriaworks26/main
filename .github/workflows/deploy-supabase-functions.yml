@@ -1,0 +1,32 @@
+# Supabase 엣지함수 자동배포 — main에 push될 때 functions 폴더가 바뀌면 배포.
+# (Railway는 web·worker를 자동배포하지만 엣지함수는 Supabase 소관이라 이 Action이 담당)
+name: Deploy Supabase Edge Functions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "개발/앱/supabase/functions/**"
+  workflow_dispatch: {} # 수동 실행(검증용)
+
+jobs:
+  deploy:
+    # 푸시가 두 원격(dasgddadqw231/memoriaworks0617 · memoriaworks26/main)에 동시에 가므로,
+    # 한 곳에서만 실행해 중복 배포 방지.
+    if: github.repository == 'dasgddadqw231/memoriaworks0617'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy edge functions
+        working-directory: 개발/앱
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        # 슬러그 없이 deploy = functions 폴더의 모든 함수 배포
+        # (admin-provision · device-enroll · device-sync · send-email)
+        run: supabase functions deploy --project-ref mgybnsidmnzjfqtucfhl
