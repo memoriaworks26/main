@@ -11,18 +11,37 @@ import { Title, PhotoExampleGuide } from "./parts.jsx";
 
 const TRANSITIONS = D.USER_TRANSITIONS; // 전환 효과 명칭은 data.js에서 단일 관리
 
-// 미리보기 캔버스 슬라이드쇼 — 보호자 슬라이드 사진/영상 첫프레임을 크로스페이드로 순환(ffmpeg 슬라이드 구간을 클라이언트에서 모사).
+// 미리보기 캔버스 슬라이드쇼 — 보호자 슬라이드 사진을 순환하며, 각 사진이 등장할 때
+// 유저가 고른 전환 효과(USER_TRANSITIONS의 ffmpeg xfade 값)를 캔버스로 근사 재현한다.
+//   frames: [{ src, x }] — src=썸네일, x=그 사진으로 넘어올 때의 전환(ffmpeg xfade 명).
+//   (ffmpeg 최종 렌더와 100% 동일하진 않은 근사 미리보기 — 효과의 느낌/방향만 일치)
 function SlideCanvas({ frames }) {
   const ref = useRef(null);
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
     const ctx = cv.getContext("2d"); const W = cv.width, H = cv.height;
-    const imgs = frames.map((src) => { const im = new window.Image(); im.src = src; return im; }); // window.Image — lucide-react의 Image 아이콘 import와 이름충돌 회피(전역 생성자 명시)
+    const imgs = frames.map((f) => { const im = new window.Image(); im.src = f.src; return im; }); // window.Image — lucide-react의 Image 아이콘 import와 이름충돌 회피(전역 생성자 명시)
+    const xs = frames.map((f) => f.x || "fade"); // 각 사진의 전환 효과(ffmpeg xfade 명)
     // contain(fit) — 절대 crop 안 함. 전체가 보이도록 맞추고 남는 쪽은 여백(배경색). 세로사진=좌우 여백, 가로사진=상하 여백.
-    const drawContain = (im) => {
-      const ir = im.naturalWidth / im.naturalHeight, cr = W / H; let w, h, x, y;
-      if (ir > cr) { w = W; h = W / ir; x = 0; y = (H - h) / 2; } else { h = H; w = H * ir; x = (W - w) / 2; y = 0; }
-      ctx.drawImage(im, x, y, w, h);
+    const fit = (im) => { const ir = im.naturalWidth / im.naturalHeight, cr = W / H; return ir > cr ? { w: W, h: W / ir, x: 0, y: (H - W / ir) / 2 } : { w: H * ir, h: H, x: (W - H * ir) / 2, y: 0 }; };
+    const drawContain = (im) => { const r = fit(im); ctx.drawImage(im, r.x, r.y, r.w, r.h); };
+    const ready = (im) => im && im.complete && im.naturalWidth; // 방어적 — 미로딩/인덱스어긋남 시 .complete를 undefined에서 읽지 않게
+    const veil = (color, alpha) => { ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = color; ctx.fillRect(0, 0, W, H); ctx.restore(); };
+    // 전환 렌더 — pre(이전)→cur(현재)로 진행도 p(0~1)만큼 넘어가는 한 프레임을 그린다.
+    const renderTrans = (pre, cur, p, x) => {
+      const drawCur = () => ready(cur) && drawContain(cur);
+      const drawPre = () => ready(pre) && drawContain(pre);
+      switch (x) {
+        case "none": drawCur(); break; // 하드 컷 — 즉시 현재
+        case "fadeblack": if (p < 0.5) { drawPre(); veil("#000", p * 2); } else { drawCur(); veil("#000", (1 - p) * 2); } break;
+        case "fadewhite": if (p < 0.5) { drawPre(); veil("#fff", p * 2); } else { drawCur(); veil("#fff", (1 - p) * 2); } break;
+        case "wipeleft": drawPre(); ctx.save(); ctx.beginPath(); ctx.rect(W * (1 - p), 0, W * p, H); ctx.clip(); drawCur(); ctx.restore(); break;
+        case "slideleft": drawPre(); ctx.save(); ctx.translate(W * (1 - p), 0); drawCur(); ctx.restore(); break;
+        case "circleopen": drawPre(); ctx.save(); ctx.beginPath(); ctx.arc(W / 2, H / 2, (Math.hypot(W, H) / 2) * p, 0, Math.PI * 2); ctx.clip(); drawCur(); ctx.restore(); break;
+        case "radial": drawPre(); ctx.save(); ctx.beginPath(); ctx.moveTo(W / 2, H / 2); ctx.arc(W / 2, H / 2, Math.hypot(W, H), -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p); ctx.closePath(); ctx.clip(); drawCur(); ctx.restore(); break;
+        case "zoomin": drawPre(); ctx.save(); ctx.globalAlpha = p; const s = 0.7 + 0.3 * p; ctx.translate(W / 2, H / 2); ctx.scale(s, s); ctx.translate(-W / 2, -H / 2); drawCur(); ctx.restore(); break;
+        default: drawPre(); ctx.save(); ctx.globalAlpha = p; drawCur(); ctx.restore(); break; // fade·dissolve = 크로스페이드
+      }
     };
     const PER = 2600, FADE = 700; let raf; const t0 = performance.now();
     // 경과시간은 rAF 콜백 인자(now)가 아니라 performance.now()로 직접 계산한다.
@@ -32,10 +51,10 @@ function SlideCanvas({ frames }) {
       const n = imgs.length;
       ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H); // 여백색 = 최종 영상 ffmpeg pad(검정)과 일치(WYSIWYG)
       if (n) {
-        const e = performance.now() - t0, idx = Math.floor(e / PER) % n, prev = (idx - 1 + n) % n, a = Math.min(1, (e % PER) / FADE);
-        const cur = imgs[idx], pre = imgs[prev]; // 방어적 접근 — 인덱스가 어긋나도 .complete를 undefined에서 읽지 않게
-        if (n > 1 && pre?.complete && pre.naturalWidth) drawContain(pre);
-        if (cur?.complete && cur.naturalWidth) { ctx.globalAlpha = n > 1 ? a : 1; drawContain(cur); ctx.globalAlpha = 1; }
+        const e = performance.now() - t0, idx = Math.floor(e / PER) % n, prev = (idx - 1 + n) % n, p = Math.min(1, (e % PER) / FADE);
+        const cur = imgs[idx], pre = imgs[prev];
+        if (n > 1 && p < 1) renderTrans(pre, cur, p, xs[idx]); // 등장 전환 진행 중
+        else if (ready(cur)) drawContain(cur);                 // 전환 완료 후 정지 구간
       }
       raf = requestAnimationFrame(frame);
     };
@@ -491,7 +510,10 @@ export function StepBody({ step, st }) {
   // 5 — 미리보기 (ffmpeg 합성 전 — 슬라이드는 캔버스로, 영상은 직접 재생)
   if (step === 5) {
     // 추억 슬라이드 = 사진만 (영상은 아래 '추억 영상' 섹션에서 개별 클립으로 재생)
-    const slideFrames = st.slidePhotos.map((u) => u.thumb).filter(Boolean);
+    // 각 사진의 선택 전환(transMap[id] ?? 기본 trans)을 함께 넘겨 미리보기에 실제 효과 반영.
+    const slideFrames = st.slidePhotos
+      .map((u) => ({ src: u.thumb, x: TRANSITIONS[st.transMap[u.id] ?? st.trans]?.x || "fade" }))
+      .filter((f) => f.src);
     const playable = st.videos.filter((v) => v.url);
     return (
       <div>
