@@ -13,11 +13,7 @@ export const TERMS = [
   { key: "subject",  concept: "대상(고인)",     partner: "반려동물",   user: "반려동물 이름" },
   { key: "guardian", concept: "보호자",         partner: "보호자",     user: "보호자" },
   { key: "room",     concept: "빈소/호실",      partner: "호실",       user: "빈소" },
-  { key: "video",    concept: "추모영상",       partner: "추모영상",   user: "추모영상" },
-  { key: "letter",   concept: "편지",           partner: "추모 편지",  user: "편지" },
-  { key: "metDate",  concept: "처음 만난 날",   partner: "입양일",     user: "우리 처음 만난 날" },
-  { key: "partDate", concept: "떠난 날",        partner: "장례일",     user: "무지개다리 건넌 날" },
-  { key: "photo",    concept: "사진",           partner: "사진",       user: "사진 업로드" },
+  { key: "breed",    concept: "품종",           partner: "품종",       user: "품종" },
   { key: "checkout", concept: "퇴실",           partner: "퇴실",       user: "퇴실" },
 ];
 

@@ -10,7 +10,7 @@ import { Btn, PageHeader, Modal } from "../ui.jsx";
 import { useStore, actions } from "../store.js";
 import { toast } from "../toast.jsx";
 import * as D from "../data.js";
-import { usePartner } from "./shared.jsx";
+import { usePartner, usePartnerTerm } from "./shared.jsx";
 
 const SIG_GREEN = "#3a7468", LIVE_GOLD = "#a8782e", PAUSE_BLUE = "#3f5e87", STOP_BROWN = "#8a6f5a", WARN_AMBER = "#a8782e";
 
@@ -171,10 +171,11 @@ function LiveCard({ dev }) {
 // 알림 문구 편집기 — 다음 예약을 자동 치환해 소스 위에 띄울 안내 문구
 function NoticeEditor() {
   const PARTNER = usePartner();
+  const tp = usePartnerTerm(); // 사업부별 파트너 용어(빈소/호실 등)
   const { signageNotice, reservations } = useStore();
   const nextRes = nextReservation(reservations, PARTNER.id);
   const preview = fillNotice(signageNotice.template, nextRes);
-  const chips = [["{chief}", "보호자명"], ["{deceased}", "반려동물명"], ["{room}", "호실"], ["{slot}", "시간"], ["{date}", "날짜"]];
+  const chips = [["{chief}", "보호자명"], ["{deceased}", "반려동물명"], ["{room}", tp("room")], ["{slot}", "시간"], ["{date}", "날짜"]];
   return (
     <div className="mt-4 pt-4" style={{ borderTop: "1px solid " + LINE }}>
       <div className="mb-1.5 flex items-center justify-between">
@@ -205,6 +206,7 @@ function NoticeEditor() {
 
 // 소스 등록/관리 모달 — 한 카테고리(광고|대기|알림)의 표출 소스 목록 + 업로드/삭제/사용 토글
 function SourceManagerModal({ cat, onClose }) {
+  const tp = usePartnerTerm(); // 사업부별 파트너 용어(빈소/호실 등)
   const { signageSources } = useStore();
   const list = signageSources.filter((s) => s.cat === cat);
   const meta = CAT_META[cat];
@@ -242,7 +244,7 @@ function SourceManagerModal({ cat, onClose }) {
       <div className="max-h-[72vh] overflow-y-auto px-5 py-4">
         <div className="mb-2 flex items-start gap-1.5 px-3 py-2 text-[12px] leading-relaxed" style={{ background: "#faf8f3", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
           <Repeat className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: meta.color }} />
-          <span>표출할 <b style={{ color: INK }}>{meta.label}</b> 소스 1개를 선택하세요. 호실에서 {meta.label} 탭을 누르면 그 소스가 무한 반복됩니다.</span>
+          <span>표출할 <b style={{ color: INK }}>{meta.label}</b> 소스 1개를 선택하세요. {tp("room")}에서 {meta.label} 탭을 누르면 그 소스가 무한 반복됩니다.</span>
         </div>
 
         {/* 등록된 소스 목록 */}

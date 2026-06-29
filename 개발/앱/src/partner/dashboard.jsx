@@ -341,6 +341,7 @@ function TodayTimeline({ rows, onDetail }) {
 // 자사 현황판 (조회 — 편집·컨펌은 관리자 HQ가 수행)
 export function PDashboard({ onNew, onDetail }) {
   const PARTNER = usePartner();
+  const tp = usePartnerTerm(); // 사업부별 파트너 용어(빈소/호실 등)
   const { rooms, reservations, devices } = useStore(); // 목 DB — 호실 명칭·위치 편집 + 예약 + 사이니지 전파
   // 호실 ↔ 사이니지 디바이스 매핑(자사) — 실시간 표출 상태 표시용
   const myDevices = devices.filter((d) => d.partnerId === PARTNER.id);
@@ -383,7 +384,7 @@ export function PDashboard({ onNew, onDetail }) {
   // 표 표시용 정렬본(타임라인·호실/시간 셀의 충돌검사는 원본 todayRows 유지)
   // 컬럼·렌더는 관리자 고객관리와 동일하게 통일 — 자사 화면이라 '파트너사' 컬럼만 제외
   const { rows: todaySorted, sort, onSortChange } = useTableSort(todayRows.map(toCustomerRow), { value: customerSortValue });
-  const todayCols = CUSTOMER_COLS.filter((c) => c.key !== "partner" && c.key !== "date");
+  const todayCols = CUSTOMER_COLS.filter((c) => c.key !== "partner" && c.key !== "date").map((c) => c.key === "room" ? { ...c, label: tp("room") } : c);
 
   return (
     <div>
@@ -401,7 +402,7 @@ export function PDashboard({ onNew, onDetail }) {
         {/* 호실별 현황 헤더 + 버튼 — 4호실 우측 끝에 맞춰 정렬 */}
         <div className="mb-4 flex items-center justify-between">
           <div className="text-[13px] font-bold" style={{ color: INK }}>
-            호실별 현황 <span className="font-normal" style={{ color: FAINT }}>· 실시간 사이니지</span>
+            {tp("room")}별 현황 <span className="font-normal" style={{ color: FAINT }}>· 실시간 사이니지</span>
           </div>
           <div className="flex items-center gap-2">
             <Btn size="sm" onClick={() => onNew()}><Plus className="h-4 w-4" /> 신규 예약</Btn>
@@ -431,7 +432,7 @@ export function PDashboard({ onNew, onDetail }) {
         </div>
 
         {/* 오늘 예약 리스트 — 상세 진입 · 호실 변경 · 퇴실 처리 */}
-        <div className="mb-2 mt-6 text-[13px] font-bold" style={{ color: INK }}>오늘 예약 리스트 <span className="font-normal" style={{ color: FAINT }}>· 호실·시간 변경 · 퇴실 처리</span></div>
+        <div className="mb-2 mt-6 text-[13px] font-bold" style={{ color: INK }}>오늘 예약 리스트 <span className="font-normal" style={{ color: FAINT }}>· {tp("room")}·시간 변경 · 퇴실 처리</span></div>
         <Table cols={todayCols} rows={todaySorted} sort={sort} onSortChange={onSortChange} empty="오늘 예약이 없습니다." onRowClick={(r) => onDetail(r)} renderCell={(r, k) =>
           k === "deceased" ? <span style={{ fontFamily: SERIF, fontWeight: 700, color: INK }} className="hover:underline">{r.deceased}</span> :
           // 호실·시간 셀은 인라인 편집 컨트롤 — 셀 클릭이 상세 이동으로 번지지 않도록 차단

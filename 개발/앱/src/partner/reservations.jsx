@@ -14,6 +14,7 @@ import { TimeStepper, DragTimeline } from "./intake.jsx";
 
 export function PList({ onDetail, onNew }) {
   const PARTNER = usePartner();
+  const tp = usePartnerTerm(); // 사업부별 파트너 용어(빈소/호실 등)
   const { reservations } = useStore(); // 목 DB — 관리자 컨펌·발행이 자사 목록에 전파
   const [q, setQ] = useState("");
   const [sf, setSf] = useState("all"); // all | review | rendering | published
@@ -46,8 +47,8 @@ export function PList({ onDetail, onNew }) {
     );
   };
 
-  // 관리자 고객관리와 동일 컬럼 — 자사 화면이므로 '파트너사' 컬럼만 제외
-  const cols = CUSTOMER_COLS.filter((c) => c.key !== "partner");
+  // 관리자 고객관리와 동일 컬럼 — 자사 화면이므로 '파트너사' 컬럼 제외 + 호실 컬럼은 사업부 용어 적용
+  const cols = CUSTOMER_COLS.filter((c) => c.key !== "partner").map((c) => c.key === "room" ? { ...c, label: tp("room") } : c);
   const empty = base.length === 0
     ? "아직 접수된 예약이 없습니다. ‘신규 접수’에서 예약을 등록하세요."
     : "검색·필터 조건에 맞는 예약이 없습니다.";
@@ -100,7 +101,7 @@ export function ReservDetail({ reserv, onBack }) {
   // [QA-P1] 접수 정보(보호자·반려동물) — 예약접수에서 캡처한 실데이터(목업 제거)
   const guardianInfo = [
     { label: tp("subject") + " 이름", value: r.deceased || "—" },
-    { label: "품종", value: r.breed || "—" },
+    { label: tp("breed"), value: r.breed || "—" },
     { label: "나이", value: r.age || "—" },
     { label: tp("guardian") + " 성함", value: r.chief || "—" },
     { label: "연락처", value: r.phone || "—" },
@@ -204,7 +205,7 @@ export function ReservDetail({ reserv, onBack }) {
               </div>
               {(timeInvalid || slotConflict) && (
                 <div className="text-right text-[11px]" style={{ color: "#8a4b1c" }}>
-                  {timeInvalid ? "시작과 종료 시간이 같습니다" : "해당 호실·일시에 이미 예약이 있습니다"}
+                  {timeInvalid ? "시작과 종료 시간이 같습니다" : `해당 ${tp("room")}·일시에 이미 예약이 있습니다`}
                 </div>
               )}
               {overnight && !timeInvalid && (

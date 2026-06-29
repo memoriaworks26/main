@@ -315,11 +315,11 @@ export function Intake({ prefill } = {}) {
 
   return (
     <div style={{ maxWidth: 900 }}>
-      <PageHeader title="예약 접수" sub="날짜·호실·시간 → 보호자/반려동물 정보 → 확정 시 보호자 영상제작 URL 생성" />
+      <PageHeader title="예약 접수" sub={`날짜·${tp("room")}·시간 → 보호자/반려동물 정보 → 확정 시 보호자 영상제작 URL 생성`} />
       <div className="flex items-start gap-4">
         {/* 왼쪽: 날짜·호실·시간 */}
         <div className="min-w-0 flex-1">
-          <Card title="날짜 · 호실 · 시간">
+          <Card title={`날짜 · ${tp("room")} · 시간`}>
             <div className="flex flex-wrap items-start gap-x-8 gap-y-3">
               <div style={{ width: 180 }}><DateField label="날짜" value={date} onChange={setDate} req /></div>
               <div className="min-w-0 flex-1">
@@ -412,7 +412,7 @@ export function Intake({ prefill } = {}) {
           <Card title={tp("subject") + " 정보"}>
             <div className="space-y-3">
               {field("이름", "초코", true, petName, setPetName)}
-              {field("품종", "골든리트리버", false, breed, setBreed)}
+              {field(tp("breed"), "골든리트리버", false, breed, setBreed)}
               {field("나이", "15", false, age, setAge)}
             </div>
           </Card>
