@@ -134,33 +134,39 @@ function PromptCard({ p }) {
 //   「기본」으로 고른 프롬프트가 보호자 요청 시 자동 생성(1차 API 호출)에 사용됨. 편집기·편집컨펌 페이지 공용(export).
 export function PromptModal({ open, onClose }) {
   const store = useStore();
+  const [tab, setTab] = useState(PROMPT_TARGETS[0]); // 상단 탭 — 타깃(이미지1·이미지2·AI영상)별 분리
   useEffect(() => { if (open) actions.reloadPrompts(); }, [open]); // 편집기 밖(편집컨펌)에서 열어도 최신 목록 보장
+  const list = store.prompts.filter((p) => p.target === tab);
+  const active = list.find((p) => p.active) || list[0];
   return (
     <Modal open={open} onClose={onClose} width={500}>
       <div className="flex items-center justify-between px-4" style={{ height: 48, borderBottom: "1px solid " + LINE }}>
         <span className="text-[14px] font-bold" style={{ color: INK }}>기본 프롬프트 관리</span>
         <button onClick={onClose} className="p-1" style={{ color: FAINT }}><X className="h-4 w-4" /></button>
       </div>
-      <div className="max-h-[64vh] space-y-4 overflow-y-auto px-4 py-3">
+      {/* 상단 탭 — 타깃별로 구분(이미지1·이미지2·AI영상) */}
+      <div className="flex items-center gap-1.5 px-4 pt-3" style={{ borderBottom: "1px solid " + LINE, paddingBottom: 12 }}>
         {PROMPT_TARGETS.map((t) => {
-          const list = store.prompts.filter((p) => p.target === t);
-          const active = list.find((p) => p.active) || list[0];
+          const on = tab === t;
           return (
-            <div key={t}>
-              <div className="mb-2 flex items-center gap-2">
-                <span className="shrink-0 px-1.5 py-[1px] text-[11px] font-bold" style={{ background: "#e9eef5", color: "#3f5e87", borderRadius: 3 }}>{t}</span>
-                <span className="shrink-0 text-[11.5px] font-semibold" style={{ color: MUTE }}>기본</span>
-                <select value={active?.id || ""} onChange={(e) => actions.setPromptActive(e.target.value, t)} className="min-w-0 flex-1 px-2 py-1 text-[11.5px] outline-none" style={{ background: "#fff", border: "1px solid " + LINE2, borderRadius: 4, color: INK }}>
-                  {list.length === 0 && <option value="">없음 — 「추가」로 생성</option>}
-                  {list.map((p) => <option key={p.id} value={p.id}>{p.name}{p.active ? " ✓(기본)" : ""}</option>)}
-                </select>
-                <button onClick={() => actions.savePrompt({ target: t, name: "새 프롬프트", body: "" })} className="flex shrink-0 items-center gap-1 text-[12px] font-semibold" style={{ color: GOLD }}><Plus className="h-3.5 w-3.5" /> 추가</button>
-              </div>
-              {list.length > 0 && <div className="space-y-2">{list.map((p) => <PromptCard key={p.id} p={p} />)}</div>}
-            </div>
+            <button key={t} onClick={() => setTab(t)} className="px-3.5 py-2 text-[12.5px] font-bold outline-none transition focus-visible:ring-1"
+              style={{ borderRadius: RADIUS, background: on ? GOLD_SOFT : "transparent", color: on ? GOLD_D : MUTE, border: "1px solid " + (on ? GOLD : LINE) }}>
+              {t}
+            </button>
           );
         })}
-        <p className="text-[11.5px] leading-relaxed" style={{ color: FAINT }}>※ 「기본」으로 고른 프롬프트가 보호자 요청 시 자동 생성(1차 API)에 사용됩니다. 편집기에서는 건별로 다른 프롬프트를 골라 재생성할 수 있습니다.</p>
+      </div>
+      <div className="max-h-[60vh] overflow-y-auto px-4 py-3">
+        <div className="mb-2 flex items-center gap-2">
+          <span className="shrink-0 text-[11.5px] font-semibold" style={{ color: MUTE }}>기본</span>
+          <select value={active?.id || ""} onChange={(e) => actions.setPromptActive(e.target.value, tab)} className="min-w-0 flex-1 px-2 py-1 text-[11.5px] outline-none" style={{ background: "#fff", border: "1px solid " + LINE2, borderRadius: 4, color: INK }}>
+            {list.length === 0 && <option value="">없음 — 「추가」로 생성</option>}
+            {list.map((p) => <option key={p.id} value={p.id}>{p.name}{p.active ? " ✓(기본)" : ""}</option>)}
+          </select>
+          <button onClick={() => actions.savePrompt({ target: tab, name: "새 프롬프트", body: "" })} className="flex shrink-0 items-center gap-1 text-[12px] font-semibold" style={{ color: GOLD }}><Plus className="h-3.5 w-3.5" /> 추가</button>
+        </div>
+        {list.length > 0 && <div className="space-y-2">{list.map((p) => <PromptCard key={p.id} p={p} />)}</div>}
+        <p className="mt-4 text-[11.5px] leading-relaxed" style={{ color: FAINT }}>※ 「기본」으로 고른 프롬프트가 보호자 요청 시 자동 생성(1차 API)에 사용됩니다. 편집기에서는 건별로 다른 프롬프트를 골라 재생성할 수 있습니다.</p>
       </div>
       <div className="px-4 py-2.5" style={{ borderTop: "1px solid " + LINE }}>
         <button onClick={onClose} className="w-full py-2 text-[13px] font-bold" style={{ background: GOLD, color: "#fff", borderRadius: RADIUS }}>닫기</button>
