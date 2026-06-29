@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Pencil, Check, X, Play, ChevronRight, Plus } from "lucide-react";
 import { SURFACE, LINE, LINE2, INK, MUTE, FAINT, GOLD, SERIF } from "./theme.js";
+import { slotLabel } from "./partner/shared.jsx";
 import { Tag, Deceased } from "./ui.jsx";
 import { toast } from "./toast.jsx";
 import { confirm } from "./confirm.jsx";
@@ -86,6 +87,9 @@ export function RoomCard({ room, device, reserv, onOpen, onOpenReserv, readOnly,
               <>
                 <Deceased name={room.deceased} age={room.age} />
                 <div className="mt-1 text-[11px]" style={{ color: MUTE }}>보호자 {room.chief}</div>
+                {reserv?.slot && (
+                  <div className="mt-0.5 text-[11px] tabular-nums" style={{ color: FAINT }}>예약 {slotLabel(reserv.slot)}</div>
+                )}
                 {reserv && (onOpenReserv || onCheckout) && (
                   <div className="mt-2.5 flex items-center gap-2 border-t pt-2.5" style={{ borderColor: LINE }}>
                     {onOpenReserv && (
