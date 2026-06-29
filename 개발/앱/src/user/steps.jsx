@@ -203,7 +203,7 @@ export function StepBody({ step, st }) {
       a.play().then(() => setPlayingBgm(bi)).catch(() => { /* 자동재생 차단 등 */ });
     } catch { /* Audio 미지원 — 무음 폴백 */ }
   };
-  useEffect(() => stopPreview, []); // 언마운트 시 정지
+  useEffect(() => stopPreview, [step]); // 단계 이동·언마운트 시 미리듣기 자동 정지
   // 0 — 개인정보 동의
   if (step === 0)
     return (
@@ -486,7 +486,8 @@ export function StepBody({ step, st }) {
     );
   // 5 — 미리보기 (ffmpeg 합성 전 — 슬라이드는 캔버스로, 영상은 직접 재생)
   if (step === 5) {
-    const slideFrames = [...st.slidePhotos, ...st.videos].map((u) => u.thumb).filter(Boolean);
+    // 추억 슬라이드 = 사진만 (영상은 아래 '추억 영상' 섹션에서 개별 클립으로 재생)
+    const slideFrames = st.slidePhotos.map((u) => u.thumb).filter(Boolean);
     const playable = st.videos.filter((v) => v.url);
     return (
       <div>
