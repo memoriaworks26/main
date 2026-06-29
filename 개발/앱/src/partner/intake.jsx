@@ -11,6 +11,9 @@ import { toast } from "../toast.jsx";
 import * as D from "../data.js";
 import { usePartner, usePartnerTerm, pad2, minToStr, useCaseRooms, parseSlot, overlaps, endDateFor, slotLabel, TIMELINE_START, TIMELINE_END } from "./shared.jsx";
 
+// 예약접수 기본 날짜 — KST 기준 오늘(YYYY-MM-DD). DB reserve_date(date형)·필터(x.date===date)와 동일 포맷.
+const todayKST = () => { const k = new Date(Date.now() + 9 * 3600 * 1000); return k.getUTCFullYear() + "-" + pad2(k.getUTCMonth() + 1) + "-" + pad2(k.getUTCDate()); };
+
 // 드래그 타임라인 — 막대를 클릭·드래그해 시간대 선택. 기존 예약(blocked)은 넘어가지 못하도록 제한.
 // 끝 손잡이를 24:00 너머로 끌면 종료가 00:00 쪽으로 감겨 자정 넘김(익일) 선택이 된다(endMin<startMin).
 export function DragTimeline({ startMin, endMin, blocked, onChange }) {
@@ -239,8 +242,8 @@ export function Intake({ prefill } = {}) {
   const tp = usePartnerTerm(); // 사업부별 파트너 용어
   const { reservations } = useStore();
   const rooms = useCaseRooms().map((n) => ({ name: n }));  // [Phase4-1b] 현재 파트너 호실
-  // 호실 카드에서 들어온 경우 해당 호실·현재 시각을 시작값으로 프리필. 아니면 블락(빗금)이 보이는 기존 예약일을 기본으로.
-  const [date, setDate] = useState(prefill?.date || "2026-06-15");
+  // 호실 카드에서 들어온 경우 해당 호실·현재 시각을 시작값으로 프리필. 아니면 KST 오늘을 기본 날짜로.
+  const [date, setDate] = useState(prefill?.date || todayKST());
   const [room, setRoom] = useState(prefill?.room || rooms[0]?.name || "");
   const [sH, setSH] = useState(prefill?.sH ?? 9), [sM, setSM] = useState(prefill?.sM ?? 0);
   const [eH, setEH] = useState(prefill?.eH ?? 12), [eM, setEM] = useState(prefill?.eM ?? 0);
@@ -326,7 +329,7 @@ export function Intake({ prefill } = {}) {
                     const on = room === r.name;
                     const blocked = slotConflict(r.name);
                     return (
-                      <button key={r.id} type="button"
+                      <button key={r.name} type="button"
                         disabled={blocked && !on}
                         onClick={() => !blocked && setRoom(r.name)}
                         className="flex items-center gap-1.5 px-3.5 text-[13px] font-semibold tabular-nums outline-none transition"
