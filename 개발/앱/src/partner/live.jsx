@@ -1,5 +1,5 @@
 // [파트너] 사이니지 라이브 — 호실 디스플레이 장비 상태/제어, 음량·소스 관리.
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   AlertTriangle, Bell, Film, Image as ImageIcon, Megaphone, Monitor, Pause, Play,
   Plus, RefreshCw, Repeat, Settings2, Square, Trash2, Upload, Volume2, VolumeX,
@@ -13,6 +13,17 @@ import * as D from "../data.js";
 import { usePartner, usePartnerTerm } from "./shared.jsx";
 
 const SIG_GREEN = "#3a7468", LIVE_GOLD = "#a8782e", PAUSE_BLUE = "#3f5e87", STOP_BROWN = "#8a6f5a", WARN_AMBER = "#a8782e";
+
+// 실제 연결 판정 — 마지막 하트비트(device-sync 폴링)가 이 시간 내면 '연결됨'. 웹/파이 모두 3초 폴.
+const HEARTBEAT_MS = 20000;
+// 마지막 통신 경과 표시(초/분/시)
+function agoLabel(ts) {
+  if (!ts) return "—";
+  const s = Math.max(0, Math.floor((Date.now() - new Date(ts).getTime()) / 1000));
+  if (s < 60) return s + "초 전";
+  if (s < 3600) return Math.floor(s / 60) + "분 전";
+  return Math.floor(s / 3600) + "시간 전";
+}
 
 const CAT_META = {
   "광고": { icon: Megaphone, label: "광고", color: LIVE_GOLD },
@@ -113,13 +124,18 @@ function WebLinkRow({ room, connected }) {
 function LiveCard({ room, dev }) {
   const PARTNER = usePartner();
   const { signageSources, signageNotice, reservations } = useStore();
-  const connected = !!dev && !!dev.enrolled;             // 토큰 발급된(=실제 연결된) 디스플레이
-  const offline = connected && dev.status === "offline";
+  // 발급(provisioned)과 실제 연결(onlineNow)은 다르다 — 연결은 화면이 device-sync를 폴링(하트비트)할 때만.
+  const provisioned = !!dev && !!dev.enrolled;                          // 토큰 발급됨(=프로비저닝)
+  const lastMs = dev?.lastComm ? new Date(dev.lastComm).getTime() : 0;
+  const onlineNow = provisioned && lastMs > 0 && Date.now() - lastMs < HEARTBEAT_MS; // 최근 하트비트 = 표출 중
+  const everConnected = provisioned && lastMs > 0;
+  const waiting = provisioned && !onlineNow && !everConnected;          // 발급만 함 · 화면 아직 미접속
+  const offline = provisioned && !onlineNow && everConnected;           // 접속했다 끊김
   const mode = dev?.mode || "대기";
-  const play = dev?.play || (dev?.status === "live" ? "playing" : "stopped");
+  const play = dev?.play || "stopped";
   const setMode = (m) => actions.setDeviceMode(dev.id, m);
   const setPlay = (p) => actions.setDevicePlay(dev.id, p);
-  const live = connected && !offline && play === "playing";
+  const live = onlineNow && play === "playing";
 
   // 모드별 표출 콘텐츠 — 제작영상은 dev.playing, 그 외(광고·대기·알림)는 켜진 소스를 무한 반복
   const activeSrc = signageSources.find((s) => s.cat === mode && s.active);
@@ -127,15 +143,19 @@ function LiveCard({ room, dev }) {
   const noticeText = signageNotice.enabled ? fillNotice(signageNotice.template, nextReservation(reservations, PARTNER.id)) : "";
 
   let slateMain;
-  if (!connected) slateMain = "디스플레이 미연결";
-  else if (offline) slateMain = "신호 없음";
+  if (!provisioned) slateMain = "디스플레이 미연결";
+  else if (waiting) slateMain = "접속 대기 — 화면 링크를 호실 TV에서 여세요";
+  else if (offline) slateMain = "연결 끊김";
   else if (mode === "제작영상") slateMain = (dev.playing || "제작영상") + (live ? " 재생중" : " 대기");
   else if (activeSrc) slateMain = activeSrc.name + "\n" + modeLabel + (live ? " 무한 반복중" : " 일시정지");
   else slateMain = modeLabel + " 화면";
 
-  const slateBg = !connected ? "#232b35" : offline ? "#211d18" : live ? "#16231d" : "#1c232c";
+  const slateBg = !provisioned ? "#232b35" : waiting ? "#26303c" : offline ? "#211d18" : live ? "#16231d" : "#1c232c";
   const showNotice = live && mode === "알림" && noticeText;
-  const badge = !connected ? { t: "미연결", bg: "#3a4452", c: "#cfd6df" } : offline ? { t: "오프라인", bg: "#403a33", c: "#d8d0c2" } : { t: "연결됨", bg: "rgba(255,255,255,.92)", c: SIG_GREEN };
+  const badge = !provisioned ? { t: "미연결", bg: "#3a4452", c: "#cfd6df" }
+    : waiting ? { t: "접속 대기", bg: "#5a4a2a", c: "#f0dca8" }
+    : offline ? { t: "오프라인", bg: "#403a33", c: "#d8d0c2" }
+    : { t: "연결됨", bg: "rgba(255,255,255,.92)", c: SIG_GREEN };
 
   return (
     <div className="overflow-hidden" style={{ background: SURFACE, border: "1px solid " + LINE, borderRadius: 8 }}>
@@ -153,7 +173,7 @@ function LiveCard({ room, dev }) {
             </span>
           )
         )}
-        <span className="text-[12.5px]" style={{ color: !connected ? "rgba(207,214,223,.85)" : offline ? "#8a7676" : "rgba(243,239,230,.92)", whiteSpace: "pre-line" }}>{slateMain}</span>
+        <span className="text-[12.5px]" style={{ color: onlineNow ? "rgba(243,239,230,.92)" : "rgba(207,214,223,.82)", whiteSpace: "pre-line" }}>{slateMain}</span>
         {showNotice && (
           <span className="absolute inset-x-0 bottom-0 truncate px-3 py-1.5 text-left text-[11px] font-semibold text-white" style={{ background: "rgba(168,120,46,.92)" }}>{noticeText}</span>
         )}
@@ -163,25 +183,38 @@ function LiveCard({ room, dev }) {
       <div className="px-4 py-3.5">
         <div className="mb-0.5 flex items-center gap-2">
           <span className="text-[15px] font-bold" style={{ color: INK }}>{room.name || dev?.id || "호실"}</span>
+          {waiting && <span className="flex items-center gap-1 text-[12px] font-semibold" style={{ color: WARN_AMBER }}><Monitor className="h-3.5 w-3.5" /> 접속 대기</span>}
           {offline && <span className="flex items-center gap-1 text-[12px] font-semibold" style={{ color: STOP_BROWN }}><AlertTriangle className="h-3.5 w-3.5" /> 오프라인</span>}
         </div>
-        <div className="mb-3 text-[12px]" style={{ color: !connected ? FAINT : offline ? FAINT : live ? SIG_GREEN : MUTE }}>
-          {!connected ? "웹 화면 링크를 발급해 디스플레이를 연결하세요"
-            : offline ? "마지막 통신: " + (dev.lastComm || "—")
+        <div className="mb-3 text-[12px]" style={{ color: !provisioned ? FAINT : !onlineNow ? FAINT : live ? SIG_GREEN : MUTE }}>
+          {!provisioned ? "웹 화면 링크를 발급해 디스플레이를 연결하세요"
+            : waiting ? "발급됨 · 아직 화면이 접속하지 않음"
+            : offline ? "연결 끊김 · 마지막 통신 " + agoLabel(dev.lastComm)
             : mode === "제작영상" ? (live ? (dev.playing || "제작영상") + " 재생중" : "대기 모드")
             : modeLabel + (live ? " 무한 반복" : " 정지")}
         </div>
 
-        {!connected ? (
+        {!provisioned ? (
           <div className="px-3 py-2.5 text-[12.5px]" style={{ background: "#f4f1ea", border: "1px dashed " + LINE2, borderRadius: RADIUS, color: MUTE }}>
             이 호실에 연결된 화면이 없습니다. 아래 링크를 호실 TV(브라우저)에서 열면 자동 전체화면으로 표출됩니다.
           </div>
-        ) : offline ? (
+        ) : !onlineNow ? (
           <>
-            <div className="mb-2.5 px-3 py-2.5 text-[12.5px]" style={{ background: "#f1ece3", border: "1px solid #e4dcce", borderRadius: RADIUS, color: STOP_BROWN }}>장비가 응답하지 않습니다.</div>
-            <div className="space-y-2">
-              <button onClick={() => actions.refreshDevices()} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[12.5px] font-bold" style={{ borderRadius: RADIUS, border: "1px solid " + LINE2, color: INK }}><RefreshCw className="h-4 w-4" /> 상태 새로고침</button>
-              <button onClick={() => actions.sendDeviceCommand(dev.id, "restart")} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[12.5px] font-bold" style={{ borderRadius: RADIUS, border: "1.5px solid " + SIG_GREEN, color: SIG_GREEN }}><Play className="h-4 w-4" /> 플레이어 재시작</button>
+            <div className="mb-2.5 px-3 py-2.5 text-[12.5px]" style={{ background: "#f1ece3", border: "1px solid #e4dcce", borderRadius: RADIUS, color: waiting ? WARN_AMBER : STOP_BROWN }}>
+              {waiting
+                ? "링크는 발급됐지만 아직 어떤 화면도 접속하지 않았습니다. 호실 TV(브라우저)에서 링크를 열면 ‘연결됨’으로 바뀝니다."
+                : "화면이 응답하지 않습니다(탭 닫힘·네트워크 끊김). 링크를 다시 여세요."}
+            </div>
+            {/* 미접속이어도 모드·음량은 미리 설정해 둘 수 있음(연결되면 바로 반영) */}
+            <VolumeControl dev={dev} />
+            <div className="mb-1 grid grid-cols-4 gap-1.5">
+              {D.SIGNAGE_MODES.map((m) => {
+                const on = mode === m;
+                return (
+                  <button key={m} onClick={() => setMode(m)} className="py-2 text-[12px] font-bold outline-none transition focus-visible:ring-1"
+                    style={{ borderRadius: RADIUS, background: on ? INK : "#fff", color: on ? "#fff" : MUTE, border: "1px solid " + (on ? INK : LINE2) }}>{m}</button>
+                );
+              })}
             </div>
           </>
         ) : (
@@ -204,8 +237,8 @@ function LiveCard({ room, dev }) {
           </>
         )}
 
-        {/* 웹 화면 링크 — 미연결이면 연결, 연결돼 있으면 재발급·열기 */}
-        <WebLinkRow room={room} connected={connected} />
+        {/* 웹 화면 링크 — 미발급이면 발급·연결, 발급돼 있으면 재발급·열기 */}
+        <WebLinkRow room={room} connected={provisioned} />
       </div>
     </div>
   );
@@ -439,10 +472,19 @@ export function Live() {
     .map((d) => ({ room: { id: d.roomId, partnerId: d.partnerId, name: d.room || d.id }, dev: d }));
   const allCards = [...cards, ...orphans];
 
-  const connected = allCards.filter((c) => c.dev && c.dev.enrolled && c.dev.status !== "offline");
-  const liveN = connected.filter((c) => (c.dev.play || (c.dev.status === "live" ? "playing" : "stopped")) === "playing");
-  const offlineCards = allCards.filter((c) => c.dev && c.dev.enrolled && c.dev.status === "offline");
+  // 실제 연결(하트비트 최신) 기준 집계 — 발급만 한 건 '대기'로 분리.
+  const isOnline = (d) => d && d.enrolled && d.lastComm && Date.now() - new Date(d.lastComm).getTime() < HEARTBEAT_MS;
+  const connected = allCards.filter((c) => isOnline(c.dev));
+  const liveN = connected.filter((c) => (c.dev.play || "stopped") === "playing");
+  const offlineCards = allCards.filter((c) => c.dev && c.dev.enrolled && !isOnline(c.dev) && c.dev.lastComm);
+  const waitingCards = allCards.filter((c) => c.dev && c.dev.enrolled && !c.dev.lastComm);
   const unlinked = allCards.filter((c) => !c.dev || !c.dev.enrolled);
+
+  // 하트비트 반영 — 5초마다 조용히 상태 리페치(연결됨↔대기 자동 전환).
+  useEffect(() => {
+    const t = setInterval(() => actions.refreshDevices(true), 5000);
+    return () => clearInterval(t);
+  }, []);
 
   const [srcCat, setSrcCat] = useState(null); // 열린 소스 관리 모달 카테고리
   return (
@@ -454,7 +496,8 @@ export function Live() {
           <StatPill label="호실" n={myRooms.length} />
           <StatPill label="재생중" n={liveN.length} c={LIVE_GOLD} />
           <StatPill label="연결됨" n={connected.length} c={SIG_GREEN} />
-          <StatPill label="미연결" n={unlinked.length} c={STOP_BROWN} />
+          {waitingCards.length > 0 && <StatPill label="접속 대기" n={waitingCards.length} c={WARN_AMBER} />}
+          <StatPill label="미발급" n={unlinked.length} c={MUTE} />
           {offlineCards.length > 0 && <StatPill label="오프라인" n={offlineCards.length} c={STOP_BROWN} />}
         </div>
         {offlineCards.length > 0 && <DeviceAlerts offline={offlineCards.map((c) => ({ ...c.dev, room: c.room.name }))} />}

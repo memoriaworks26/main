@@ -58,11 +58,13 @@ async function sha256hex(s) {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 // 기존 디바이스에 새 웹 토큰 발급(기존 토큰/등록코드 폐기) → 평문 토큰 반환.
+//   주의: 발급=프로비저닝일 뿐 '연결'이 아니다. status는 pending으로 두고, 실제 화면이
+//   device-sync를 폴링해야 online + last_comm 으로 바뀐다. 이전 하트비트(last_comm)도 초기화.
 export async function issueWebToken(id) {
   const d = need();
   const token = randHex();
   const { error } = await d.from("signage_devices")
-    .update({ device_token_hash: await sha256hex(token), enroll_code: null, enroll_expires_at: null, status: "online" })
+    .update({ device_token_hash: await sha256hex(token), enroll_code: null, enroll_expires_at: null, status: "pending", last_comm: null })
     .eq("id", id);
   if (error) throw new Error("웹 토큰 발급 실패: " + error.message);
   return token;

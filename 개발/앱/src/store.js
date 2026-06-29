@@ -549,15 +549,15 @@ export const actions = {
       set({ devices });
       return signageUrlFor(token);
     }
-    // 목업 — 로컬 디바이스 생성(없으면)하고 데모 토큰 링크 반환(디스플레이는 데모 화면).
+    // 목업 — 로컬 디바이스 생성(없으면)하고 데모 토큰 링크 반환. 발급=프로비저닝(접속 대기), 연결 아님.
     let dev = state.devices.find((d) => d.roomId === room.id && d.partnerId === room.partnerId);
     const token = "demo" + Math.random().toString(36).slice(2, 10);
     if (!dev) {
       const id = "WEB-" + Date.now().toString(36).toUpperCase();
       const partner = state.partners.find((p) => p.id === room.partnerId);
-      set((s) => ({ devices: [...s.devices, { id, partnerId: room.partnerId, partner: partner?.name, roomId: room.id, room: room.name, status: "online", mode: "대기", volume: 50, muted: false, enrolled: true }] }));
+      set((s) => ({ devices: [...s.devices, { id, partnerId: room.partnerId, partner: partner?.name, roomId: room.id, room: room.name, status: "pending", mode: "대기", volume: 50, muted: false, enrolled: true, lastComm: null }] }));
     } else {
-      set((s) => ({ devices: mapById(s.devices, dev.id, { enrolled: true, status: "online" }) }));
+      set((s) => ({ devices: mapById(s.devices, dev.id, { enrolled: true, status: "pending", lastComm: null }) }));
     }
     return signageUrlFor(token);
   },
@@ -570,7 +570,7 @@ export const actions = {
       set({ devices });
       return signageUrlFor(token);
     }
-    set((s) => ({ devices: mapById(s.devices, id, { enrolled: true, status: "online" }) }));
+    set((s) => ({ devices: mapById(s.devices, id, { enrolled: true, status: "pending", lastComm: null }) }));
     return signageUrlFor("demo" + Math.random().toString(36).slice(2, 10));
   },
 
