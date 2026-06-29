@@ -770,6 +770,19 @@ export const actions = {
     }
     set((s) => ({ partners: mapById(s.partners, id, patch) }));
   },
+  // 파트너 호실 수 변경 시 rooms 테이블 동기화(파트너 행의 rooms 컬럼은 updatePartner가 처리).
+  //   늘면 추가/줄면 뒤쪽 삭제 — 더미 모드는 rooms 테이블 미사용이라 무시.
+  syncPartnerRooms: (id, count) => {
+    if (!LIVE) return;
+    roomsData.syncRoomsForPartner(id, count).catch((e) => toast("호실 동기화 실패: " + e.message));
+  },
+  // 파트너 비밀번호 초기화(임시비번 = ID 코드) — edge function. UI는 결과만 토스트.
+  resetPartnerPw: (id) => {
+    if (!LIVE) { toast("초기 비밀번호(ID 코드와 동일)로 초기화되었습니다"); return; }
+    accountsData.resetPartnerPassword(id)
+      .then(() => toast("초기 비밀번호(ID 코드와 동일)로 초기화되었습니다"))
+      .catch((e) => toast("비밀번호 초기화 실패: " + e.message));
+  },
 
   // 정산 매출 건 (추가·금액수정·삭제) [Phase4-5 배선]
   addSettlementItem: (item) => {

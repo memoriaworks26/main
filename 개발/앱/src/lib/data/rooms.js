@@ -39,3 +39,38 @@ export async function createRoomsForPartner(partnerId, count) {
   if (error) throw new Error(error.message);
   return (data || []).map(mapRoom);
 }
+
+// 파트너 호실 수를 target에 맞춰 동기화(파트너사 수정에서 호실 수 변경 시).
+//   늘면 뒤에 추가 / 줄면 정렬 큰(뒤쪽) 호실부터 삭제.
+//   삭제해도 reservations·signage_devices.room_id 는 on delete set null → 예약·디바이스는 보존(연결만 해제).
+export async function syncRoomsForPartner(partnerId, targetCount) {
+  const d = need();
+  const target = Math.max(0, Math.min(50, Number(targetCount) || 0));
+  const { data: cur, error: e0 } = await d.from("rooms")
+    .select("id, name, sort_order").eq("partner_id", partnerId).order("sort_order");
+  if (e0) throw new Error("호실 조회 실패: " + e0.message);
+  const rooms = cur || [];
+  if (target === rooms.length) return await fetchRooms(partnerId);
+  if (target > rooms.length) {
+    // 추가 — 이름 중복(unique partner_id,name) 회피하며 다음 번호부터 채움.
+    const taken = new Set(rooms.map((r) => r.name));
+    const baseSort = rooms.length ? Math.max(...rooms.map((r) => r.sort_order)) + 1 : 0;
+    const add = [];
+    let n = rooms.length;
+    while (add.length < target - rooms.length) {
+      n += 1;
+      const name = `${n}호실`;
+      if (taken.has(name)) continue; // 이미 쓰는 이름이면 다음 번호로
+      taken.add(name);
+      add.push({ partner_id: partnerId, name, floor: "1층", type: "case", sort_order: baseSort + add.length });
+    }
+    const { error } = await d.from("rooms").insert(add);
+    if (error) throw new Error("호실 추가 실패: " + error.message);
+  } else {
+    // 줄이기 — 정렬 큰(뒤쪽) 초과분 삭제.
+    const remove = rooms.slice(target).map((r) => r.id);
+    const { error } = await d.from("rooms").delete().in("id", remove);
+    if (error) throw new Error("호실 삭제 실패: " + error.message);
+  }
+  return await fetchRooms(partnerId);
+}

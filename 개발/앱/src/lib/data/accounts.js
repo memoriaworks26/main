@@ -42,3 +42,14 @@ export const provisionPartner = (partnerId) => invoke({ kind: "partner", partner
 export const deleteAccount = (authUserId) => invoke({ kind: "delete", authUserId });
 // 비밀번호 초기화(임시비번 = 아이디/ID코드) — 마스터만. 반환: { ok, tempPassword }.
 export const resetPassword = (authUserId) => invoke({ kind: "reset", authUserId });
+
+// 파트너 비밀번호 초기화 — partner_members에서 auth_user_id 해석 후 reset.
+//   master는 RLS(pm_self_read: is_master)로 partner_members 조회 가능.
+export async function resetPartnerPassword(partnerId) {
+  const d = need();
+  const { data, error } = await d.from("partner_members")
+    .select("auth_user_id").eq("partner_id", partnerId).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data?.auth_user_id) throw new Error("이 파트너의 로그인 계정을 찾을 수 없습니다");
+  return resetPassword(data.auth_user_id);
+}

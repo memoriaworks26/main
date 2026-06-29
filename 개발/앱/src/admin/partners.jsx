@@ -155,18 +155,32 @@ function PartnerDetail({ partner: p, onBack, go }) {
   const { partners, reservations, devices } = store;
   const [editing, setEditing] = useState(false);
   // 건당 단가는 [정산 내역]에서 관리 — 파트너사 편집에서는 다루지 않음
-  const seed = () => ({ idCode: p.idCode || "", name: p.name, region: p.region, manager: p.manager, phone: p.phone || "", logo: p.logo || "", memo: p.memo || "", active: p.active });
+  const seed = () => ({ idCode: p.idCode || "", name: p.name, region: p.region, manager: p.manager, phone: p.phone || "", rooms: String(p.rooms ?? ""), logo: p.logo || "", memo: p.memo || "", active: p.active });
   const [f, setF] = useState(seed);
   const startEdit = () => { setF(seed()); setEditing(true); };
   const cancelEdit = () => setEditing(false);
   const idCode = f.idCode.trim();
   const dupCode = !!idCode && partners.some((x) => x.id !== p.id && String(x.idCode || "").toLowerCase() === idCode.toLowerCase());
-  const canSave = !!f.name.trim() && idCode.length >= 6 && !dupCode;
+  const roomsN = num(f.rooms);                       // 호실 수 — 변경 시 rooms 테이블도 동기화
+  const roomsValid = roomsN >= 1 && roomsN <= 50;
+  const canSave = !!f.name.trim() && idCode.length >= 6 && !dupCode && roomsValid;
   const save = async () => {
     if (!canSave) return;
-    if (!(await confirm({ title: "파트너사 정보 저장", message: "변경한 파트너사 정보를 저장합니다." }))) return;
-    actions.updatePartner(p.id, { idCode, name: f.name.trim(), region: f.region.trim(), manager: f.manager.trim(), phone: f.phone.trim(), logo: f.logo || "", memo: f.memo.trim(), active: f.active });
+    const roomsChanged = roomsN !== p.rooms;
+    const decreasing = roomsChanged && roomsN < p.rooms;
+    const msg = decreasing
+      ? `변경한 파트너사 정보를 저장합니다.\n호실 수를 ${p.rooms} → ${roomsN}로 줄이면 뒤쪽 호실 ${p.rooms - roomsN}개가 삭제됩니다(연결된 예약·사이니지는 호실 연결만 해제).`
+      : "변경한 파트너사 정보를 저장합니다.";
+    if (!(await confirm({ title: "파트너사 정보 저장", message: msg, confirmLabel: decreasing ? "삭제하고 저장" : "확인", danger: decreasing }))) return;
+    actions.updatePartner(p.id, { idCode, name: f.name.trim(), region: f.region.trim(), manager: f.manager.trim(), phone: f.phone.trim(), rooms: roomsN, logo: f.logo || "", memo: f.memo.trim(), active: f.active });
+    if (roomsChanged) actions.syncPartnerRooms(p.id, roomsN);  // rooms 테이블 추가/삭제 반영
     setEditing(false);
+  };
+  // 파트너 로그인 비밀번호 초기화 — 초기 비밀번호(ID 코드)로 되돌림(상세에서 호출).
+  const resetPw = async () => {
+    if (!p.idCode) { return; }
+    if (!(await confirm({ title: "비밀번호 초기화", message: `${p.name}의 로그인 비밀번호를 초기 비밀번호(ID 코드: ${p.idCode})로 초기화합니다.\n첫 로그인 시 비밀번호 변경이 필요합니다.`, confirmLabel: "초기화" }))) return;
+    actions.resetPartnerPw(p.id);
   };
   const rs = reservations.filter((r) => r.partner === p.name);
   const dv = devices.filter((d) => d.partner === p.name);
@@ -212,7 +226,18 @@ function PartnerDetail({ partner: p, onBack, go }) {
               {editRow("지역", "region")}
               {editRow("담당자", "manager")}
               {editRow("담당자 전화번호", "phone", { inputMode: "tel", placeholder: "010-0000-0000" })}
-              {row("호실 수", p.rooms + "실")}
+              <label className="flex items-center justify-between gap-3 text-[13px]">
+                <span className="shrink-0" style={{ color: MUTE }}>호실 수</span>
+                <input value={f.rooms} onChange={(e) => setF((s) => ({ ...s, rooms: e.target.value }))} inputMode="numeric" placeholder="1"
+                  className="w-44 px-2.5 text-[13px] outline-none focus-visible:ring-1" style={{ height: 32, background: SURFACE, border: "1px solid " + (roomsValid ? LINE : "#8a4b1c"), borderRadius: RADIUS, color: INK }} />
+              </label>
+              {!roomsValid
+                ? <div className="text-right text-[10.5px]" style={{ color: "#8a4b1c" }}>호실 수는 1~50 사이여야 합니다</div>
+                : roomsN !== p.rooms && (
+                  <div className="text-right text-[10.5px]" style={{ color: roomsN < p.rooms ? "#8a4b1c" : FAINT }}>
+                    {roomsN > p.rooms ? `호실 ${roomsN - p.rooms}개가 추가됩니다` : `뒤쪽 호실 ${p.rooms - roomsN}개가 삭제됩니다 (예약·사이니지는 연결만 해제)`}
+                  </div>
+                )}
               <label className="flex items-center justify-between text-[13px]">
                 <span style={{ color: MUTE }}>운영 상태</span>
                 <button type="button" onClick={() => setF((s) => ({ ...s, active: !s.active }))}
@@ -236,7 +261,13 @@ function PartnerDetail({ partner: p, onBack, go }) {
               {row("담당자 전화번호", p.phone || "—")}
               {row("고유 코드", p.id)}
               {row("ID 코드", <span className="flex items-center gap-1.5">{p.idCode || "—"}{p.idCode && <CopyBtn text={p.idCode} />}</span>)}
-              {row("초기 비밀번호", <span className="flex items-center gap-1.5"><span style={{ color: GOLD_D }}>{p.idCode || "—"}</span>{p.idCode && <CopyBtn text={p.idCode} />}</span>)}
+              {row("초기 비밀번호", <span className="flex items-center gap-1.5">
+                <span style={{ color: GOLD_D }}>{p.idCode || "—"}</span>
+                {p.idCode && <CopyBtn text={p.idCode} />}
+                {p.idCode && <button type="button" onClick={resetPw}
+                  className="ml-1 px-2 py-0.5 text-[11px] font-semibold outline-none hover:bg-black/[.02]"
+                  style={{ border: "1px solid " + LINE2, color: GOLD_D, borderRadius: RADIUS }}>비밀번호 초기화</button>}
+              </span>)}
               {row("호실 수", p.rooms + "실")}
               {row("계약일", <span className="tabular-nums">{p.contractDate || "—"}</span>)}
               <div className="pt-1 text-[13px]">
