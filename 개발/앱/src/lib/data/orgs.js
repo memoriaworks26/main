@@ -70,6 +70,17 @@ export async function updatePartner(id, patch) {
   return mapPartner(data);
 }
 
+// 파트너사 삭제 — 호실·멤버·디바이스·사이니지소스·폼설정은 DB가 CASCADE 자동삭제.
+//   예약·정산·발행영상·콘텐츠 자산 등 RESTRICT 참조가 있으면 DB가 거부 → 친절한 안내로 변환.
+export async function deletePartner(id) {
+  const d = need();
+  const { error } = await d.from("partners").delete().eq("id", id);
+  if (error) {
+    if (error.code === "23503") throw new Error("연결된 데이터(예약·정산·발행 영상·콘텐츠 자산 등)가 있어 삭제할 수 없습니다. 먼저 정리하거나 '비활성'으로 전환하세요.");
+    throw new Error(error.message);
+  }
+}
+
 export async function createBizUnit(name) {
   const d = need();
   const { data, error } = await d.from("biz_units").insert({ name }).select().single();

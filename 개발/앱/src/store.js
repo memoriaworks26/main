@@ -828,6 +828,27 @@ export const actions = {
     if (!LIVE) return;
     roomsData.syncRoomsForPartner(id, count).catch((e) => toast("호실 동기화 실패: " + e.message));
   },
+  // 파트너사 삭제 — 호실·멤버·디바이스·사이니지소스·폼설정은 서버 CASCADE, 예약·정산·발행영상·콘텐츠는 RESTRICT(DB가 차단).
+  //   성공 시 로컬에서 파트너·템플릿·연결 디바이스/콘텐츠를 함께 제거. 되돌릴 수 없음.
+  removePartner: (id) => {
+    const apply = (s) => {
+      const templates = { ...s.templates }; delete templates[id];
+      return {
+        partners: s.partners.filter((p) => p.id !== id),
+        templates,
+        content: s.content.filter((c) => c.partnerId !== id),
+        devices: s.devices.filter((d) => d.partnerId !== id),
+      };
+    };
+    if (LIVE) {
+      orgs.deletePartner(id)
+        .then(() => { set(apply); toast("파트너사를 삭제했습니다."); })
+        .catch((e) => toast("파트너 삭제 실패: " + e.message));
+      return;
+    }
+    set(apply);
+    toast("파트너사를 삭제했습니다.");
+  },
   // 파트너 비밀번호 초기화(임시비번 = ID 코드) — edge function. UI는 결과만 토스트.
   resetPartnerPw: (id) => {
     if (!LIVE) { toast("초기 비밀번호(ID 코드와 동일)로 초기화되었습니다"); return; }

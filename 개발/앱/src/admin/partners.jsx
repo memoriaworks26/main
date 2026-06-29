@@ -1,7 +1,7 @@
 // [총괄] 파트너사 관리 — 목록·상세·신규 등록 모달.
 import React, { useState, useEffect } from "react";
 import {
-  Check, ChevronRight, Plus, Search, X, Upload, Image as ImageIcon,
+  Check, ChevronRight, Plus, Search, X, Upload, Image as ImageIcon, Trash2,
 } from "lucide-react";
 import { SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, STATUS, RADIUS } from "../theme.js";
 import { Tag, Btn, Card, Summary, Table, PageHeader, Modal, CopyBtn, useTableSort } from "../ui.jsx";
@@ -192,6 +192,12 @@ function PartnerDetail({ partner: p, onBack, go }) {
     if (!(await confirm({ title: "비밀번호 초기화", message: `${p.name}의 로그인 비밀번호를 초기 비밀번호(ID 코드: ${p.idCode})로 초기화합니다.\n첫 로그인 시 비밀번호 변경이 필요합니다.`, confirmLabel: "초기화" }))) return;
     actions.resetPartnerPw(p.id);
   };
+  // 파트너사 삭제 — 호실·계정·사이니지 설정은 함께 삭제, 예약·정산·발행영상·콘텐츠가 있으면 거부됨. 삭제 후 목록으로.
+  const removePartner = async () => {
+    if (!(await confirm({ title: "파트너사 삭제", message: `"${p.name}"을(를) 완전히 삭제합니다.\n호실·로그인 계정·사이니지 설정도 함께 삭제됩니다.\n연결된 예약·정산·발행 영상·콘텐츠 자산이 있으면 삭제되지 않습니다.\n이 작업은 되돌릴 수 없습니다.`, confirmLabel: "삭제", danger: true }))) return;
+    actions.removePartner(p.id);
+    onBack && onBack();
+  };
   const rs = reservations.filter((r) => r.partnerId === p.id);
   const dv = devices.filter((d) => d.partnerId === p.id);
   const settle = partnerSettle(store, p.id);  // [QA-P1] store 매출·입금에서 집계(목업 제거)
@@ -284,6 +290,15 @@ function PartnerDetail({ partner: p, onBack, go }) {
               <div className="pt-1 text-[13px]">
                 <div className="mb-1" style={{ color: MUTE }}>비고</div>
                 <div className="px-2.5 py-2 whitespace-pre-wrap" style={{ background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS, color: p.memo ? INK : FAINT, minHeight: 36 }}>{p.memo || "메모 없음"}</div>
+              </div>
+              {/* 파트너사 삭제 — 연결 데이터(예약·정산·발행영상·콘텐츠)가 있으면 DB가 거부. 신중한 작업이라 본문 하단에 분리 배치. */}
+              <div className="flex items-center justify-between pt-3" style={{ borderTop: "1px solid " + LINE }}>
+                <span className="text-[11.5px]" style={{ color: FAINT }}>삭제 시 호실·로그인 계정·사이니지 설정도 함께 삭제됩니다.</span>
+                <button type="button" onClick={removePartner}
+                  className="inline-flex shrink-0 items-center gap-1.5 px-3 text-[12.5px] font-semibold outline-none transition hover:opacity-80"
+                  style={{ height: 32, borderRadius: RADIUS, color: "#c0392b", border: "1px solid " + LINE2, background: SURFACE }}>
+                  <Trash2 className="h-3.5 w-3.5" /> 파트너사 삭제
+                </button>
               </div>
             </div>
           )}
