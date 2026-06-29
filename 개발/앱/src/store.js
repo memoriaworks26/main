@@ -965,13 +965,23 @@ export const actions = {
 
   // ── 일괄 커밋(저장 버튼) — 초안을 한 번에 반영 ──
   replaceTemplates: (templates) => {                                            // 영상 템플릿 전체 교체(저장 버튼) [Phase4-4]
-    if (LIVE) {
-      tpl.upsertMany(templates)
-        .then(() => set({ templates }))
-        .catch((e) => toast("템플릿 저장 실패: " + e.message));
-      return;
-    }
-    set({ templates });
+    if (!LIVE) { set({ templates }); return; }
+    const prev = state.templates || {};
+    // 바뀐 파트너 템플릿만 개별 upsert. 과거엔 전체를 한 배치(upsertMany)로 올려, __default__(master 전용)나
+    // 타 사업부 행 하나만 RLS에 걸려도 배치 전부가 실패 → 다른 파트너의 클립 assetId 등이 통째로 저장 안 됐다.
+    const changed = Object.keys(templates).filter((pid) => JSON.stringify(templates[pid]) !== JSON.stringify(prev[pid]));
+    if (!changed.length) { set({ templates }); return; }
+    Promise.allSettled(changed.map((pid) => tpl.upsertTemplate(pid, templates[pid]).then(() => pid)))
+      .then((results) => {
+        const ok = new Set(results.filter((r) => r.status === "fulfilled").map((r) => r.value));
+        // 성공한 파트너만 스토어 반영 — 실패분은 옛 상태 유지(화면이 DB 진실과 어긋나지 않게).
+        if (ok.size) set((s) => ({ templates: { ...s.templates, ...Object.fromEntries(changed.filter((p) => ok.has(p)).map((p) => [p, templates[p]])) } }));
+        const failed = changed.filter((p) => !ok.has(p));
+        if (failed.length) {
+          const why = results.find((r) => r.status === "rejected");
+          toast("템플릿 저장 실패(" + failed.join(", ") + ")" + (why ? " — " + (why.reason?.message || why.reason) : ""));
+        }
+      });
   },
   setPartnerPrices: (priceMap) => {
     if (LIVE) {
