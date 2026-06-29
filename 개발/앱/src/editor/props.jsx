@@ -215,7 +215,7 @@ function GenHistory({ results = [] }) {
   );
 }
 
-export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, reservation, bgmName, media, onGenerate, sel }) {
+export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, reservation, partnerId, bgmName, media, onGenerate, sel }) {
   const [promptModal, setPromptModal] = useState(false); // AI 문구 관리 모달
   let item;
   if (sel.scope === "block") item = blocks.find((b) => b.id === sel.id);
@@ -252,10 +252,12 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
   const transKey = "trans-" + sel.id;
   const effect = (edits[transKey] && edits[transKey].effect) || blockTrans(sel.id);
   const _store = useStore();                    // BGM 설정(파트너 템플릿)
-  const _pid = reservation?.partnerId;
+  const _pid = partnerId || reservation?.partnerId; // 파트너 스코프 통일(VideoEditor가 이름매칭으로 해결한 id 우선)
   const _tb = (_pid && _store.templates?.[_pid]) || {};
   const bgmVol = _tb.bgmVol ?? 70, bgmFadeIn = _tb.bgmFadeIn ?? 1, bgmFadeOut = _tb.bgmFadeOut ?? 2;
   // 추억 슬라이드 — 실제 보호자 사진(없으면 목업 폴백) + 사진 사이 전환(기본 페이드).
+  const _slideMock = !_slidePhotos.length;  // 실제 업로드 사진 없음/로딩 전 → 샘플(렌더엔 안 들어감)
+  const _vidMock = !_memoryVideos.length;   // 실제 보호자 영상 없음/로딩 전 → 샘플
   const slideSrcs = _slidePhotos.length ? _slidePhotos.map((a) => a.url) : SLIDE_PHOTOS;
   const slideTrans = item.slideTrans || slideSrcs.slice(1).map(() => "페이드");
   const setSlideTrans = (i, v) => { const n = slideTrans.slice(); n[i] = v; onEdit(item.id, { slideTrans: n }); };
@@ -316,6 +318,7 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
         {k === "clip" && <SoundField label="클립 소리 크기" value={item.volume} onChange={(val) => onEdit(item.id, { volume: val })} />}
         {k === "slide" && (
           <>
+            {_slideMock && <div className="mb-2 px-3 py-2 text-[11px] leading-relaxed" style={{ background: "#fbf3e6", border: "1px solid #ecd9b0", borderRadius: RADIUS, color: "#8a6d3b" }}>샘플 미리보기입니다 — 실제 업로드 사진이 아직 없거나 불러오는 중이라, 아래 사진은 최종 렌더에 들어가지 않습니다.</div>}
             <Field label={`사진 조합 · 사이 전환 (${slideSrcs.length}장 · 장당 7~10초 · 총 2분30초 이내)`}>
               <div className="max-h-[260px] overflow-y-auto px-2.5 py-2.5" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS }}>
                 {slideSrcs.map((src, i) => (
@@ -357,10 +360,11 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
             <div className="mt-5 border-t pt-4" style={{ borderColor: LINE }}>
               <div className="mb-2 flex items-center gap-1.5 text-[12.5px] font-bold" style={{ color: INK }}><Music className="h-4 w-4" style={{ color: GOLD_D }} /> 배경 음악 <span className="font-normal" style={{ color: FAINT }}>· 추억 슬라이드(사진)에만</span></div>
               <p className="mb-2 text-[11px] leading-relaxed" style={{ color: FAINT }}>※ 추억 영상(보호자 영상)에는 BGM이 들어가지 않고 원본 사운드가 유지됩니다.</p>
+              {!_pid && <div className="mb-2 px-3 py-2 text-[11px] leading-relaxed" style={{ background: "#fbeaea", border: "1px solid #e6c6c6", borderRadius: RADIUS, color: "#9a3b3b" }}>이 예약에 파트너가 연결되지 않아 배경 음악 설정이 저장되지 않습니다.</div>}
               <Field label="지금 음악">
                 <div className="px-3 py-2.5 text-[12.5px]" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: INK }}>{bgmName}</div>
-                {reservation?.partnerId ? (
-                  <FileButton accept="audio/*" onFile={(f) => actions.uploadBgm(reservation.partnerId, f)}
+                {_pid ? (
+                  <FileButton accept="audio/*" onFile={(f) => actions.uploadBgm(_pid, f)}
                     className="mt-2 flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}>
                     <Upload className="h-4 w-4" /> 음악 파일 업로드
                   </FileButton>
@@ -382,6 +386,7 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
           const vids = _memoryVideos.length ? _memoryVideos : (D.USER_UPLOADS || []).filter((u) => u.kind === "video");
           return (
           <>
+            {_vidMock && <div className="mb-2 px-3 py-2 text-[11px] leading-relaxed" style={{ background: "#fbf3e6", border: "1px solid #ecd9b0", borderRadius: RADIUS, color: "#8a6d3b" }}>샘플 미리보기입니다 — 실제 보호자 영상이 아직 없거나 불러오는 중입니다.</div>}
             <Field label={`보호자 영상 (${vids.length}개 · 슬라이드 뒤 개별 클립)`}>
               <div className="space-y-2 px-2.5 py-2.5" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS }}>
                 {vids.length === 0
@@ -433,6 +438,7 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
 
         {k === "letter" && (
           <>
+            {!(item.text != null || media?.letter) && <div className="mb-2 px-3 py-2 text-[11px] leading-relaxed" style={{ background: "#fbf3e6", border: "1px solid #ecd9b0", borderRadius: RADIUS, color: "#8a6d3b" }}>샘플 편지입니다 — 보호자가 작성한 편지가 아직 없거나 불러오는 중입니다.</div>}
             {/* 보호자(유저) 입력을 기본값으로 — 편집하면 그 값이 실시간으로 미리보기에 반영 */}
             <Field label="우리 처음 만난 날"><DateField value={item.metDate ?? media?.metDate ?? reservation?.metDate ?? ""} onChange={(d) => onEdit(item.id, { metDate: d })} /></Field>
             <Field label="무지개다리 건넌 날"><DateField value={item.partDate ?? media?.partDate ?? reservation?.partDate ?? ""} onChange={(d) => onEdit(item.id, { partDate: d })} /></Field>

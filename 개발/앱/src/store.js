@@ -229,6 +229,13 @@ export const actions = {
     if (!LIVE || !reservationId) return;
     subs.requestCompose(reservationId).catch((e) => toast("합성 요청 실패: " + e.message));
   },
+  // 편집기 편집본 저장 — submissions.edit_doc. 순서/숨김/전환/편지/자막/소리를 워커 compose가 다음 렌더부터 반영.
+  //   반환 Promise(편집기 save()가 완료 토스트를 띄울 수 있게). 로컬 미디어 캐시도 즉시 갱신.
+  saveEditDoc: (reservationId, submissionId, payload) => {
+    if (!LIVE || !submissionId) return Promise.resolve();
+    return subs.saveEditDoc(submissionId, payload)
+      .then(() => set((s) => { const m = s.reservationMedia[reservationId]; return m ? { reservationMedia: { ...s.reservationMedia, [reservationId]: { ...m, editDoc: payload } } } : {}; }));
+  },
   // 편집기용 보호자 자산(서명URL) — 예약별 캐시. 편집기 진입 시 로드.
   loadReservationMedia: (reservationId) => {
     if (!LIVE || !reservationId) return;

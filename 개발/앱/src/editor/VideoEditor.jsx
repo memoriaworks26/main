@@ -8,7 +8,7 @@ import { toast } from "../toast.jsx";
 import { confirm } from "../confirm.jsx";
 import * as D from "../data.js";
 import { useStore, actions, submissionFor } from "../store.js";
-import { buildBlocks } from "./blocks.js";
+import { buildBlocks, buildRenderPlan } from "./blocks.js";
 import { BlockList, Timeline } from "./timeline.jsx";
 import { Preview } from "./preview.jsx";
 import { PropPanel } from "./props.jsx";
@@ -19,12 +19,14 @@ const EMPTY = []; // 안정 참조(미노출 없음 기본값) — useMemo 의�
 export default function VideoEditor({ reservation, onClose }) {
   const store = useStore(); // 템플릿·콘텐츠·파트너 구독 → 템플릿 변경이 제작에 즉시 반영
   // 열린 예약의 파트너 → 그 파트너 템플릿(없으면 기본 템플릿) → 편집기 블록·BGM
-  const { blocks, bgmName } = useMemo(() => {
+  const { blocks, bgmName, partnerId } = useMemo(() => {
     const partner = store.partners.find((p) => p.name === reservation?.partner);
     const tpl = (partner && store.templates[partner.id]) || store.templates[D.DEFAULT_TEMPLATE_ID] || { bgm: null, blocks: [] };
     return {
       blocks: buildBlocks(tpl, store.content, reservation),
       bgmName: (D.BGM.find((b) => b.id === tpl.bgm) || {}).name || "배경 음악",
+      // 파트너 스코프 통일 — 이름 매칭 우선, 없으면 reservation.partnerId. BGM 등 템플릿 쓰기에 이 값을 사용.
+      partnerId: (partner && partner.id) || reservation?.partnerId || null,
     };
   }, [store.partners, store.templates, store.content, reservation]);
 
@@ -68,6 +70,18 @@ export default function VideoEditor({ reservation, onClose }) {
     }, 6000);
     return () => clearInterval(t);
   }, [reservation?.id, mediaLoading]);
+  // 저장된 편집본(submissions.edit_doc.doc) 복원 — 미디어 로드 후 1회(아직 편집 전일 때만).
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (restoredRef.current) return;
+    const saved = media?.editDoc?.doc;
+    if (!saved) return;
+    restoredRef.current = true;
+    if (hist.past.length || hist.present !== savedDoc) return; // 이미 편집 중이면 덮어쓰지 않음
+    const restored = { edits: saved.edits || {}, gens: {}, subs: saved.subs || [], ...(saved.layout ? { layout: saved.layout } : {}) };
+    setHist({ past: [], present: restored, future: [] });
+    setSavedDoc(restored);
+  }, [media?.editDoc]); // eslint-disable-line react-hooks/exhaustive-deps
   // 블록 id → { source(보호자 원본), result(AI 생성 결과) }. 미리보기 좌=원본 / 우=작업본.
   const blockMedia = useMemo(() => {
     const m = {};
@@ -170,7 +184,15 @@ export default function VideoEditor({ reservation, onClose }) {
     commit({ ...doc, edits: {} });
     toast("편집을 초기화했습니다");
   };
-  const save = async () => { if (!(await confirm({ title: "저장", message: "편집한 내용을 저장합니다." }))) return; setSavedDoc(doc); toast("저장되었습니다"); };
+  const save = async () => {
+    if (!(await confirm({ title: "저장", message: "편집한 내용을 저장합니다.\n다음 「최종 렌더」부터 합성에 반영됩니다." }))) return;
+    const subId = media?.submissionId;
+    if (!reservation?.secondJobId && subId) {
+      const render = buildRenderPlan({ orderedVisible: visibleBlocks, edits, subs: editedSubs });
+      try { await actions.saveEditDoc(reservation.id, subId, { v: 1, doc, render }); setSavedDoc(doc); toast("저장되었습니다 — 다음 최종 렌더부터 반영됩니다"); }
+      catch (e) { toast("저장 실패: " + (e.message || e)); }
+    } else { setSavedDoc(doc); toast("저장되었습니다"); } // 2차 가공·미연결은 메모리 저장만
+  };
 
   // 템플릿 변경 등으로 선택한 블록이 사라지면 첫 블록으로 복귀
   useEffect(() => {
@@ -253,7 +275,7 @@ export default function VideoEditor({ reservation, onClose }) {
           <Timeline blocks={timelineBlocks} edits={edits} bgmName={bgmName} subtitles={editedSubs} onSubChange={setEdit} onAddSub={addSub} onPickBgm={selectSlide} sel={sel} onSel={setSel} />
         </div>
         <aside className="w-80 shrink-0 overflow-y-auto" style={{ background: SURFACE, borderLeft: "1px solid " + LINE }}>
-          <PropPanel key={sel.scope + sel.id} blocks={panelBlocks} subtitles={editedSubs} edits={edits} onEdit={setEdit} onRemoveSub={removeSub} reservation={reservation} bgmName={bgmName} media={media} blockMedia={blockMedia} onGenerate={generate} sel={sel} />
+          <PropPanel key={sel.scope + sel.id} blocks={panelBlocks} subtitles={editedSubs} edits={edits} onEdit={setEdit} onRemoveSub={removeSub} reservation={reservation} partnerId={partnerId} bgmName={bgmName} media={media} blockMedia={blockMedia} onGenerate={generate} sel={sel} />
         </aside>
       </div>
 

@@ -67,13 +67,14 @@ const capFor = (cap, isLetter, fontFile) => (isLetter ? letterCaption(cap, fontF
 // ultrafast preset + threads 0(가용 코어 전부) — 긴 영상도 인코딩이 코어수만큼 빨라져 reaper 창 안에 들어옴.
 //   (대용량 RAM 폭증의 주범은 인코딩이 아니라 최종본 fs.readFile였고, 그건 스트리밍 업로드로 제거 → threads 풀어도 안전)
 const ENC = ["-c:v", "libx264", "-preset", "ultrafast", "-threads", "0", "-pix_fmt", "yuv420p", "-an"];
-async function imageSegment(src, dur, out, cap, fontFile, isLetter) {
-  await ff(["-y", "-loop", "1", "-t", String(dur), "-i", src, "-vf", FIT + capFor(cap, isLetter, fontFile), "-r", String(FPS), ...ENC, out]);
+const FADEIN = ",fade=t=in:st=0:d=0.4"; // 장면전환(「없음」 아닌 경계)의 부드러운 페이드인
+async function imageSegment(src, dur, out, cap, fontFile, isLetter, fade) {
+  await ff(["-y", "-loop", "1", "-t", String(dur), "-i", src, "-vf", FIT + (fade ? FADEIN : "") + capFor(cap, isLetter, fontFile), "-r", String(FPS), ...ENC, out]);
 }
-async function videoSegment(src, dur, out, cap, fontFile, isLetter) {
+async function videoSegment(src, dur, out, cap, fontFile, isLetter, fade) {
   const args = ["-y", "-i", src];
   if (dur) args.push("-t", String(dur));
-  args.push("-vf", FIT + capFor(cap, isLetter, fontFile), "-r", String(FPS), ...ENC, out);
+  args.push("-vf", FIT + (fade ? FADEIN : "") + capFor(cap, isLetter, fontFile), "-r", String(FPS), ...ENC, out);
   await ff(args);
 }
 
@@ -89,21 +90,25 @@ function hasAudio(file) {
 
 // segments: [{ type:'image'|'video', path, dur, caption?, letter?, mem? }] (mem=추억영상: 원본사운드 유지·BGM 덕킹)
 // bgmPath?, bgmVol(0~100), bgmFadeIn/Out(초), fontFile?(한글캡션), outPath
-export async function compose({ segments, bgmPath, bgmVol = 70, bgmFadeIn = 1, bgmFadeOut = 2, fontFile, outPath }) {
+export async function compose({ segments, bgmPath, bgmVol = 70, bgmFadeIn = 1, bgmFadeOut = 2, fontFile, subs = null, memVol = 100, outPath }) {
   if (!segments?.length) throw new Error("compose: 세그먼트 없음");
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mw-render-"));
   try {
     const parts = [];
     for (let i = 0; i < segments.length; i++) {
       const s = segments[i]; const seg = path.join(dir, `seg${i}.mp4`);
-      if (s.type === "video") await videoSegment(s.path, s.dur, seg, s.caption, fontFile, s.letter);
-      else await imageSegment(s.path, s.dur || 5, seg, s.caption, fontFile, s.letter);
+      if (s.type === "video") await videoSegment(s.path, s.dur, seg, s.caption, fontFile, s.letter, s.fade);
+      else await imageSegment(s.path, s.dur || 5, seg, s.caption, fontFile, s.letter, s.fade);
       parts.push(seg);
     }
     const list = path.join(dir, "list.txt");
     await fs.writeFile(list, parts.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join("\n"));
     const concat = path.join(dir, "concat.mp4");           // 영상 전용(세그 -an)
     await ff(["-y", "-f", "concat", "-safe", "0", "-i", list, "-c", "copy", concat]);
+
+    // 자막 — 편집기 자막 트랙을 최종 타임라인 절대시간으로 번인(있을 때만 영상 재인코딩). 없으면 무비용.
+    let base = concat;
+    if (subs && subs.length) { const subbed = path.join(dir, "subbed.mp4"); await burnSubtitles(concat, subbed, subs, fontFile); base = subbed; }
 
     // ── 오디오 트랙 구성 ── 추억영상 원본 사운드(해당 구간 배치) + BGM(볼륨·페이드, 추억영상 구간 덕킹)
     const durs = []; for (const p of parts) durs.push(await durationOf(p));
@@ -115,12 +120,13 @@ export async function compose({ segments, bgmPath, bgmVol = 70, bgmFadeIn = 1, b
       memRanges.push([offs[i], offs[i] + durs[i]]);
       if (await hasAudio(segments[i].path)) memAudio.push({ src: segments[i].path, start: offs[i] });
     }
-    if (!bgmPath && memAudio.length === 0) { await ff(["-y", "-i", concat, "-c", "copy", "-movflags", "+faststart", outPath]); return outPath; } // 무음(+faststart 리먹스)
+    if (!bgmPath && memAudio.length === 0) { await ff(["-y", "-i", base, "-c", "copy", "-movflags", "+faststart", outPath]); return outPath; } // 무음(+faststart 리먹스)
 
-    const args = ["-y", "-i", concat]; const fc = []; const mix = [];
+    const args = ["-y", "-i", base]; const fc = []; const mix = [];
+    const memGain = (Math.max(0, Math.min(200, memVol)) / 100).toFixed(2); // 추억영상 원본 소리 크기(편집기 슬라이더)
     memAudio.forEach((m, j) => {
       args.push("-i", m.src); const ms = Math.round(m.start * 1000);
-      fc.push(`[${1 + j}:a]adelay=${ms}|${ms}[ma${j}]`); mix.push(`[ma${j}]`);
+      fc.push(`[${1 + j}:a]adelay=${ms}|${ms},volume=${memGain}[ma${j}]`); mix.push(`[ma${j}]`);
     });
     if (bgmPath) {
       const bidx = 1 + memAudio.length; args.push("-stream_loop", "-1", "-i", bgmPath);
@@ -178,6 +184,23 @@ export async function letterScrollSegment(text, fontFile, out) {
 //   보호자 원본 영상이 브라우저 미리보기에서 전체 다운로드 없이 즉시 재생되게. 코덱 비호환이면 호출측에서 throw 처리.
 export async function faststartRemux(inPath, outPath) {
   await ff(["-y", "-i", inPath, "-c", "copy", "-movflags", "+faststart", outPath]);
+  return outPath;
+}
+
+// 자막 번인 — 편집기 자막 트랙(절대시간 start~end)을 최종 영상 위에 그려 재인코딩. pos(상단/중앙/하단) 또는 xPct/yPct.
+export async function burnSubtitles(inPath, outPath, subs, fontFile) {
+  const font = fontFile ? `fontfile='${fontFile}':` : "";
+  const filters = (subs || []).filter((s) => (s.text || "").trim()).map((s) => {
+    const size = Math.max(20, Math.min(80, Number(s.size) || 48));
+    const color = (s.color || "#f3e9c8").replace("#", "0x");
+    const x = s.xPct != null ? `(w*${(s.xPct / 100).toFixed(4)})` : "(w-text_w)/2";
+    const y = s.yPct != null ? `(h*${(s.yPct / 100).toFixed(4)})`
+      : s.pos === "상단" ? "h*0.10" : s.pos === "중앙" ? "(h-text_h)/2" : "h-200";
+    const st = Number(s.start) || 0, en = Number(s.end) || st + 3;
+    return `drawtext=${font}text='${escText(s.text)}':fontcolor=${color}:fontsize=${size}:x=${x}:y=${y}:box=1:boxcolor=black@0.4:boxborderw=16:enable='between(t,${st.toFixed(2)},${en.toFixed(2)})'`;
+  });
+  if (!filters.length) { await ff(["-y", "-i", inPath, "-c", "copy", outPath]); return outPath; }
+  await ff(["-y", "-i", inPath, "-vf", filters.join(","), "-r", String(FPS), ...ENC, outPath]);
   return outPath;
 }
 

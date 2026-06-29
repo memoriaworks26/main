@@ -48,6 +48,39 @@ export function buildBlocks(tpl, content, reservation) {
   });
 }
 
+// 편집기 편집본 → 워커 compose용 정규화 렌더 플랜.
+//   orderedVisible = 순서·숨김 반영된(보이는) 블록들. edits = 편집값(전환·편지·소리), subs = 자막 트랙.
+//   결과 { plan:[{kind,i?,fade?}], letter, memVol, subs } 를 submissions.edit_doc.render 에 저장 → 워커가 그대로 합성.
+//   타입 기준이라 워커가 블록 id를 몰라도 됨. clip 등 워커 미지원 타입은 플랜에서 제외.
+export function buildRenderPlan({ orderedVisible, edits = {}, subs = [] }) {
+  const trans = (id) => (edits["trans-" + id] && edits["trans-" + id].effect) || blockTrans(id);
+  const plan = [];
+  orderedVisible.forEach((b, idx) => {
+    const fade = idx > 0 && trans(b.id) !== "없음"; // 첫 블록·「없음」 전환은 페이드 없음
+    if (b.type === "title") plan.push({ kind: "title" });            // 타이틀은 자체 인트로 페이드
+    else if (b.type === "ai") plan.push({ kind: "ai", i: (b.aiIndex || 1) - 1, fade });
+    else if (b.type === "slide") plan.push({ kind: "slide", fade });
+    else if (b.type === "video") plan.push({ kind: "video", fade });
+    else if (b.type === "letter") plan.push({ kind: "letter", fade });
+    // clip 등은 워커 미지원 → 제외
+  });
+  // 편지 오버라이드(관리자 편집본) — 편지 블록에 편집값이 있을 때만.
+  const letterBlk = orderedVisible.find((b) => b.type === "letter");
+  const le = letterBlk ? edits[letterBlk.id] : null;
+  const letter = le && (le.text != null || le.metDate != null || le.partDate != null)
+    ? { text: le.text ?? null, metDate: le.metDate ?? null, partDate: le.partDate ?? null } : null;
+  // 추억 영상 원본 소리 크기(편집기 슬라이더).
+  const videoBlk = orderedVisible.find((b) => b.type === "video");
+  const memVol = videoBlk && edits[videoBlk.id] && edits[videoBlk.id].volume != null ? edits[videoBlk.id].volume : null;
+  // 자막 — 빈 텍스트 제외, 워커가 쓰는 필드만.
+  const subsOut = (subs || []).filter((s) => (s.text || "").trim()).map((s) => ({
+    text: s.text, start: s.start ?? 0, end: s.end ?? 3, pos: s.pos || "하단",
+    size: s.size ?? 48, color: s.color || "#f3e9c8",
+    xPct: s.xPct ?? null, yPct: s.yPct ?? null,
+  }));
+  return { plan, letter, memVol, subs: subsOut };
+}
+
 // 블록 → 타임라인 세그먼트 (단일 시간축)
 export function segments(blocks) {
   let acc = 0;

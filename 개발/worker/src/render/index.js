@@ -52,41 +52,56 @@ export async function composeFinal(job, assets) {
     const sign = (a) => st.signedUrl(cfg.uploadBucket, a.storage_path, 3600);
     const dl = async (a, fn) => st.downloadTo(await sign(a), path.join(dir, fn));
 
+    // 편집기 편집본(없으면 기존 고정 순서로 폴백). render.plan = [{kind,i?,fade?}], letter/subs/slideDur/memVol 오버라이드.
+    const render = job.edit_doc?.render || null;
+    const SLIDE_DUR = Number(render?.slideDur) || 7;   // 슬라이드 장당(초) — 기본 7(편집기 라벨 7~10초와 정합)
+    const letterText = (render?.letter && render.letter.text != null) ? render.letter.text : job.letter;
+    const metDate = render?.letter?.metDate ?? job.met_date;
+    const partDate = render?.letter?.partDate ?? job.part_date;
+
     const segs = [];
     // 타이틀 — 완성 클립(title_video) 우선, 없으면 2장으로 영상화, 1장이면 정적, 없으면 텍스트
-    if (titleVid) {
-      await dl(titleVid, "title.mp4"); segs.push({ type: "video", path: path.join(dir, "title.mp4") });
-    } else if (titleRes.length >= 2) {
-      await dl(titleRes[0], "t0.png"); await dl(titleRes[1], "t1.png");
-      const tv = path.join(dir, "title.mp4");
-      await makeTitleVideo(path.join(dir, "t0.png"), path.join(dir, "t1.png"), `사랑하는 ${name}`, FONT, tv);
-      segs.push({ type: "video", path: tv });
-    } else if (titleRes.length === 1) {
-      await dl(titleRes[0], "t0.png");
-      segs.push({ type: "image", path: path.join(dir, "t0.png"), dur: 8, caption: `사랑하는 ${name}` });
+    async function emitTitle() {
+      if (titleVid) { await dl(titleVid, "title.mp4"); segs.push({ type: "video", path: path.join(dir, "title.mp4") }); }
+      else if (titleRes.length >= 2) {
+        await dl(titleRes[0], "t0.png"); await dl(titleRes[1], "t1.png");
+        const tv = path.join(dir, "title.mp4");
+        await makeTitleVideo(path.join(dir, "t0.png"), path.join(dir, "t1.png"), `사랑하는 ${name}`, FONT, tv);
+        segs.push({ type: "video", path: tv });
+      } else if (titleRes.length === 1) {
+        await dl(titleRes[0], "t0.png"); segs.push({ type: "image", path: path.join(dir, "t0.png"), dur: 8, caption: `사랑하는 ${name}` });
+      } else {
+        const bg = await makeSolid("0x161310", path.join(dir, "tbg.png")); segs.push({ type: "image", path: bg, dur: 6, caption: `사랑하는 ${name}` });
+      }
+    }
+    // AI영상(i=0 A, 1 B) — 해당 결과물 있으면.
+    async function emitAi(i, fade) { if (aiRes[i]) { const fn = `ai${i}.mp4`; await dl(aiRes[i], fn); segs.push({ type: "video", path: path.join(dir, fn), fade }); } }
+    // 추억 슬라이드(사진) — 장당 SLIDE_DUR초. 첫 장만 경계 페이드.
+    async function emitSlides(fade) { for (let i = 0; i < slidePhotos.length; i++) { await dl(slidePhotos[i], `s${i}.img`); segs.push({ type: "image", path: path.join(dir, `s${i}.img`), dur: SLIDE_DUR, fade: fade && i === 0 }); } }
+    // 추억 영상(개별 클립) — 원본 사운드 유지(mem). 첫 클립만 경계 페이드.
+    async function emitMemVideos(fade) { for (let i = 0; i < memVideos.length; i++) { await dl(memVideos[i], `m${i}.mp4`); segs.push({ type: "video", path: path.join(dir, `m${i}.mp4`), mem: true, fade: fade && i === 0 }); } }
+    // 편지(아래→위 스크롤) + 날짜 카드.
+    async function emitLetter(fade) {
+      if (letterText) { const lv = path.join(dir, "letter.mp4"); await letterScrollSegment(letterText, FONT, lv); segs.push({ type: "video", path: lv, fade }); }
+      if (metDate || partDate) {
+        const bg = await makeSolid("0x161310", path.join(dir, "dbg.png"));
+        const cap = [metDate ? `우리 처음 만난 날\n${fmtDate(metDate)}` : "", partDate ? `무지개다리 건넌 날\n${fmtDate(partDate)}` : ""].filter(Boolean).join("\n\n");
+        segs.push({ type: "image", path: bg, dur: 6, caption: cap, letter: true });
+      }
+    }
+
+    if (render?.plan?.length) {
+      // 편집기 순서·숨김 반영 — 플랜대로(숨긴 블록은 플랜에 없음). 미지원 kind(clip 등)는 생략.
+      for (const p of render.plan) {
+        if (p.kind === "title") await emitTitle();
+        else if (p.kind === "ai") await emitAi(p.i ?? 0, !!p.fade);
+        else if (p.kind === "slide") await emitSlides(!!p.fade);
+        else if (p.kind === "video") await emitMemVideos(!!p.fade);
+        else if (p.kind === "letter") await emitLetter(!!p.fade);
+      }
     } else {
-      // AI 변환 안함(타이틀 이미지 없음) — 텍스트 타이틀 카드
-      const bg = await makeSolid("0x161310", path.join(dir, "tbg.png"));
-      segs.push({ type: "image", path: bg, dur: 6, caption: `사랑하는 ${name}` });
-    }
-    // AI영상 A
-    if (aiRes[0]) { await dl(aiRes[0], "aiA.mp4"); segs.push({ type: "video", path: path.join(dir, "aiA.mp4") }); }
-    // 추억 슬라이드(사진)
-    for (let i = 0; i < slidePhotos.length; i++) { await dl(slidePhotos[i], `s${i}.img`); segs.push({ type: "image", path: path.join(dir, `s${i}.img`), dur: 4 }); }
-    // 추억 영상(개별 클립) — 원본 사운드 유지(mem)
-    for (let i = 0; i < memVideos.length; i++) { await dl(memVideos[i], `m${i}.mp4`); segs.push({ type: "video", path: path.join(dir, `m${i}.mp4`), mem: true }); }
-    // AI영상 B
-    if (aiRes[1]) { await dl(aiRes[1], "aiB.mp4"); segs.push({ type: "video", path: path.join(dir, "aiB.mp4") }); }
-    // 편지 — 아래→위 스크롤 영상(편집기 미리보기와 동일)
-    if (job.letter) {
-      const lv = path.join(dir, "letter.mp4");
-      await letterScrollSegment(job.letter, FONT, lv);
-      segs.push({ type: "video", path: lv });
-    }
-    if (job.met_date || job.part_date) {
-      const bg = await makeSolid("0x161310", path.join(dir, "dbg.png"));
-      const cap = [job.met_date ? `우리 처음 만난 날\n${fmtDate(job.met_date)}` : "", job.part_date ? `무지개다리 건넌 날\n${fmtDate(job.part_date)}` : ""].filter(Boolean).join("\n\n");
-      segs.push({ type: "image", path: bg, dur: 6, caption: cap, letter: true });
+      // 폴백(편집본 없음) — 기존 고정 순서: 타이틀 → AI A → 슬라이드 → 추억영상 → AI B → 편지
+      await emitTitle(); await emitAi(0); await emitSlides(); await emitMemVideos(); await emitAi(1); await emitLetter();
     }
     if (!segs.length) throw new Error("합성할 세그먼트 없음(블록 결과물·소스 부재)");
 
@@ -112,7 +127,7 @@ export async function composeFinal(job, assets) {
     }
 
     const out = path.join(dir, "final.mp4");
-    await compose({ segments: segs, fontFile: FONT, bgmPath, bgmVol, bgmFadeIn, bgmFadeOut, outPath: out });
+    await compose({ segments: segs, fontFile: FONT, bgmPath, bgmVol, bgmFadeIn, bgmFadeOut, subs: render?.subs || null, memVol: render?.memVol ?? 100, outPath: out });
     const finalPath = `${partnerId || "unknown"}/${job.id}_final.mp4`;
     const { size } = await fs.stat(out);                 // RAM에 통째로 안 올림 — 크기는 stat으로
     await st.uploadFinalStream(finalPath, out, "video/mp4"); // 디스크→스트림 PUT(긴 영상 OOM 방지)

@@ -22,9 +22,9 @@ export async function fetchSubmissions() {
 export async function fetchReservationMedia(reservationId) {
   const d = need();
   const { data: sub, error: se } = await d.from("submissions")
-    .select("id, token, letter, met_date, part_date, status, video_url, regen_target").eq("reservation_id", reservationId).maybeSingle();
+    .select("id, token, letter, met_date, part_date, status, video_url, regen_target, edit_doc").eq("reservation_id", reservationId).maybeSingle();
   if (se) throw new Error("제출 조회 실패: " + se.message);
-  if (!sub) return { assets: [], submissionId: null, token: null, letter: null, metDate: null, partDate: null, status: null, videoUrl: null, regenTarget: null };
+  if (!sub) return { assets: [], submissionId: null, token: null, letter: null, metDate: null, partDate: null, status: null, videoUrl: null, regenTarget: null, editDoc: null };
   const { data: rows, error: ae } = await d.from("submission_assets")
     .select("id,kind,role,name,storage_path,sort_order,selected,created_at").eq("submission_id", sub.id).order("created_at");
   if (ae) throw new Error("자산 조회 실패: " + ae.message);
@@ -40,7 +40,14 @@ export async function fetchReservationMedia(reservationId) {
   const urls = {};
   paths.forEach((p) => { const c = _urlCache.get(p); if (c) urls[p] = c.url; });
   const assets = list.map((r) => ({ id: r.id, kind: r.kind, role: r.role, name: r.name, sortOrder: r.sort_order, selected: r.selected !== false, createdAt: r.created_at, url: urls[r.storage_path] || null }));
-  return { assets, submissionId: sub.id, token: sub.token, letter: sub.letter, metDate: sub.met_date, partDate: sub.part_date, status: sub.status, videoUrl: sub.video_url, regenTarget: sub.regen_target };
+  return { assets, submissionId: sub.id, token: sub.token, letter: sub.letter, metDate: sub.met_date, partDate: sub.part_date, status: sub.status, videoUrl: sub.video_url, regenTarget: sub.regen_target, editDoc: sub.edit_doc || null };
+}
+
+// 편집기 편집본 저장 — submissions.edit_doc(jsonb). { v, doc, render }. 다음 최종 렌더부터 워커가 render 플랜으로 합성.
+export async function saveEditDoc(submissionId, payload) {
+  const d = need();
+  const { error } = await d.from("submissions").update({ edit_doc: payload }).eq("id", submissionId);
+  if (error) throw new Error(error.message);
 }
 
 // 자산 버전 선택(활성) — 같은 슬롯(role+sort)에서 하나만 활성. compose·편집기가 활성본 사용.
