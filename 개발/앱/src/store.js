@@ -766,6 +766,11 @@ export const actions = {
   },
   // 신규 등록 시 기본 템플릿(__default__)을 복제해 시작 → 0에서 세팅하지 않고 수정하는 방향
   addPartner: (partner) => {
+    // 파트너사명 중복 금지(방어선) — UI 차단을 우회한 호출도 막는다. 공백·대소문자 무시.
+    const nm = String(partner.name || "").trim().toLowerCase();
+    if (nm && state.partners.some((p) => String(p.name || "").trim().toLowerCase() === nm)) {
+      toast("이미 사용 중인 파트너사명입니다."); return;
+    }
     if (LIVE) {
       // 현재 사업부 소속으로 등록 + 기본 템플릿(__default__) 복제.
       orgs.createPartner({ ...partner, bizUnit: state.bizUnit })

@@ -49,9 +49,12 @@ function PartnerRegisterModal({ open, onClose }) {
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
   const idCode = f.idCode.trim();
   const dupCode = !!idCode && partners.some((p) => String(p.idCode || "").toLowerCase() === idCode.toLowerCase());
+  const nameT = f.name.trim();
+  // 파트너사명 중복 금지 — 이름 기준 화면(드롭다운·고객관리 등) 혼동 방지. 공백·대소문자 무시 비교.
+  const dupName = !!nameT && partners.some((p) => String(p.name || "").trim().toLowerCase() === nameT.toLowerCase());
   const roomsN = num(f.rooms); // 호실 수는 필수 — 등록 시 이 개수만큼 호실 자동 생성(최소 1)
   // ID코드 = 로그인 아이디 = 초기 비밀번호 → 비번 정책(최소 6자) 위해 6자 이상.
-  const canSubmit = !!f.name.trim() && idCode.length >= 6 && !dupCode && roomsN >= 1;
+  const canSubmit = !!nameT && !dupName && idCode.length >= 6 && !dupCode && roomsN >= 1;
   const nextId = () => {
     const nums = partners.map((p) => parseInt(String(p.id).replace(/\D/g, ""), 10)).filter((n) => !isNaN(n));
     return "P-" + String((nums.length ? Math.max(...nums) : 0) + 1).padStart(3, "0");
@@ -98,7 +101,12 @@ function PartnerRegisterModal({ open, onClose }) {
             <span className="text-[12px] font-semibold" style={{ color: MUTE }}>사업부</span>
             <div className="mt-1 flex items-center px-3 text-[13px]" style={{ height: 34, background: "#f6f3ec", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }}>{bizName}<span className="ml-1.5 text-[11.5px]" style={{ color: FAINT }}>· 현재 선택된 사업부로 등록</span></div>
           </label>
-          {field("파트너사명 *", "name")}
+          <label className="block">
+            <span className="text-[12px] font-semibold" style={{ color: MUTE }}>파트너사명 *</span>
+            <input value={f.name} onChange={set("name")}
+              className="mt-1 w-full px-3 text-[13px] outline-none" style={{ height: 34, background: "#fff", border: "1px solid " + (dupName ? "#8a4b1c" : LINE2), borderRadius: RADIUS, color: INK }} />
+            {dupName && <span className="mt-1 block text-[10.5px]" style={{ color: "#8a4b1c" }}>이미 사용 중인 파트너사명입니다</span>}
+          </label>
           <label className="block">
             <span className="text-[12px] font-semibold" style={{ color: MUTE }}>ID 코드(로그인 ID) *</span>
             <input value={f.idCode} onChange={set("idCode")} placeholder="예: greenfield (6자 이상)"
@@ -161,9 +169,11 @@ function PartnerDetail({ partner: p, onBack, go }) {
   const cancelEdit = () => setEditing(false);
   const idCode = f.idCode.trim();
   const dupCode = !!idCode && partners.some((x) => x.id !== p.id && String(x.idCode || "").toLowerCase() === idCode.toLowerCase());
+  const nameT = f.name.trim();
+  const dupName = !!nameT && partners.some((x) => x.id !== p.id && String(x.name || "").trim().toLowerCase() === nameT.toLowerCase());
   const roomsN = num(f.rooms);                       // 호실 수 — 변경 시 rooms 테이블도 동기화
   const roomsValid = roomsN >= 1 && roomsN <= 50;
-  const canSave = !!f.name.trim() && idCode.length >= 6 && !dupCode && roomsValid;
+  const canSave = !!nameT && !dupName && idCode.length >= 6 && !dupCode && roomsValid;
   const save = async () => {
     if (!canSave) return;
     const roomsChanged = roomsN !== p.rooms;
@@ -222,7 +232,8 @@ function PartnerDetail({ partner: p, onBack, go }) {
                   className="w-44 px-2.5 text-[13px] outline-none focus-visible:ring-1" style={{ height: 32, background: SURFACE, border: "1px solid " + (dupCode ? "#8a4b1c" : LINE), borderRadius: RADIUS, color: INK }} />
               </label>
               {dupCode && <div className="text-right text-[10.5px]" style={{ color: "#8a4b1c" }}>이미 사용 중인 ID 코드입니다</div>}
-              {editRow("상호", "name")}
+              {editRow("상호", "name", dupName ? { style: { borderColor: "#8a4b1c" } } : {})}
+              {dupName && <div className="text-right text-[10.5px]" style={{ color: "#8a4b1c" }}>이미 사용 중인 파트너사명입니다</div>}
               {editRow("지역", "region")}
               {editRow("담당자", "manager")}
               {editRow("담당자 전화번호", "phone", { inputMode: "tel", placeholder: "010-0000-0000" })}

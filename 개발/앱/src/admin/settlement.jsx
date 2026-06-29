@@ -167,7 +167,7 @@ function PartnerSettleDetail({ partnerId, partnerName, onBack, onIssue, onViewSt
     if (!(await confirm({ title: "거래명세서 발행", message: `선택한 ${selItems.length}건(${won(selAmount)})으로 거래명세서를 발행합니다.\n발행 시 단가가 동결됩니다.`, confirmLabel: "발행" }))) return;
     const period = fmtYmd(from) + " ~ " + fmtYmd(to);
     actions.addStatement({ id: "TS-" + Date.now().toString(36), partnerId, partner, period, issuedAt: "2026. 06. 18", count: selItems.length, amount: selAmount, status: "sent" }); // [Phase4-5b] 발행 영구화
-    onIssue({ partner, items: selItems, period, issuedAt: "2026. 06. 18", amount: selAmount });
+    onIssue({ partner, partnerId, items: selItems, period, issuedAt: "2026. 06. 18", amount: selAmount });
   };
 
   const ckbox = (on) => (
@@ -346,7 +346,7 @@ export function Settlement() {
     return (
       <div>
         <PageHeader title="거래명세서" sub={view.partner + " · " + view.period} back={{ onClick: () => setView(null), label: "뒤로" }} />
-        <TradeStatement partner={view.partner} items={view.items} period={view.period} issuedAt={view.issuedAt} />
+        <TradeStatement partner={view.partner} partnerId={view.partnerId} items={view.items} period={view.period} issuedAt={view.issuedAt} />
       </div>
     );
   }
@@ -358,7 +358,7 @@ export function Settlement() {
         partnerName={detail.partner}
         onBack={() => setDetail(null)}
         onIssue={(v) => setView(v)}
-        onViewStatement={(st) => setView({ partner: detail.partner, items: undefined, period: st.period, issuedAt: st.issuedAt })}
+        onViewStatement={(st) => setView({ partner: detail.partner, partnerId: detail.id, items: undefined, period: st.period, issuedAt: st.issuedAt })}
       />
     );
   }
