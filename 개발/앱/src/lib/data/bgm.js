@@ -1,5 +1,6 @@
 // 배경 음악(bgm) — 실제 음원 파일 업로드(memoria-content) + 파트너 템플릿에 적용.
 import { db, getClient } from "../supabase.js";
+import { uploadFileWithProgress } from "../storage.js";
 
 const need = () => { const d = db(); if (!d) throw new Error("백엔드 미연결"); return d; };
 const _ext = (n = "") => { const i = n.lastIndexOf("."); return i > 0 ? n.slice(i + 1) : "mp3"; };
@@ -15,11 +16,9 @@ export async function fetchBgm() {
 
 // 음원 파일 업로드 → bgm 행 생성 + (partnerId 있을 때만) 그 파트너 템플릿 bgm_id 지정.
 //   콘텐츠 허브 업로드는 partnerId=null → 라이브러리에만 추가(템플릿 미지정).
-export async function uploadBgm(partnerId, file, meta) {
-  const sbc = getClient();
+export async function uploadBgm(partnerId, file, meta, onProgress) {
   const path = `bgm/${_uniq()}.${_ext(file.name)}`;
-  const { error: ue } = await sbc.storage.from("memoria-content").upload(path, file, { contentType: file.type || "audio/mpeg" });
-  if (ue) throw new Error("업로드 실패: " + ue.message);
+  await uploadFileWithProgress("memoria-content", path, file, { onProgress }); // 진행률 표시 업로드
   const d = need();
   const id = "bgm-" + _uniq();
   const { error: be } = await d.from("bgm").upsert({ id, name: file.name, storage_path: path, meta: meta ?? null });

@@ -13,7 +13,8 @@ import { parseMB } from "./parts.jsx";
 const STEPS = D.USER_STEPS;
 const TRANSITIONS = D.USER_TRANSITIONS; // 전환 효과 명칭은 data.js에서 단일 관리
 
-export function useUserWizard(previewBizId, stepCtl) {
+// previewOverride: 사업부별 세팅의 「저장 전 draft」를 미리보기에만 반영(스토어/DB 미반영). { text, photos }
+export function useUserWizard(previewBizId, stepCtl, previewOverride) {
   const token = getToken();
   const liveMode = BACKEND_LIVE && !!token;
   const store = useStore(); // 고객센터 문의처(본사 + 장례식장) — 설정에서 편집 → 하단 안내에 반영
@@ -113,8 +114,13 @@ export function useUserWizard(previewBizId, stepCtl) {
   // 표시 텍스트·예시사진·고객센터/동의문구 — 실 보호자 링크면 linkConfig(토큰 사업부) 우선,
   //   아니면(preview/데모) store·시드 기준. linkConfig null이면 자동 폴백(현 동작 유지).
   const cfg = (!preview && liveMode) ? linkConfig : null;
-  const T = { ...userTextOf(store, bizForText), ...(cfg?.user_text || {}) };
-  const examplePhotos = cfg?.user_photos || store.userPhotos[bizForText] || {};
+  // 미리보기에서 draft 오버라이드가 오면 그것만 반영(저장 전 미리보기) — 그 외엔 스토어/링크 설정 기준.
+  const T = previewOverride
+    ? { ...D.USER_TEXT, ...(previewOverride.text || {}) }
+    : { ...userTextOf(store, bizForText), ...(cfg?.user_text || {}) };
+  const examplePhotos = previewOverride
+    ? (previewOverride.photos || {})
+    : (cfg?.user_photos || store.userPhotos[bizForText] || {});
   // 배경 음악 선택지 — 실 보호자 링크면 토큰 사업부의 공용 BGM 라이브러리(linkConfig.bgm), 아니면 데모 시드.
   //   cfg 로드 전/데모/미리보기는 D.BGM 폴백. 라이브러리가 비어도 그대로 빈 목록(목 곡 노출 방지).
   const bgmList = cfg?.bgm || D.BGM;

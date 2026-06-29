@@ -1,13 +1,13 @@
 // [추모영상 제작] 콘텐츠 허브 — 공용 영상/이미지/음악 소스 업로드·관리.
 import React, { useState, useEffect, useRef } from "react";
 import {
-  Check, Clapperboard, Image, Music, Pause, Play, Plus, Search, Trash2, Upload, X,
+  Clapperboard, Image, Loader2, Music, Pause, Play, Plus, RotateCw, Search, Trash2, X,
 } from "lucide-react";
 import { NAVY, SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS } from "../theme.js";
 import { Btn, PageHeader, Modal, Table, useTableSort } from "../ui.jsx";
 import { useStore, actions } from "../store.js";
 import { confirm } from "../confirm.jsx";
-import { photoThumb, genFrame } from "../lib/media.js";
+import { photoThumb, genFrame, grabImageSize, grabVideoMeta, grabAudioMeta } from "../lib/media.js";
 import { matchQuery } from "../lib/util.js";
 import * as storage from "../lib/storage.js";
 import { SearchSelect } from "./shared.jsx";
@@ -59,101 +59,45 @@ const contentSortValue = (c, k) =>
   k === "fmt" ? fmtLabel(c) :
   k === "name" ? c.name : c[k];
 
-const CONTENT_KINDS = [
-  { key: "clip", label: "영상 클립", icon: Clapperboard, hint: "예: 오프닝_숲속.mp4", metaPh: "0:10 · 1920×1080" },
-  { key: "photo", label: "이미지", icon: Image, hint: "예: 추모액자_모던.png", metaPh: "투명 PNG" },
-  { key: "audio", label: "음악", icon: Music, hint: "예: 잔잔한_피아노.mp3", metaPh: "3:45 · 128kbps" },
-];
-function ContentUploadModal({ open, onClose, partners, defaultPartner }) {
-  const blank = { kind: "clip", scope: "partner", partner: defaultPartner, name: "", meta: "", size: "", file: null };
-  const [f, setF] = useState(blank);
-  useEffect(() => { if (open) setF({ ...blank, partner: defaultPartner }); /* eslint-disable-next-line */ }, [open, defaultPartner]);
-  const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
-  const kindDef = CONTENT_KINDS.find((k) => k.key === f.kind) || CONTENT_KINDS[0];
-  // 음악은 공용(BGM 라이브러리), 클립·사진만 공통/파트너 선택 가능
-  const shared = f.kind === "audio" || f.scope === "common";
-  const canSubmit = !!f.name.trim() && (shared || !!f.partner);
-  const submit = () => {
-    if (!canSubmit) return;
-    const asset = { id: "ct-" + Date.now(), kind: f.kind, name: f.name.trim(), meta: f.meta.trim() || kindDef.metaPh, size: f.size.trim(), file: f.file };
-    if (shared) asset.shared = true; else asset.partner = f.partner;
-    actions.addContent(asset);
-    onClose();
-  };
-  const inputStyle = { height: 36, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK };
-  return (
-    <Modal open={open} onClose={onClose} width={460}>
-      <div className="flex items-center justify-between px-5" style={{ height: 50, borderBottom: "1px solid " + LINE }}>
-        <span className="text-[14px] font-semibold" style={{ color: INK }}>자산 업로드</span>
-        <button onClick={onClose} className="transition hover:opacity-70" style={{ color: MUTE }}><X className="h-4 w-4" /></button>
-      </div>
-      <div className="space-y-4 px-5 py-4">
-        {/* 종류 */}
-        <div>
-          <div className="mb-1.5 text-[12px] font-semibold" style={{ color: MUTE }}>종류</div>
-          <div className="grid grid-cols-3 gap-2">
-            {CONTENT_KINDS.map((k) => {
-              const on = f.kind === k.key; const Icon = k.icon;
-              return (
-                <button key={k.key} onClick={() => setF((s) => ({ ...s, kind: k.key }))}
-                  className="flex flex-col items-center justify-center gap-1.5 py-3 text-[12px] font-semibold outline-none transition focus-visible:ring-1"
-                  style={{ borderRadius: RADIUS, background: on ? GOLD_SOFT : "#fff", color: on ? GOLD_D : MUTE, border: "1.5px solid " + (on ? GOLD : LINE2) }}>
-                  <Icon className="h-5 w-5" /> {k.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        {/* 파일 선택 — 실제 업로드(memoria-content 버킷). 라이브에서만 실제 전송. */}
-        <label className="flex w-full cursor-pointer flex-col items-center justify-center gap-1.5 py-6 outline-none transition hover:border-[#c9a86a]"
-          style={{ border: "1.5px dashed " + LINE2, borderRadius: RADIUS, background: "#faf8f3" }}>
-          <input type="file" className="hidden"
-            accept={f.kind === "photo" ? "image/*" : f.kind === "audio" ? "audio/*" : "video/*"}
-            onChange={(e) => { const file = e.target.files?.[0]; if (file) setF((s) => ({ ...s, file, name: s.name || file.name, size: (file.size / 1048576).toFixed(1) + "MB" })); }} />
-          <Upload className="h-6 w-6" style={{ color: GOLD }} />
-          <span className="text-[12.5px] font-semibold" style={{ color: INK }}>{f.file ? f.file.name : "눌러서 파일 선택"}</span>
-          <span className="text-[11px]" style={{ color: FAINT }}>{f.file ? f.size : kindDef.hint}</span>
-        </label>
-        {/* 귀속 — 음악은 공용 고정 */}
-        {f.kind === "audio" ? (
-          <div className="px-3 py-2 text-[12px]" style={{ background: "#e9eef5", borderRadius: RADIUS, color: "#3f5e87" }}>음악은 공용 BGM 라이브러리에 추가됩니다 (모든 파트너사 공통).</div>
-        ) : (
-          <div>
-            <div className="mb-1.5 text-[12px] font-semibold" style={{ color: MUTE }}>귀속</div>
-            <div className="flex gap-2">
-              <button onClick={() => setF((s) => ({ ...s, scope: "partner" }))} className="flex-1 py-2 text-[12.5px] font-semibold outline-none" style={{ borderRadius: RADIUS, background: f.scope === "partner" ? GOLD_SOFT : "#fff", color: f.scope === "partner" ? GOLD_D : MUTE, border: "1.5px solid " + (f.scope === "partner" ? GOLD : LINE2) }}>파트너사</button>
-              <button onClick={() => setF((s) => ({ ...s, scope: "common" }))} className="flex-1 py-2 text-[12.5px] font-semibold outline-none" style={{ borderRadius: RADIUS, background: f.scope === "common" ? GOLD_SOFT : "#fff", color: f.scope === "common" ? GOLD_D : MUTE, border: "1.5px solid " + (f.scope === "common" ? GOLD : LINE2) }}>공통 (공용)</button>
-            </div>
-            {f.scope === "partner" && (
-              <select value={f.partner} onChange={set("partner")} className="mt-2 w-full px-3 text-[13px] outline-none" style={inputStyle}>
-                {partners.map((p) => <option key={p.id}>{p.name}</option>)}
-              </select>
-            )}
-          </div>
-        )}
-        {/* 파일명 · 정보 · 용량 */}
-        <label className="block">
-          <span className="text-[12px] font-semibold" style={{ color: MUTE }}>파일명 *</span>
-          <input value={f.name} onChange={set("name")} placeholder={kindDef.hint.replace("예: ", "")} className="mt-1 w-full px-3 text-[13px] outline-none" style={inputStyle} />
-        </label>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="text-[12px] font-semibold" style={{ color: MUTE }}>정보</span>
-            <input value={f.meta} onChange={set("meta")} placeholder={kindDef.metaPh} className="mt-1 w-full px-3 text-[13px] outline-none" style={inputStyle} />
-          </label>
-          <label className="block">
-            <span className="text-[12px] font-semibold" style={{ color: MUTE }}>용량</span>
-            <input value={f.size} onChange={set("size")} placeholder="예: 12MB" className="mt-1 w-full px-3 text-[13px] outline-none" style={inputStyle} />
-          </label>
-        </div>
-      </div>
-      <div className="flex items-center justify-end gap-2 px-5" style={{ height: 56, borderTop: "1px solid " + LINE }}>
-        <Btn size="sm" variant="neutral" onClick={onClose}>취소</Btn>
-        <Btn size="sm" onClick={submit} disabled={!canSubmit}><Check className="h-3.5 w-3.5" /> 업로드</Btn>
-      </div>
-    </Modal>
-  );
+// ── 자동 분류·메타 추출 ── 파일 하나에서 종류·이름·길이·해상도·용량을 모두 자동 산출.
+//   수동 입력(파일명·정보·용량·종류·귀속) 전부 제거. 귀속은 현재 보고 있는 파트너 베이스(공통이면 공용).
+const kindOf = (file) => {
+  const t = file.type || "";
+  if (t.startsWith("image/")) return "photo";
+  if (t.startsWith("audio/")) return "audio";
+  if (t.startsWith("video/")) return "clip";
+  const ext = (file.name.split(".").pop() || "").toLowerCase(); // MIME 비어있을 때 확장자 폴백
+  if (["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "svg", "bmp"].includes(ext)) return "photo";
+  if (["mp3", "wav", "m4a", "aac", "ogg", "flac", "opus"].includes(ext)) return "audio";
+  return "clip";
+};
+const mmss = (s) => { const t = Math.max(0, Math.round(s || 0)); return Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0"); };
+const sizeLabel = (bytes) => `${(bytes / 1048576).toFixed(1)}MB`;
+
+// 파일 → store asset(메타 자동). i는 같은 배치 내 id 충돌 방지용. 메타 추출 실패해도 업로드는 진행.
+async function buildAsset(file, partnerName, i) {
+  const kind = kindOf(file);
+  let meta = "";
+  if (kind === "photo") {
+    const s = await grabImageSize(file);
+    const ext = (file.name.split(".").pop() || "IMG").toUpperCase();
+    meta = s ? `${s.w}×${s.h} · ${ext}` : ext;
+  } else if (kind === "clip") {
+    const m = await grabVideoMeta(file);
+    meta = m.w ? `${mmss(m.duration)} · ${m.w}×${m.h}` : mmss(m.duration);
+  } else {
+    const m = await grabAudioMeta(file);
+    const kbps = m.duration ? Math.round((file.size * 8) / m.duration / 1000) : 0; // 용량·길이로 평균 비트레이트 추정
+    meta = kbps ? `${mmss(m.duration)} · ${kbps}kbps` : mmss(m.duration);
+  }
+  const asset = { id: `ct-${Date.now()}-${i}`, kind, name: file.name, meta, size: sizeLabel(file.size), file };
+  // 음악은 무조건 공용 BGM 라이브러리. 클립·사진은 현재 파트너 베이스(공통→공용).
+  if (kind !== "audio") { if (partnerName === "공통") asset.shared = true; else asset.partner = partnerName; }
+  return asset;
 }
+
+// 업로드 진행 상태 라벨(인라인 행에서 사용).
+const UP_STATUS = { prep: "처리 중", up: "업로드 중", err: "업로드 실패" };
 
 // 자산 미리보기 모달 — 영상/이미지는 프레임, 음악은 WebAudio 합성음 재생(목업).
 function ContentPreview({ item, onClose }) {
@@ -161,15 +105,27 @@ function ContentPreview({ item, onClose }) {
   const ctxRef = useRef(null);
   const oscRef = useRef([]);
   const isAudio = item.kind === "audio";
+  const isClip = item.kind === "clip";
   const src = useThumbSrc(item);
-  // 음악 실파일 재생용 서명URL — 있으면 합성음(목업) 대신 진짜 <audio>로 재생.
+  // 음악 실파일 재생용 — 업로드본(서명URL) 우선, 없으면 공용 번들 mp3(item.src). 둘 다 없으면 합성음(목업).
   const [audioUrl, setAudioUrl] = useState(null);
   useEffect(() => {
-    if (!isAudio || !item.storagePath) { setAudioUrl(null); return; }
+    if (!isAudio) { setAudioUrl(null); return; }
+    if (item.storagePath) {
+      let alive = true;
+      storage.signedUrl(storage.BUCKETS.content, item.storagePath).then((u) => { if (alive) setAudioUrl(u); }).catch(() => { if (alive) setAudioUrl(null); });
+      return () => { alive = false; };
+    }
+    setAudioUrl(item.src || null); // 공용 번들 BGM(/bgm/*.mp3) 미리듣기
+  }, [isAudio, item.storagePath, item.src]);
+  // 영상 실파일 재생용 서명URL — 있으면 정지 썸네일 대신 <video controls>로 실제 재생.
+  const [videoUrl, setVideoUrl] = useState(null);
+  useEffect(() => {
+    if (!isClip || !item.storagePath) { setVideoUrl(null); return; }
     let alive = true;
-    storage.signedUrl(storage.BUCKETS.content, item.storagePath).then((u) => { if (alive) setAudioUrl(u); }).catch(() => { if (alive) setAudioUrl(null); });
+    storage.signedUrl(storage.BUCKETS.content, item.storagePath).then((u) => { if (alive) setVideoUrl(u); }).catch(() => { if (alive) setVideoUrl(null); });
     return () => { alive = false; };
-  }, [isAudio, item.storagePath]);
+  }, [isClip, item.storagePath]);
 
   const stop = () => {
     oscRef.current.forEach((o) => { try { o.stop(); } catch { /* already stopped */ } });
@@ -231,10 +187,13 @@ function ContentPreview({ item, onClose }) {
                 </button>
               )}
             </div>
+          ) : isClip && videoUrl ? (
+            <video src={videoUrl} poster={src || undefined} controls playsInline preload="metadata"
+              className="absolute inset-0 h-full w-full object-contain" style={{ background: "#000" }} />
           ) : (
             <>
               <img src={src} alt={item.name} className="absolute inset-0 h-full w-full object-cover" />
-              {item.kind === "clip" && (
+              {isClip && (
                 <span className="relative flex h-12 w-12 items-center justify-center rounded-full" style={{ background: "rgba(0,0,0,.45)" }}>
                   <Play className="h-5 w-5 text-white" style={{ marginLeft: 2 }} fill="#fff" />
                 </span>
@@ -248,9 +207,24 @@ function ContentPreview({ item, onClose }) {
           <div><div className="text-[11px]" style={{ color: FAINT }}>길이</div><div className="tabular-nums" style={{ color: INK }}>{durLabel(item)}</div></div>
         </div>
         {item.size && <div className="mt-2 text-[11.5px]" style={{ color: FAINT }}>용량 {item.size}</div>}
-        {(isAudio ? !audioUrl : !item.storagePath) && (
+        {(isAudio ? !audioUrl : isClip ? !videoUrl : !item.storagePath) && (
           <p className="mt-3 text-[11px]" style={{ color: FAINT }}>※ 미리보기는 예시입니다 — 실제 업로드 파일이 있으면 그대로 표시·재생됩니다.</p>
         )}
+      </div>
+      {/* 미리보기에서 바로 삭제 (음악=BGM 라이브러리, 그 외=콘텐츠 자산) */}
+      <div className="flex items-center justify-between px-5" style={{ height: 56, borderTop: "1px solid " + LINE }}>
+        <button
+          onClick={async () => {
+            if (await confirm({ title: isAudio ? "음악 삭제" : "자산 삭제", message: `"${item.name}"${isAudio ? " 음악을" : " 자산을"} 삭제합니다.`, danger: true })) {
+              isAudio ? actions.removeBgm(item.id) : actions.removeContent(item.id);
+              onClose();
+            }
+          }}
+          className="inline-flex items-center gap-1.5 px-3 text-[12.5px] font-semibold outline-none transition hover:opacity-80"
+          style={{ height: 34, borderRadius: RADIUS, color: "#c0392b", border: "1px solid " + LINE2, background: "#fff" }}>
+          <Trash2 className="h-3.5 w-3.5" /> 삭제
+        </button>
+        <Btn size="sm" variant="neutral" onClick={onClose}>닫기</Btn>
       </div>
     </Modal>
   );
@@ -262,17 +236,57 @@ export function ContentHub() {
   const [partner, setPartner] = useState(allPartners.find((p) => p.active)?.name || allPartners[0].name);
   const [t, setT] = useState("전체");
   const [q, setQ] = useState("");
-  const [uploading, setUploading] = useState(false);
+  // 백그라운드 업로드 — 파일을 고르면 즉시 표 상단에 행으로 띄우고, 자동으로 메타추출→업로드(진행률%)를 처리.
+  //   entry: { upId, name, kind, progress(0~1), status: prep|up|err, file, target, targetLabel }
+  const [uploads, setUploads] = useState([]);
   const [preview, setPreview] = useState(null); // 미리보기 중인 자산
+  const fileRef = useRef(null);
+  const queueRef = useRef([]);   // 대기 중 업로드 entry
+  const activeRef = useRef(0);   // 동시 업로드 수
   const partners = allPartners.filter((p) => p.active);
+  const patchUp = (upId, patch) => setUploads((u) => u.map((e) => (e.upId === upId ? { ...e, ...patch } : e)));
+  // 한 파일: 메타추출(처리 중) → 업로드(진행률) → 완료 시 행 제거(실데이터가 목록에 prepend). 실패는 행에 '다시 시도'.
+  const runUpload = async (entry) => {
+    patchUp(entry.upId, { status: "prep", progress: 0 });
+    try {
+      const asset = await buildAsset(entry.file, entry.target, entry.upId);
+      patchUp(entry.upId, { status: "up" });
+      await actions.addContent(asset, { onProgress: (p) => patchUp(entry.upId, { progress: p }) });
+      setUploads((u) => u.filter((e) => e.upId !== entry.upId));
+    } catch {
+      patchUp(entry.upId, { status: "err" });
+    }
+  };
+  // 동시 업로드 상한(3) — 너무 많이 동시에 올리면 대역폭 분산으로 각 파일이 더 느려짐.
+  const pump = () => {
+    while (activeRef.current < 3 && queueRef.current.length) {
+      const entry = queueRef.current.shift();
+      activeRef.current += 1;
+      runUpload(entry).finally(() => { activeRef.current -= 1; pump(); });
+    }
+  };
+  const enqueue = (entries) => { queueRef.current.push(...entries); pump(); };
+  const onFiles = (list) => {
+    const files = Array.from(list || []);
+    if (!files.length) return;
+    const targetLabel = partner === "공통" ? "공용(모든 파트너)" : partner; // 음악은 항상 공용 BGM
+    const entries = files.map((file, k) => ({
+      upId: `up-${Date.now()}-${k}-${Math.random().toString(36).slice(2, 6)}`,
+      name: file.name, kind: kindOf(file), progress: 0, status: "prep", file, target: partner, targetLabel,
+    }));
+    setUploads((u) => [...entries, ...u]); // 즉시 행으로 표시
+    enqueue(entries);                       // 백그라운드 처리
+  };
   // 음악(BGM)은 공용 라이브러리(memoria.bgm) → 모든 파트너사 공통. 클립·사진은 파트너사별.
-  const items = content.concat(bgm.map((b) => ({ id: b.id, kind: "audio", name: b.name, meta: b.meta, size: b.size || "", shared: true, storagePath: b.storagePath })));
+  const items = content.concat(bgm.map((b) => ({ id: b.id, kind: "audio", name: b.name, meta: b.meta, size: b.size || "", shared: true, storagePath: b.storagePath, src: b.src })));
   const filtered = items
     .filter((c) => partner === "공통" ? c.shared : (c.partner === partner || c.shared))
     .filter((c) => t === "전체" || (t === "영상" && c.kind === "clip") || (t === "이미지" && c.kind === "photo") || (t === "음악" && c.kind === "audio"))
     .filter((c) => matchQuery(q, c.name, c.meta));
   const { rows: sorted, sort, onSortChange } = useTableSort(filtered, { value: contentSortValue });
-  const rows = sorted.map((c, i) => ({ ...c, idx: i + 1 }));
+  // 진행 중 업로드 행을 표 상단에 고정 — 현재 탭/파트너와 무관하게 항상 보이게(완료되면 자동 제거).
+  const upRows = uploads.map((u) => ({ ...u, id: u.upId, _uploading: true }));
+  const rows = upRows.concat(sorted.map((c, i) => ({ ...c, idx: i + 1 })));
   const cols = [
     { key: "idx", label: "순번", align: "right" },
     { key: "thumb", label: "미리보기" },
@@ -290,22 +304,60 @@ export function ContentHub() {
             <Search className="h-4 w-4" style={{ color: FAINT }} strokeWidth={1.9} />
             <input value={q} onChange={(e) => setQ(e.target.value)} className="ml-2 w-full bg-transparent text-[13px] outline-none" placeholder="자산명·정보 검색" style={{ color: INK }} />
           </div>
-          <Btn size="sm" onClick={() => setUploading(true)}><Plus className="h-4 w-4" /> 자산 업로드</Btn>
+          {/* 업로드 버튼 → 다중 파일 선택. 종류·메타·용량은 전부 자동. */}
+          <input ref={fileRef} type="file" multiple accept="image/*,video/*,audio/*" className="hidden"
+            onChange={(e) => { onFiles(e.target.files); e.target.value = ""; }} />
+          <Btn size="sm" onClick={() => fileRef.current?.click()}><Plus className="h-4 w-4" /> 자산 업로드</Btn>
         </div>
       } />
-      <ContentUploadModal open={uploading} onClose={() => setUploading(false)} partners={partners} defaultPartner={partner === "공통" ? partners[0]?.name : partner} />
       {/* 파트너사 베이스 (+ 공통 공용 자산) */}
       <div className="mb-3 flex items-center gap-2">
         <SearchSelect value={partner} onChange={setPartner} placeholder="파트너사"
           options={[{ value: "공통", label: "공통 (공용 자산)" }, ...partners.map((p) => ({ value: p.name, label: p.name }))]} />
-        <span className="text-[12px]" style={{ color: FAINT }}>{rows.length}개</span>
+        <span className="text-[12px]" style={{ color: FAINT }}>{sorted.length}개</span>
       </div>
       <div className="mb-3 flex gap-1.5">
         {tabs.map((x) => (
           <button key={x} onClick={() => setT(x)} className="px-3 py-1.5 text-[12px] font-semibold" style={{ borderRadius: RADIUS, background: t === x ? GOLD_SOFT : SURFACE, color: t === x ? GOLD_D : MUTE, border: "1px solid " + (t === x ? GOLD_SOFT : LINE) }}>{x}</button>
         ))}
       </div>
-      <Table cols={cols} rows={rows} empty="자산이 없습니다" sort={sort} onSortChange={onSortChange} onRowClick={(c) => setPreview(c)} renderCell={(c, k) => {
+      <Table cols={cols} rows={rows} empty="자산이 없습니다" sort={sort} onSortChange={onSortChange} onRowClick={(c) => { if (!c._uploading) setPreview(c); }} renderCell={(c, k) => {
+        // 백그라운드 업로드 진행 행 — 종류 아이콘 + 진행률 바/%. 완료되면 사라지고 실데이터 행이 대체.
+        if (c._uploading) {
+          const Icon = KIND_ICON[c.kind] || Clapperboard;
+          const pct = Math.round((c.progress || 0) * 100);
+          const err = c.status === "err";
+          if (k === "idx") return err ? <X className="h-3.5 w-3.5" style={{ color: "#c0392b" }} /> : <Loader2 className="h-3.5 w-3.5 animate-spin" style={{ color: GOLD_D }} />;
+          if (k === "thumb") return (
+            <span className="flex items-center justify-center" style={{ width: 52, height: 32, borderRadius: 3, background: "#1c232c", border: "1px solid " + LINE }}>
+              <Icon className="h-4 w-4" style={{ color: "#fff", opacity: 0.7 }} />
+            </span>
+          );
+          if (k === "kind") return <span className="inline-flex items-center gap-1.5 text-[12.5px]" style={{ color: MUTE }}><Icon className="h-3.5 w-3.5" style={{ color: KIND_ICON_C[c.kind], opacity: 0.7 }} />{KIND_LABEL[c.kind] || "—"}</span>;
+          if (k === "name") return (
+            <span className="block" style={{ minWidth: 200 }}>
+              <span className="block truncate font-semibold" style={{ color: INK }}>{c.name}</span>
+              <span className="mt-1 block overflow-hidden" style={{ height: 4, borderRadius: 2, background: "#eee" }}>
+                <span className="block h-full" style={{ width: `${err ? 100 : pct}%`, background: err ? "#c0392b" : GOLD, transition: "width .2s" }} />
+              </span>
+            </span>
+          );
+          if (k === "fmt") return <span style={{ color: err ? "#c0392b" : MUTE }}>{UP_STATUS[c.status] || "처리 중"}</span>;
+          if (k === "len") return <span className="tabular-nums" style={{ color: err ? "#c0392b" : MUTE }}>{c.status === "up" ? `${pct}%` : err ? "실패" : "준비"}</span>;
+          if (k === "act") return err ? (
+            <span className="inline-flex items-center gap-0.5">
+              <button onClick={(e) => { e.stopPropagation(); patchUp(c.upId, { status: "prep", progress: 0 }); enqueue([{ upId: c.upId, name: c.name, kind: c.kind, file: c.file, target: c.target, targetLabel: c.targetLabel, status: "prep", progress: 0 }]); }}
+                className="rounded p-1.5 outline-none transition hover:bg-[#f0ece4]" title="다시 시도" style={{ color: GOLD_D }}>
+                <RotateCw className="h-3.5 w-3.5" />
+              </button>
+              <button onClick={(e) => { e.stopPropagation(); setUploads((u) => u.filter((x) => x.upId !== c.upId)); }}
+                className="rounded p-1.5 outline-none transition hover:bg-[#f0ece4]" title="지우기" style={{ color: FAINT }}>
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </span>
+          ) : null;
+          return null;
+        }
         if (k === "idx") return <span className="tabular-nums" style={{ color: FAINT }}>{c.idx}</span>;
         if (k === "thumb") return <ThumbCell c={c} />;
         if (k === "kind") {

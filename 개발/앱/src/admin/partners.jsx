@@ -43,14 +43,15 @@ function LogoInput({ value, onChange }) {
 function PartnerRegisterModal({ open, onClose }) {
   const { partners, bizUnits, bizUnit } = useStore();
   const bizName = bizUnits.find((b) => b.id === bizUnit)?.name || "";  // 신규 파트너는 현재 사업부로 등록됨
-  const blank = { idCode: "", name: "", region: "", rooms: "", bizNo: "", ceo: "", address: "", bizType: "", bizItem: "", manager: "", phone: "", email: "", logo: "", memo: "" };
+  const blank = { idCode: "", name: "", region: "", rooms: "1", bizNo: "", ceo: "", address: "", bizType: "", bizItem: "", manager: "", phone: "", email: "", logo: "", memo: "" };
   const [f, setF] = useState(blank);
   useEffect(() => { if (open) setF(blank); /* eslint-disable-next-line */ }, [open]);
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
   const idCode = f.idCode.trim();
   const dupCode = !!idCode && partners.some((p) => String(p.idCode || "").toLowerCase() === idCode.toLowerCase());
+  const roomsN = num(f.rooms); // 호실 수는 필수 — 등록 시 이 개수만큼 호실 자동 생성(최소 1)
   // ID코드 = 로그인 아이디 = 초기 비밀번호 → 비번 정책(최소 6자) 위해 6자 이상.
-  const canSubmit = !!f.name.trim() && idCode.length >= 6 && !dupCode;
+  const canSubmit = !!f.name.trim() && idCode.length >= 6 && !dupCode && roomsN >= 1;
   const nextId = () => {
     const nums = partners.map((p) => parseInt(String(p.id).replace(/\D/g, ""), 10)).filter((n) => !isNaN(n));
     return "P-" + String((nums.length ? Math.max(...nums) : 0) + 1).padStart(3, "0");
@@ -60,7 +61,7 @@ function PartnerRegisterModal({ open, onClose }) {
     if (!(await confirm({ title: "파트너사 등록", message: `${f.name.trim()} 파트너사를 신규 등록합니다.` }))) return;
     actions.addPartner({
       id: nextId(), idCode,
-      bizUnit: f.bizUnit, name: f.name.trim(), region: f.region.trim(), rooms: num(f.rooms),
+      bizUnit: f.bizUnit, name: f.name.trim(), region: f.region.trim(), rooms: roomsN,
       bizNo: f.bizNo.trim(), ceo: f.ceo.trim(), address: f.address.trim(), bizType: f.bizType.trim(), bizItem: f.bizItem.trim(),
       manager: f.manager.trim(), phone: f.phone.trim(), email: f.email.trim(),
       logo: f.logo || "", memo: f.memo.trim(), contractDate: today(),
@@ -105,7 +106,12 @@ function PartnerRegisterModal({ open, onClose }) {
             <span className="mt-1 block text-[10.5px]" style={{ color: dupCode ? "#8a4b1c" : FAINT }}>{dupCode ? "이미 사용 중인 ID 코드입니다" : "파트너사 로그인 ID로 사용 · 고유 코드(내부 식별자)는 자동 부여"}</span>
           </label>
           {field("지역", "region")}
-          {field("호실 수", "rooms", { inputMode: "numeric" })}
+          <label className="block">
+            <span className="text-[12px] font-semibold" style={{ color: MUTE }}>호실 수 *</span>
+            <input value={f.rooms} onChange={set("rooms")} inputMode="numeric" placeholder="1"
+              className="mt-1 w-full px-3 text-[13px] outline-none" style={{ height: 34, background: "#fff", border: "1px solid " + (roomsN >= 1 ? LINE2 : "#8a4b1c"), borderRadius: RADIUS, color: INK }} />
+            <span className="mt-1 block text-[10.5px]" style={{ color: roomsN >= 1 ? FAINT : "#8a4b1c" }}>{roomsN >= 1 ? "등록 시 이 개수만큼 호실이 자동 생성됩니다" : "호실 수는 1 이상이어야 합니다"}</span>
+          </label>
           <label className="block">
             <span className="text-[12px] font-semibold" style={{ color: MUTE }}>계약일</span>
             <input value={today()} disabled

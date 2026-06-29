@@ -12,9 +12,9 @@ import { StepBody } from "./steps.jsx";
 
 const STEPS = USER_STEPS;
 
-export default function UserMobile({ previewBizId, step: stepProp, onStep }) {
+export default function UserMobile({ previewBizId, step: stepProp, onStep, previewOverride }) {
   const stepCtl = stepProp != null && onStep ? { step: stepProp, setStep: onStep } : undefined;
-  const { st, T, step, setStep, last, previewStep, blocked, submitting, liveMode, link, company, partners, doSubmit, policyOpen, setPolicyOpen } = useUserWizard(previewBizId, stepCtl);
+  const { st, T, step, setStep, last, previewStep, blocked, submitting, liveMode, link, company, partners, doSubmit, policyOpen, setPolicyOpen } = useUserWizard(previewBizId, stepCtl, previewOverride);
 
   // 라이브에서 토큰이 유효하지 않거나 만료된 경우 — 안내 화면.
   if (link.ok === false || link.status === "expired") {

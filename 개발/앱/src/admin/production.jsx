@@ -170,13 +170,17 @@ export function Production({ onOpenEditor, account }) {
     if (!(await confirm({ title: "재제작", message: "결과물을 반려하고 작업 중으로 되돌립니다.\n담당자가 다시 편집·렌더합니다.", danger: true, confirmLabel: "재제작" }))) return;
     actions.updateReservation(r.id, { status: "rendering", renderAt: null, renderDur: null }); setReview(null);
   };
+  // 접수 대기 = 예약 생성이 아니라 "보호자(유저)가 제작 요청을 제출"한 건만 큐에 노출.
+  // 예약만 발급되고 보호자가 아직 작성 중(submission 없음 or status=draft)인 건은 큐에 올리지 않는다.
+  const requested = (r) => { const sub = submissionFor(s, r.id); return !!sub && sub.status !== "draft"; };
+  const inTab = (r, t) => t.match(r.status) && (t.key !== "review" || requested(r));
   const tabDef = PROD_TABS.find((t) => t.key === tab);
   const rows = reservations
-    .filter((r) => tabDef.match(r.status))
+    .filter((r) => inTab(r, tabDef))
     .filter((r) => pf === "all" || r.partner === pf)
     .sort((a, b) => String(a.requestedAt ?? "").localeCompare(String(b.requestedAt ?? ""))); // 먼저 요청된 순(null 안전)
 
-  const count = (t) => reservations.filter((r) => t.match(r.status)).length;
+  const count = (t) => reservations.filter((r) => inTab(r, t)).length;
 
   return (
     <div style={{ maxWidth: 700 }}>
@@ -205,7 +209,9 @@ export function Production({ onOpenEditor, account }) {
       {/* 처리 큐 (조밀한 행) */}
       <div className="overflow-hidden" style={{ border: "1px solid " + LINE, borderRadius: RADIUS, background: SURFACE }}>
         {rows.length === 0 && (
-          <div className="px-4 py-8 text-center text-[13px]" style={{ color: FAINT }}>해당 상태의 예약이 없습니다.</div>
+          <div className="px-4 py-8 text-center text-[13px]" style={{ color: FAINT }}>
+            {tab === "review" ? "보호자가 제작 요청을 제출하면 여기에 표시됩니다." : "해당 상태의 예약이 없습니다."}
+          </div>
         )}
         {rows.map((r, i) => {
           const cur = st(r);
@@ -273,7 +279,7 @@ export function Production({ onOpenEditor, account }) {
         })}
       </div>
       <p className="mt-3 text-[11px] leading-relaxed" style={{ color: FAINT }}>
-        ※ 흐름: 접수 대기 →「받기」작업 중 → 편집기에서 「최종 렌더·컨펌 요청」→ 컨펌 대기(렌더 진행률 표시) → 렌더 완료 후 「검수」로 결과물 확인 → 「확인·컨펌」발행 / 수정 필요 시 「재제작」으로 작업 중 반려.
+        ※ 흐름: 보호자가 제작 요청 제출 → 접수 대기 →「받기」작업 중 → 편집기에서 「최종 렌더·컨펌 요청」→ 컨펌 대기(렌더 진행률 표시) → 렌더 완료 후 「검수」로 결과물 확인 → 「확인·컨펌」발행 / 수정 필요 시 「재제작」으로 작업 중 반려.
         정렬은 요청 시각 오름차순(먼저 요청된 건이 상단) — 가장 왼쪽에 요청 시각을 분단위로 표시.
         담당자 = 해당 건을 받은 작업자(미배정은 「받기」로 본인 배정 · 작업 중인 본인 건은 ✕로 해제). 누가 처리 중인지 한눈에 확인.
       </p>

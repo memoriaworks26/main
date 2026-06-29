@@ -41,10 +41,76 @@ function SlideCanvas({ frames }) {
   return <canvas ref={ref} width={640} height={360} className="absolute inset-0 h-full w-full" />;
 }
 
+// 드래그 중 페이지 스크롤 차단 — 모듈 레벨 고정 참조라야 add/remove가 같은 함수로 매칭됨(리렌더로 신원이 바뀌지 않음).
+// iOS Safari는 pointermove의 preventDefault만으론 스크롤이 안 막혀, 비수동(passive:false) touchmove로 직접 차단해야 한다.
+const blockTouchMove = (e) => { e.preventDefault(); };
+
 // 소스 업로드 그리드 — 사진(슬라이드, 전환 선택) / 영상(추억 영상) 공용. withTrans면 카드마다 전환 선택 노출.
+// 순서 변경 드래그는 Pointer Events로 구현 — 모바일 터치(길게 눌러 끌기)·데스크톱 마우스 모두 동작.
+// (HTML5 draggable은 터치에서 동작하지 않아 모바일 위저드에서 무용지물이었음)
+// iOS/Android 차이 대응: iOS=비수동 touchmove로 스크롤 차단·콜아웃(callout) 억제, Android=touch-action:none·contextmenu 억제.
 function UploadGrid({ items, withTrans, st, onAdd, onFiles, inputRef, onRemove, onReorder, accept, addLabel, addHint }) {
-  const [dragId, setDragId] = useState(null);
-  const [overId, setOverId] = useState(null);
+  const [dragId, setDragId] = useState(null);   // 끌고 있는 카드 id
+  const [overId, setOverId] = useState(null);   // 드롭 대상으로 강조할 카드 id
+  const [ghost, setGhost] = useState(null);     // 손가락/커서 따라다니는 미리보기 {x,y,thumb,kind}
+  const drag = useRef(null);                     // 진행 중 드래그 추적(스테일 클로저 회피용 mutable)
+
+  // 현재 포인터 좌표 아래의 카드 id (고스트는 pointer-events:none이라 hit-test에서 무시됨)
+  const cardIdAt = (x, y) => {
+    const el = document.elementFromPoint(x, y);
+    const card = el && el.closest && el.closest("[data-uid]");
+    return card ? card.getAttribute("data-uid") : null;
+  };
+  // 실제 드래그 시작 — 포인터 캡처로 손가락이 카드를 벗어나도 move/up을 계속 받는다.
+  const begin = () => {
+    const d = drag.current; if (!d || d.active) return;
+    d.active = true;
+    if (d.timer) { clearTimeout(d.timer); d.timer = null; }
+    try { d.el.setPointerCapture(d.pointerId); } catch {}
+    document.addEventListener("touchmove", blockTouchMove, { passive: false }); // iOS 스크롤 차단(Android는 touch-action으로도 막히지만 같이 적용)
+    setDragId(d.id);
+    setGhost({ x: d.x, y: d.y, thumb: d.thumb, kind: d.kind });
+    if (navigator.vibrate) { try { navigator.vibrate(8); } catch {} } // iOS Safari 미지원 → no-op
+  };
+  const onCardPointerDown = (e, u) => {
+    if (e.target.closest && e.target.closest("button, select, input")) return; // 삭제·전환 조작은 드래그 제외
+    if (u.uploading) return;                                  // 업로드 중 카드는 순서 변경 금지
+    if (e.pointerType === "mouse" && e.button !== 0) return;  // 마우스는 좌클릭만
+    drag.current = {
+      id: u.id, thumb: u.thumb, kind: u.kind, el: e.currentTarget, pointerId: e.pointerId,
+      startX: e.clientX, startY: e.clientY, x: e.clientX, y: e.clientY, active: false, over: null,
+      timer: e.pointerType === "mouse" ? null : setTimeout(begin, 180), // 터치: 길게 눌러야 드래그(스와이프 스크롤과 구분)
+    };
+  };
+  const onCardPointerMove = (e) => {
+    const d = drag.current; if (!d) return;
+    d.x = e.clientX; d.y = e.clientY;
+    if (!d.active) {
+      const moved = Math.abs(e.clientX - d.startX) > 6 || Math.abs(e.clientY - d.startY) > 6;
+      if (e.pointerType === "mouse") { if (moved) begin(); }              // 마우스: 살짝 끌면 시작
+      else if (moved) { clearTimeout(d.timer); drag.current = null; }     // 터치: 길게 누르기 전 움직이면 스크롤로 간주
+      return;
+    }
+    e.preventDefault();                                                   // 드래그 중에는 페이지 스크롤 막기
+    setGhost((g) => (g ? { ...g, x: e.clientX, y: e.clientY } : g));
+    const over = cardIdAt(e.clientX, e.clientY);
+    d.over = over && over !== d.id ? over : null;
+    setOverId(d.over);
+  };
+  const end = (reorder) => {
+    const d = drag.current;
+    if (d) {
+      if (d.timer) clearTimeout(d.timer);
+      if (reorder && d.active && d.over) onReorder(d.id, d.over);
+      try { d.el.releasePointerCapture(d.pointerId); } catch {}
+    }
+    document.removeEventListener("touchmove", blockTouchMove);
+    drag.current = null;
+    setDragId(null); setOverId(null); setGhost(null);
+  };
+  // 언마운트 시 타이머·스크롤차단 리스너 잔존 방지
+  useEffect(() => () => { if (drag.current && drag.current.timer) clearTimeout(drag.current.timer); document.removeEventListener("touchmove", blockTouchMove); }, []);
+
   return (
     <>
       <input ref={inputRef} type="file" accept={accept} multiple className="hidden" onChange={onFiles} />
@@ -57,16 +123,17 @@ function UploadGrid({ items, withTrans, st, onAdd, onFiles, inputRef, onRemove, 
         <div className="grid grid-cols-4 gap-2">
           {items.map((u, i) => (
             <div key={u.id}
-              draggable
-              onDragStart={() => setDragId(u.id)}
-              onDragEnd={() => { setDragId(null); setOverId(null); }}
-              onDragOver={(e) => { e.preventDefault(); if (overId !== u.id) setOverId(u.id); }}
-              onDrop={(e) => { e.preventDefault(); onReorder(dragId, u.id); setOverId(null); }}
-              className="flex cursor-grab flex-col gap-1 p-1 transition active:cursor-grabbing"
-              style={{ background: SURFACE, border: "1px solid " + (overId === u.id && dragId !== u.id ? GOLD : LINE), borderRadius: RADIUS, opacity: dragId === u.id ? 0.45 : 1 }}>
+              data-uid={u.id}
+              onPointerDown={(e) => onCardPointerDown(e, u)}
+              onPointerMove={onCardPointerMove}
+              onPointerUp={() => end(true)}
+              onPointerCancel={() => end(false)}
+              onContextMenu={(e) => e.preventDefault()}
+              className="flex cursor-grab select-none flex-col gap-1 p-1 transition active:cursor-grabbing"
+              style={{ background: SURFACE, border: "1px solid " + (overId === u.id && dragId !== u.id ? GOLD : LINE), borderRadius: RADIUS, opacity: dragId === u.id ? 0.4 : 1, transform: overId === u.id && dragId !== u.id ? "scale(1.05)" : "none", touchAction: dragId ? "none" : undefined, WebkitTouchCallout: "none", WebkitUserSelect: "none" }}>
               <div className="relative overflow-hidden" style={{ aspectRatio: "1", borderRadius: 4, background: "linear-gradient(135deg,#f0ebe0,#e3d9c4)" }}>
                 {u.thumb ? (
-                  <img src={u.thumb} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                  <img src={u.thumb} alt="" draggable={false} className="absolute inset-0 h-full w-full object-cover" />
                 ) : (
                   <span className="absolute inset-0 flex items-center justify-center">
                     {u.kind === "photo"
@@ -98,6 +165,13 @@ function UploadGrid({ items, withTrans, st, onAdd, onFiles, inputRef, onRemove, 
               )}
             </div>
           ))}
+        </div>
+      )}
+      {ghost && (
+        <div className="pointer-events-none fixed z-50" style={{ left: ghost.x, top: ghost.y, width: 64, height: 64, transform: "translate(-50%,-50%) rotate(-3deg)", borderRadius: 6, overflow: "hidden", background: "linear-gradient(135deg,#f0ebe0,#e3d9c4)", border: "2px solid " + GOLD, boxShadow: "0 8px 20px rgba(0,0,0,.35)" }}>
+          {ghost.thumb
+            ? <img src={ghost.thumb} alt="" draggable={false} className="h-full w-full object-cover" />
+            : <span className="flex h-full w-full items-center justify-center">{ghost.kind === "photo" ? <Image className="h-5 w-5" style={{ color: GOLD_D }} /> : <Film className="h-5 w-5" style={{ color: GOLD_D }} />}</span>}
         </div>
       )}
     </>
@@ -228,7 +302,7 @@ export function StepBody({ step, st }) {
             </button>
           )}
         </div>
-        <p className="mb-2 text-[11px]" style={{ color: FAINT }}>최대 20장 · 장당 7~10초 · 끌어서 순서 변경 · 사진마다 전환 효과 선택</p>
+        <p className="mb-2 text-[11px]" style={{ color: FAINT }}>최대 20장 · 장당 7~10초 · 길게 눌러 끌어서 순서 변경 · 사진마다 전환 효과 선택</p>
         <UploadGrid items={st.slidePhotos} withTrans st={st} onAdd={st.addPhoto} onFiles={st.onPhotoFiles} inputRef={st.photoRef} onRemove={st.removePhoto} onReorder={st.reorderPhotos} accept="image/*" addLabel="사진 추가" addHint={`사진만 · 최대 ${st.PHOTO_MAX}장`} />
         {st.photoOver && <p className="mt-1 text-[11px] font-semibold" style={{ color: warn }}>사진은 최대 {st.PHOTO_MAX}장까지 올릴 수 있어요.</p>}
 
@@ -251,7 +325,7 @@ export function StepBody({ step, st }) {
               <div className="mb-1" style={{ height: 5, background: LINE, borderRadius: 3, overflow: "hidden" }}>
                 <div style={{ height: "100%", width: vpct + "%", background: st.videoOver ? warn : GOLD, borderRadius: 3, transition: "width .3s ease" }} />
               </div>
-              <p className="mb-2 text-[11px]" style={{ color: FAINT }}>개수 제한 없음 · 총 길이 1분30초 이내 · 사진 슬라이드 다음에 묶음으로 이어집니다 · 원본 소리 그대로(배경음악 없음)</p>
+              <p className="mb-2 text-[11px]" style={{ color: FAINT }}>개수 제한 없음 · 총 길이 1분30초 이내 · 길게 눌러 끌어서 순서 변경 · 사진 슬라이드 다음에 묶음으로 이어집니다 · 원본 소리 그대로(배경음악 없음)</p>
               {st.videoOver && <p className="mb-2 text-[11px] font-semibold" style={{ color: warn }}>추억 영상 총 길이가 1분30초를 넘었습니다. 영상을 줄여 주세요.</p>}
               <UploadGrid items={st.videos} st={st} onAdd={st.addVideo} onFiles={st.onVideoFiles} inputRef={st.videoRef} onRemove={st.removeVideo} onReorder={st.reorderVideos} accept="video/*" addLabel="영상 추가" addHint="영상만 · 총 1분30초 이내" />
             </div>

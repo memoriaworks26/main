@@ -3,7 +3,7 @@
 //   provider 무관 설계 유지: 버킷명만 여기서 관리(추후 R2 전환 시 이 레이어만 교체).
 //   storage RLS(0018)가 접근을 통제 — 서명URL 발급도 권한 있는 세션에서만 성공.
 // ─────────────────────────────────────────────────────────────
-import { getClient } from "./supabase.js";
+import { getClient, SUPABASE_URL, SUPABASE_ANON } from "./supabase.js";
 
 export const BUCKETS = {
   uploads: "memoria-uploads",  // 보호자 원본(사진·영상)
@@ -27,6 +27,34 @@ export async function uploadFile(bucket, path, file, { upsert = false } = {}) {
   const { error } = await sb.storage.from(bucket).upload(path, file, { upsert, contentType: file.type || undefined });
   if (error) throw new Error("업로드 실패: " + error.message);
   return path;
+}
+
+// 진행률 표시 업로드 — supabase-js upload()는 fetch 기반이라 진행 이벤트가 없어,
+//   Storage REST 엔드포인트로 XHR 직접 업로드(upload.onprogress로 0~1 보고).
+//   본문/헤더 구성은 storage-js 브라우저 경로와 동일(FormData + cacheControl). 비공개 버킷은
+//   세션 access_token으로 RLS 통과(없으면 anon). onProgress는 0~1 비율.
+export function uploadFileWithProgress(bucket, path, file, { upsert = false, onProgress } = {}) {
+  const sb = need();
+  const encPath = String(path).split("/").map(encodeURIComponent).join("/");
+  const url = `${SUPABASE_URL}/storage/v1/object/${bucket}/${encPath}`;
+  return Promise.resolve(sb.auth.getSession()).then(({ data }) => new Promise((resolve, reject) => {
+    const token = data?.session?.access_token || SUPABASE_ANON;
+    const form = new FormData();
+    form.append("cacheControl", "3600");
+    form.append("", file, file.name);
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url, true);
+    xhr.setRequestHeader("authorization", `Bearer ${token}`);
+    xhr.setRequestHeader("apikey", SUPABASE_ANON);
+    if (upsert) xhr.setRequestHeader("x-upsert", "true");
+    xhr.upload.onprogress = (e) => { if (onProgress && e.lengthComputable) onProgress(e.loaded / e.total); };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) { onProgress?.(1); resolve(path); }
+      else reject(new Error("업로드 실패: " + (xhr.responseText || xhr.status)));
+    };
+    xhr.onerror = () => reject(new Error("업로드 실패: 네트워크 오류"));
+    xhr.send(form);
+  }));
 }
 
 export async function removeFiles(bucket, paths) {

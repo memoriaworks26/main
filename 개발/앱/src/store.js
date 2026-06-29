@@ -646,32 +646,29 @@ export const actions = {
   },
 
   // 콘텐츠 허브 자산 (즉시 추가 → 템플릿 클립 드롭다운·허브에 즉시 반영) [Phase4-4b 배선]
-  addContent: (asset) => {
+  //   Promise 반환 — 다중 업로드 진행 표시(콘텐츠 허브)가 파일별 성공/실패를 추적할 수 있게.
+  addContent: (asset, { onProgress } = {}) => {
     // 음악(BGM)은 공용 라이브러리(memoria.bgm)로 — 파트너 템플릿 미지정. 클립·사진과 다른 저장소.
     if (asset.kind === "audio") {
       if (LIVE) {
-        if (!asset.file) { toast("음악 파일을 선택해 주세요."); return; }
-        bgmData.uploadBgm(null, asset.file, asset.meta)
+        if (!asset.file) { toast("음악 파일을 선택해 주세요."); return Promise.reject(new Error("음악 파일 없음")); }
+        return bgmData.uploadBgm(null, asset.file, asset.meta, onProgress)
           .then((b) => set((s) => ({ bgm: [b, ...s.bgm] })))
-          .catch((e) => toast("음악 업로드 실패: " + e.message));
-        return;
+          .catch((e) => { toast("음악 업로드 실패: " + e.message); throw e; });
       }
       set((s) => ({ bgm: [{ id: asset.id, kind: "audio", name: asset.name, meta: asset.meta, shared: true }, ...s.bgm] }));
-      return;
+      return Promise.resolve();
     }
     if (LIVE) {
       const pid = asset.shared ? null : state.partners.find((p) => p.name === asset.partner)?.id;
-      if (!asset.shared && !pid) { toast("파트너를 찾을 수 없습니다."); return; }
-      const insert = (storagePath, size, thumbPath) => content.addContent({ ...asset, storagePath, thumbPath, size: size || asset.size }, pid)
-        .then((a) => set((s) => ({ content: [a, ...s.content] })))
-        .catch((e) => toast("자산 추가 실패: " + e.message));
-      if (asset.file) {
-        const path = `${asset.shared ? "shared" : pid}/${asset.id}.${storage.extOf(asset.file.name)}`;
-        const size = `${(asset.file.size / 1048576).toFixed(1)}MB`;
-        (async () => {
-          await storage.uploadFile(storage.BUCKETS.content, path, asset.file);
-          // 클립은 첫 프레임을 캡처해 썸네일로 함께 저장(실패해도 업로드는 진행 — 절차적 폴백).
-          let thumbPath = null;
+      if (!asset.shared && !pid) { toast("파트너를 찾을 수 없습니다."); return Promise.reject(new Error("파트너 없음")); }
+      // 파일 업로드(있으면) → 클립 썸네일 캡처(실패 무시) → DB 행 삽입 → 목록 prepend. 단일 에러 경로로 토스트.
+      const run = async () => {
+        let storagePath = null, size = asset.size, thumbPath = null;
+        if (asset.file) {
+          storagePath = `${asset.shared ? "shared" : pid}/${asset.id}.${storage.extOf(asset.file.name)}`;
+          size = `${(asset.file.size / 1048576).toFixed(1)}MB`;
+          await storage.uploadFileWithProgress(storage.BUCKETS.content, storagePath, asset.file, { onProgress });
           if (asset.kind === "clip") {
             try {
               const frame = await grabVideoFrame(asset.file);
@@ -680,14 +677,16 @@ export const actions = {
                 await storage.uploadFile(storage.BUCKETS.content, tp, dataUrlToBlob(frame));
                 thumbPath = tp;
               }
-            } catch { /* 썸네일 캡처 실패는 무시 */ }
+            } catch { /* 썸네일 캡처 실패는 무시 — 절차적 폴백 */ }
           }
-          return insert(path, size, thumbPath);
-        })().catch((e) => toast("업로드 실패: " + e.message));
-      } else { insert(null); }
-      return;
+        }
+        const a = await content.addContent({ ...asset, storagePath, thumbPath, size }, pid);
+        set((s) => ({ content: [a, ...s.content] }));
+      };
+      return run().catch((e) => { toast("자산 추가 실패: " + e.message); throw e; });
     }
     set((s) => ({ content: [asset, ...s.content] }));
+    return Promise.resolve();
   },
   removeContent: (id) => {
     if (LIVE) {
@@ -742,19 +741,22 @@ export const actions = {
       // 현재 사업부 소속으로 등록 + 기본 템플릿(__default__) 복제.
       orgs.createPartner({ ...partner, bizUnit: state.bizUnit })
         .then(async (p) => {
-          const def = state.templates[D.DEFAULT_TEMPLATE_ID] || { bgm: null, blocks: [] };
+          // 기본 템플릿이 store에 없으면(미저장·미hydrate·worker RLS 등) 코드 기본값으로 폴백 — 빈 복제 방지.
+          const def = state.templates[D.DEFAULT_TEMPLATE_ID] || { bgm: D.DEFAULT_TEMPLATE.bgm, blocks: D.DEFAULT_TEMPLATE.blocks };
           const cloned = { bgm: def.bgm, blocks: def.blocks.map((b, i) => ({ ...b, id: "e-" + Date.now() + "-" + i })) };
-          // 로그인 계정 발급(임시비번=ID코드) — 등록 즉시 파트너가 로그인 가능하도록.
-          try { await accountsData.provisionPartner(p.id); } catch (e) { toast("로그인 계정 발급 실패(파트너 등록은 완료): " + e.message); }
+          // 템플릿 복제를 가장 먼저 — 부차 단계(edge 계정발급·호실)가 지연/실패/미응답해도 기본 템플릿은 반드시 생성.
+          //   (과거: provisionPartner를 먼저 await → edge 미응답 시 그 뒤 upsertTemplate가 영영 미실행되어 파트너만 남고 템플릿 누락)
           try { await tpl.upsertTemplate(p.id, cloned); } catch (e) { toast("템플릿 생성 실패: " + e.message); }
-          try { await roomsData.createRoomsForPartner(p.id, partner.rooms); } catch (e) { toast("호실 생성 실패: " + e.message); }
           set((s) => ({ partners: [...s.partners, p], templates: { ...s.templates, [p.id]: cloned } }));
+          // 로그인 계정 발급(임시비번=ID코드) + 호실 — 실패해도 등록·템플릿은 유지.
+          try { await accountsData.provisionPartner(p.id); } catch (e) { toast("로그인 계정 발급 실패(파트너 등록은 완료): " + e.message); }
+          try { await roomsData.createRoomsForPartner(p.id, partner.rooms); } catch (e) { toast("호실 생성 실패: " + e.message); }
         })
         .catch((e) => toast("파트너 등록 실패: " + e.message));
       return;
     }
     set((s) => {
-      const def = s.templates[D.DEFAULT_TEMPLATE_ID] || { bgm: null, blocks: [] };
+      const def = s.templates[D.DEFAULT_TEMPLATE_ID] || { bgm: D.DEFAULT_TEMPLATE.bgm, blocks: D.DEFAULT_TEMPLATE.blocks };
       const cloned = { bgm: def.bgm, blocks: def.blocks.map((b, i) => ({ ...b, id: "e-" + Date.now() + "-" + i })) };
       return { partners: [...s.partners, { ...partner, bizUnit: s.bizUnit }], templates: { ...s.templates, [partner.id]: cloned } };
     });

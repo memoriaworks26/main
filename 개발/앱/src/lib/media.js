@@ -58,6 +58,44 @@ export const grabVideoDuration = (file) =>
     v.onerror = () => { URL.revokeObjectURL(url); resolve(0); };
   });
 
+// 콘텐츠 허브 업로드 — 종류별 메타데이터 자동 추출(길이·해상도). 실패하면 0/null → 표시는 폴백.
+//   브라우저 네이티브 디코드만 사용(외부 의존성 0). 메타데이터만 로드하므로 빠름.
+
+// 이미지 픽셀 크기 {w,h} — 실패 시 null.
+export const grabImageSize = (file) =>
+  new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => { const r = { w: img.naturalWidth, h: img.naturalHeight }; URL.revokeObjectURL(url); resolve(r); };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  });
+
+// 영상 길이(초)+해상도 {duration,w,h} — 실패 시 0.
+export const grabVideoMeta = (file) =>
+  new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const v = document.createElement("video");
+    v.preload = "metadata";
+    v.src = url;
+    v.onloadedmetadata = () => {
+      const r = { duration: Number.isFinite(v.duration) ? v.duration : 0, w: v.videoWidth || 0, h: v.videoHeight || 0 };
+      URL.revokeObjectURL(url); resolve(r);
+    };
+    v.onerror = () => { URL.revokeObjectURL(url); resolve({ duration: 0, w: 0, h: 0 }); };
+  });
+
+// 오디오 길이(초) {duration} — 실패 시 0.
+export const grabAudioMeta = (file) =>
+  new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const a = document.createElement("audio");
+    a.preload = "metadata";
+    a.src = url;
+    a.onloadedmetadata = () => { const r = { duration: Number.isFinite(a.duration) ? a.duration : 0 }; URL.revokeObjectURL(url); resolve(r); };
+    a.onerror = () => { URL.revokeObjectURL(url); resolve({ duration: 0 }); };
+  });
+
 // 영상 파일의 첫 프레임을 캡처해 JPEG data URL로 반환 (Promise).
 // 코덱·CORS 제약으로 실패하면 null → 호출부에서 아이콘 폴백 유지.
 export const grabVideoFrame = (file) =>
