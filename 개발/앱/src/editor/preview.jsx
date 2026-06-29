@@ -63,18 +63,22 @@ function SubtitleLayer({ boxRef, subs, time, selSubId, onSubEdit, onSelSub }) {
 // 블록별 실제 보호자 미디어 — 사진(타이틀/AI소스)·슬라이드(자동순환)·영상(재생)·편지(텍스트).
 function MediaView({ media, onTime }) {
   const [idx, setIdx] = useState(0);
+  const [err, setErr] = useState(false);
+  useEffect(() => { setErr(false); }, [media]); // 미디어 바뀌면 에러상태 초기화
   useEffect(() => {
     if (media?.kind !== "images" || media.urls.length < 2) return;
     const t = setInterval(() => setIdx((i) => (i + 1) % media.urls.length), 2200);
     return () => clearInterval(t);
   }, [media]);
   if (!media) return null;
+  // 서명URL 만료·스토리지 오류 등으로 로드 실패 시 빈 화면 대신 안내(깨진 이미지/영상 방지).
+  if (err) return <div className="absolute inset-0 flex items-center justify-center" style={{ background: "#000" }}><span className="text-[12px]" style={{ color: "#aab2bf" }}>미디어를 불러올 수 없습니다 — 새로고침해 주세요</span></div>;
   if (media.kind === "image")
-    return <img src={media.url} alt="" className="absolute inset-0 h-full w-full object-contain" style={{ background: "#000" }} />;
+    return <img src={media.url} alt="" onError={() => setErr(true)} className="absolute inset-0 h-full w-full object-contain" style={{ background: "#000" }} />;
   if (media.kind === "images")
-    return <img src={media.urls[idx % media.urls.length]} alt="" className="absolute inset-0 h-full w-full object-contain" style={{ background: "#000" }} />;
+    return <img src={media.urls[idx % media.urls.length]} alt="" onError={() => setErr(true)} className="absolute inset-0 h-full w-full object-contain" style={{ background: "#000" }} />;
   if (media.kind === "videos")
-    return <video src={media.urls[0]} controls playsInline preload="metadata" className="absolute inset-0 h-full w-full" style={{ background: "#000" }} onTimeUpdate={onTime} />;
+    return <video src={media.urls[0]} controls playsInline preload="metadata" onError={() => setErr(true)} className="absolute inset-0 h-full w-full" style={{ background: "#000" }} onTimeUpdate={onTime} />;
   if (media.kind === "letter") {
     // 아래 → 위 크레딧 스크롤. 끝에 처음 만난 날 / 무지개다리 건넌 날을 크게.
     const dur = Math.max(14, Math.round((media.text || "").length / 12) + 12); // 글 길이에 비례

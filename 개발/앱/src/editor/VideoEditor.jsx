@@ -1,6 +1,6 @@
 // 편집기 — 메인 셸. 예약→템플릿→블록 구성, 편집 문서(edits+gens)·되돌리기/다시 히스토리, 발행 단계 제어.
 // 3패널(왼쪽 BlockList · 가운데 Preview+Timeline · 오른쪽 PropPanel)을 묶는다.
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { ChevronLeft, Undo2, Redo2, Save, Check, Volume2, RotateCcw, Send } from "lucide-react";
 import { SERIF, MASTER, BG, SURFACE, LINE, GOLD, INK, MUTE, FAINT } from "../theme.js";
 import { Btn } from "../ui.jsx";
@@ -57,9 +57,15 @@ export default function VideoEditor({ reservation, onClose }) {
   const mediaLoading = ["queued", "rendering", "composing"].includes(media?.status); // 생성/합성 진행 중
   useEffect(() => { if (reservation?.id) actions.loadReservationMedia(reservation.id); }, [reservation?.id]);
   // 폴링은 "생성 중"일 때만 — 유휴 시엔 서명URL 재발급이 없어 미리보기 영상이 끊기지 않음(20초 클립 정상 재생).
+  //   상한 200회(6s×200≈20분, reaper 15분보다 김) — 워커 중단 등으로 queued/composing 고착 시 무한 폴링 방지.
+  const pollCount = useRef(0);
   useEffect(() => {
     if (!reservation?.id || !mediaLoading) return;
-    const t = setInterval(() => actions.loadReservationMedia(reservation.id), 6000);
+    pollCount.current = 0;
+    const t = setInterval(() => {
+      if (++pollCount.current > 200) { clearInterval(t); return; }
+      actions.loadReservationMedia(reservation.id);
+    }, 6000);
     return () => clearInterval(t);
   }, [reservation?.id, mediaLoading]);
   // 블록 id → { source(보호자 원본), result(AI 생성 결과) }. 미리보기 좌=원본 / 우=작업본.

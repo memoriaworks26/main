@@ -11,4 +11,17 @@ export default defineConfig({
   optimizeDeps: {
     include: ["@supabase/supabase-js", "react", "react-dom", "lucide-react"],
   },
+  // 벤더 분할 — 단일 번들(821KB)을 react/supabase/icons로 쪼개 초기 파싱·캐시 효율↑.
+  build: {
+    chunkSizeWarningLimit: 900,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          react: ["react", "react-dom"],
+          supabase: ["@supabase/supabase-js"],
+          icons: ["lucide-react"],
+        },
+      },
+    },
+  },
 });

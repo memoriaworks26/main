@@ -39,10 +39,13 @@ export async function resolveLink(token) {
     const sb = getClient();
     const { data, error } = await sb.rpc("resolve_link", { p_token: token });
     if (error || !data) return { mode: "live", ok: false, token, error: error?.message || "링크를 찾을 수 없습니다." };
+    // 만료 클라 이중체크 — 서버가 expired로 안 내려도 종료일 지났으면 만료 처리(서버 enforce 외 방어).
+    let status = data.status;
+    if (data.expires_at && new Date(data.expires_at).getTime() < Date.now() && status !== "expired") status = "expired";
     return {
       mode: "live", ok: true, token,
       petName: data.pet_name, partnerName: data.partner_name,
-      status: data.status, videoUrl: data.video_url, expiresAt: data.expires_at,
+      status, videoUrl: data.video_url, expiresAt: data.expires_at,
     };
   } catch (e) {
     return { mode: "live", ok: false, token, error: e.message };
