@@ -27,6 +27,13 @@ export async function uploadBgm(partnerId, file, meta, onProgress) {
   return { id, kind: "audio", name: file.name, meta: meta ?? null, storagePath: path, shared: true };
 }
 
+// BGM 이름 변경 — bgm.name 갱신(음원 파일·storage_path는 그대로).
+export async function renameBgm(id, name) {
+  const d = need();
+  const { error } = await d.from("bgm").update({ name }).eq("id", id);
+  if (error) throw new Error("이름 변경 실패: " + error.message);
+}
+
 // BGM 삭제 — 이 곡을 쓰던 파트너 템플릿 참조부터 비우고, 행·스토리지 파일 제거.
 export async function deleteBgm(id) {
   const d = need();

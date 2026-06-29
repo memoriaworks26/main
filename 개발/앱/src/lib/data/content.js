@@ -8,7 +8,7 @@ const need = () => { const d = db(); if (!d) throw new Error("백엔드 미연�
 const mapAsset = (r) => ({
   id: r.id, kind: r.kind, name: r.name, meta: r.meta, size: r.size_label,
   storagePath: r.storage_path, thumbPath: r.thumb_path,
-  ...(r.shared ? { shared: true } : { partner: r.partner?.name }),
+  ...(r.shared ? { shared: true } : { partner: r.partner?.name, partnerId: r.partner_id }),
 });
 
 export async function fetchContent() {
@@ -35,5 +35,12 @@ export async function addContent(asset, partnerId) {
 export async function deleteContent(id) {
   const d = need();
   const { error } = await d.from("content_assets").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+// 자산 이름 변경 — content_assets.name 갱신(메타·파일은 그대로).
+export async function renameContent(id, name) {
+  const d = need();
+  const { error } = await d.from("content_assets").update({ name }).eq("id", id);
   if (error) throw new Error(error.message);
 }

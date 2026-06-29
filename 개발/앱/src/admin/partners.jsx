@@ -182,9 +182,9 @@ function PartnerDetail({ partner: p, onBack, go }) {
     if (!(await confirm({ title: "비밀번호 초기화", message: `${p.name}의 로그인 비밀번호를 초기 비밀번호(ID 코드: ${p.idCode})로 초기화합니다.\n첫 로그인 시 비밀번호 변경이 필요합니다.`, confirmLabel: "초기화" }))) return;
     actions.resetPartnerPw(p.id);
   };
-  const rs = reservations.filter((r) => r.partner === p.name);
-  const dv = devices.filter((d) => d.partner === p.name);
-  const settle = partnerSettle(store, p.name);  // [QA-P1] store 매출·입금에서 집계(목업 제거)
+  const rs = reservations.filter((r) => r.partnerId === p.id);
+  const dv = devices.filter((d) => d.partnerId === p.id);
+  const settle = partnerSettle(store, p.id);  // [QA-P1] store 매출·입금에서 집계(목업 제거)
   const cnt = (s) => rs.filter((r) => r.status === s).length;
   const online = dv.filter((d) => d.status !== "offline").length;
   const row = (label, val) => (
@@ -313,7 +313,7 @@ export function PartnersManage({ go, onLoginAsPartner }) {
   const month = ymKST(0);
   // 현재 사업부 소속만 + [QA] 이번달 예약 수를 store 예약에서 계산해 주입(목업 reservThisMonth 제거).
   const partners = allPartners.filter((p) => p.bizUnit === bizUnit)
-    .map((p) => ({ ...p, reservThisMonth: countReservInMonth(reservations, month, p.name) }));
+    .map((p) => ({ ...p, reservThisMonth: countReservInMonth(reservations, month, p.id) }));
   const [sel, setSel] = useState(null);
   const [adding, setAdding] = useState(false);
   const [statusF, setStatusF] = useState("all"); // all | active | inactive

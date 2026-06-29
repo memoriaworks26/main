@@ -25,9 +25,9 @@ const SOURCE_KINDS = [
 ];
 
 // 파트너의 다음(가장 임박한) 예약 — 알림 문구 자동 생성용. 발행 완료 건은 제외.
-function nextReservation(reservations, partnerName) {
+function nextReservation(reservations, partnerId) {
   const mine = reservations
-    .filter((r) => r.partner === partnerName && r.status !== "published")
+    .filter((r) => r.partnerId === partnerId && r.status !== "published")
     .sort((a, b) => String((a.date || "") + (a.slot || "")).localeCompare(String((b.date || "") + (b.slot || ""))));
   return mine[0] || null;
 }
@@ -86,7 +86,7 @@ function LiveCard({ dev }) {
   const activeSrc = signageSources.find((s) => s.cat === mode && s.active);
   const modeLabel = CAT_META[mode]?.label || "제작영상";
   // 알림 모드: 소스 위에 다음 예약 안내 문구 오버레이
-  const noticeText = signageNotice.enabled ? fillNotice(signageNotice.template, nextReservation(reservations, PARTNER.name)) : "";
+  const noticeText = signageNotice.enabled ? fillNotice(signageNotice.template, nextReservation(reservations, PARTNER.id)) : "";
 
   let slateMain;
   if (offline) slateMain = "신호 없음";
@@ -172,7 +172,7 @@ function LiveCard({ dev }) {
 function NoticeEditor() {
   const PARTNER = usePartner();
   const { signageNotice, reservations } = useStore();
-  const nextRes = nextReservation(reservations, PARTNER.name);
+  const nextRes = nextReservation(reservations, PARTNER.id);
   const preview = fillNotice(signageNotice.template, nextRes);
   const chips = [["{chief}", "보호자명"], ["{deceased}", "반려동물명"], ["{room}", "호실"], ["{slot}", "시간"], ["{date}", "날짜"]];
   return (
@@ -346,8 +346,8 @@ function SourceManager({ sources, onOpen }) {
 // 색은 라이브 컨트롤과 동일 웜톤(빨강·버건디 배제, 디자인 가이드).
 
 // 자사 디바이스를 상태별로 분류 (오프라인=네트워크 끊김)
-function deviceHealth(devices, partnerName) {
-  const my = devices.filter((d) => d.partner === partnerName);
+function deviceHealth(devices, partnerId) {
+  const my = devices.filter((d) => d.partnerId === partnerId);
   const offline = my.filter((d) => d.status === "offline");
   const live = my.filter((d) => d.status === "live");
   const online = my.filter((d) => d.status !== "offline");
@@ -389,8 +389,8 @@ function DeviceAlerts({ offline }) {
 export function Live() {
   const PARTNER = usePartner();
   const { devices, signageSources } = useStore(); // 목 DB — 라이브 컨트롤 ↔ 관리자 사이니지 공유
-  const { my, offline, live, online } = deviceHealth(devices, PARTNER.name);
-  const rows = devices.filter((d) => d.partner === PARTNER.name && d.room.includes("호실")).slice(0, 4);
+  const { my, offline, live, online } = deviceHealth(devices, PARTNER.id);
+  const rows = devices.filter((d) => d.partnerId === PARTNER.id && d.room.includes("호실")).slice(0, 4);
   const [srcCat, setSrcCat] = useState(null); // 열린 소스 관리 모달 카테고리
   return (
     <div>

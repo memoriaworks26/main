@@ -23,13 +23,13 @@ export default function VideoEditor({ reservation, onClose }) {
   const store = useStore(); // 템플릿·콘텐츠·파트너 구독 → 템플릿 변경이 제작에 즉시 반영
   // 열린 예약의 파트너 → 그 파트너 템플릿(없으면 기본 템플릿) → 편집기 블록·BGM
   const { blocks, bgmName, partnerId } = useMemo(() => {
-    const partner = store.partners.find((p) => p.name === reservation?.partner);
-    const tpl = (partner && store.templates[partner.id]) || store.templates[D.DEFAULT_TEMPLATE_ID] || { bgm: null, blocks: [] };
+    // 파트너 스코프 통일 — 예약의 partnerId 기준(동명이인 방지). 템플릿·BGM 쓰기에 이 값 사용.
+    const pid = reservation?.partnerId || null;
+    const tpl = (pid && store.templates[pid]) || store.templates[D.DEFAULT_TEMPLATE_ID] || { bgm: null, blocks: [] };
     return {
       blocks: buildBlocks(tpl, store.content, reservation),
       bgmName: (store.bgm.find((b) => b.id === tpl.bgm) || {}).name || "배경 음악", // 실 공용 BGM 라이브러리 기준
-      // 파트너 스코프 통일 — 이름 매칭 우선, 없으면 reservation.partnerId. BGM 등 템플릿 쓰기에 이 값을 사용.
-      partnerId: (partner && partner.id) || reservation?.partnerId || null,
+      partnerId: pid,
     };
   }, [store.partners, store.templates, store.content, store.bgm, reservation]);
 

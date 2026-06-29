@@ -105,26 +105,27 @@ function AddSalesModal({ open, onClose, onAdd }) {
   );
 }
 
-function PartnerSettleDetail({ partner, onBack, onIssue, onViewStatement }) {
+function PartnerSettleDetail({ partnerId, partnerName, onBack, onIssue, onViewStatement }) {
   const s = useStore();
   const partners = bizPartners(s); // 현재 사업부 파트너만
-  const bizNames = new Set(partners.map((p) => p.name));
-  const settlementItems = s.settlementItems.filter((i) => bizNames.has(i.partner)); // 사업부 매출 건만
-  const pObj = partners.find((x) => x.name === partner); // 건당 단가 출처
-  const storeItems = settlementItems.filter((i) => i.partner === partner);
+  const bizIds = new Set(partners.map((p) => p.id));
+  const settlementItems = s.settlementItems.filter((i) => bizIds.has(i.partnerId)); // 사업부 매출 건만
+  const pObj = partners.find((x) => x.id === partnerId); // 건당 단가 출처
+  const partner = pObj?.name ?? partnerName;             // 표시·명세서용 이름
+  const storeItems = settlementItems.filter((i) => i.partnerId === partnerId);
   const [draft, setDraft] = useState(() => storeItems.map((i) => ({ ...i })));
   const items = draft;
   const dirty = JSON.stringify(draft) !== JSON.stringify(storeItems);
-  const saveItems = () => actions.replacePartnerSettlement(partner, draft);
+  const saveItems = () => actions.replacePartnerSettlement(partnerId, draft);
   const resetItems = () => setDraft(storeItems.map((i) => ({ ...i })));
-  const statements = s.statements.filter((x) => x.partner === partner);              // [Phase4-5b] store
-  const deposits = s.settlementDeposits.filter((d) => d.partner === partner);         // [Phase4-5b] store
+  const statements = s.statements.filter((x) => x.partnerId === partnerId);           // [Phase4-5b] store
+  const deposits = s.settlementDeposits.filter((d) => d.partnerId === partnerId);      // [Phase4-5b] store
   const [depositOpen, setDepositOpen] = useState(false);
   const [addingModal, setAddingModal] = useState(false);
   const [bulkAmt, setBulkAmt] = useState("");
   const [editDepId, setEditDepId] = useState(null);
   const [editDepForm, setEditDepForm] = useState({});
-  const addDeposit = (dp) => actions.addDeposit(dp);
+  const addDeposit = (dp) => actions.addDeposit({ ...dp, partnerId });
   const startEditDep = (dep) => { setEditDepId(dep.id); setEditDepForm({ ...dep }); };
   const cancelEditDep = () => { setEditDepId(null); setEditDepForm({}); };
   const saveDep = async () => { if (!(await confirm({ title: "입금 내역 저장", message: "수정한 입금 내역을 저장합니다." }))) return; actions.updateDeposit(editDepId, { ...editDepForm, amount: num(String(editDepForm.amount)) }); cancelEditDep(); };
@@ -144,7 +145,7 @@ function PartnerSettleDetail({ partner, onBack, onIssue, onViewStatement }) {
   const toggleAll = () => setSel(allSelected ? [] : rows.map(itemKey));
   const addItem = ({ nm, ymd, amt }) => {
     if (!nm.trim() || !num(amt)) return;
-    setDraft((d) => [...d, { partner, deceased: nm.trim(), chief: "—", ymd, date: fmtYmd(ymd).slice(5), amount: num(amt), status: "waiting", manual: true }]);
+    setDraft((d) => [...d, { partnerId, partner, deceased: nm.trim(), chief: "—", ymd, date: fmtYmd(ymd).slice(5), amount: num(amt), status: "waiting", manual: true }]);
   };
   const setAmount = (key, v) => setDraft((d) => d.map((i) => (itemKey(i) === key ? { ...i, amount: num(v) } : i)));
   const applyBulk = async () => {
@@ -165,7 +166,7 @@ function PartnerSettleDetail({ partner, onBack, onIssue, onViewStatement }) {
     if (!selItems.length) return;
     if (!(await confirm({ title: "거래명세서 발행", message: `선택한 ${selItems.length}건(${won(selAmount)})으로 거래명세서를 발행합니다.\n발행 시 단가가 동결됩니다.`, confirmLabel: "발행" }))) return;
     const period = fmtYmd(from) + " ~ " + fmtYmd(to);
-    actions.addStatement({ id: "TS-" + Date.now().toString(36), partner, period, issuedAt: "2026. 06. 18", count: selItems.length, amount: selAmount, status: "sent" }); // [Phase4-5b] 발행 영구화
+    actions.addStatement({ id: "TS-" + Date.now().toString(36), partnerId, partner, period, issuedAt: "2026. 06. 18", count: selItems.length, amount: selAmount, status: "sent" }); // [Phase4-5b] 발행 영구화
     onIssue({ partner, items: selItems, period, issuedAt: "2026. 06. 18", amount: selAmount });
   };
 
@@ -326,13 +327,13 @@ function UnitPriceCell({ row }) {
 export function Settlement() {
   const s = useStore();
   const partners = bizPartners(s); // 현재 사업부 파트너만(신규 등록 포함)
-  const [detail, setDetail] = useState(null);   // 파트너사명
+  const [detail, setDetail] = useState(null);   // 상세 진입한 파트너 행 { id, partner(이름) … }
   const [view, setView] = useState(null);       // 발행/조회 중인 거래명세서 { partner, items, period, issuedAt }
   // 청구=Σ매출건 · 입금=Σ입금내역 · 미수금=청구−입금 (store에서 직접 집계) [Phase4-5b]
   const settleRows = partners.map((p) => {
-    const items = s.settlementItems.filter((i) => i.partner === p.name);
+    const items = s.settlementItems.filter((i) => i.partnerId === p.id);
     const billed = items.reduce((a, i) => a + i.amount, 0);
-    const paid = s.settlementDeposits.filter((d) => d.partner === p.name).reduce((a, d) => a + d.amount, 0);
+    const paid = s.settlementDeposits.filter((d) => d.partnerId === p.id).reduce((a, d) => a + d.amount, 0);
     return { partner: p.name, region: p.region, count: items.length, billed, paid, unpaid: billed - paid, status: billed - paid <= 0 ? "done" : "waiting", id: p.id, unitPrice: p.unitPrice || 0 };
   });
   const total = settleRows.reduce((s, p) => s + p.billed, 0);
@@ -353,10 +354,11 @@ export function Settlement() {
   if (detail !== null) {
     return (
       <PartnerSettleDetail
-        partner={detail}
+        partnerId={detail.id}
+        partnerName={detail.partner}
         onBack={() => setDetail(null)}
         onIssue={(v) => setView(v)}
-        onViewStatement={(st) => setView({ partner: detail, items: undefined, period: st.period, issuedAt: st.issuedAt })}
+        onViewStatement={(st) => setView({ partner: detail.partner, items: undefined, period: st.period, issuedAt: st.issuedAt })}
       />
     );
   }
@@ -379,7 +381,7 @@ export function Settlement() {
       </div>
       <Table cols={pCols} rows={settleSorted} sort={settleSortState} onSortChange={settleOnSort} renderCell={(r, k) =>
         k === "status" ? <Tag s={r.status} /> :
-        k === "act" ? <button onClick={() => setDetail(r.partner)} className="text-[12px] font-semibold" style={{ color: GOLD }}>상세 →</button> :
+        k === "act" ? <button onClick={() => setDetail(r)} className="text-[12px] font-semibold" style={{ color: GOLD }}>상세 →</button> :
         k === "unitPrice" ? <UnitPriceCell row={r} /> :
         ["billed", "paid", "unpaid"].includes(k) ? <span className="tabular-nums">{r[k] ? won(r[k]) : "—"}</span> :
         k === "count" ? <span className="tabular-nums">{r.count}건</span> : r[k]

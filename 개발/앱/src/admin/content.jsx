@@ -1,7 +1,7 @@
 // [추모영상 제작] 콘텐츠 허브 — 공용 영상/이미지/음악 소스 업로드·관리.
 import React, { useState, useEffect, useRef } from "react";
 import {
-  Clapperboard, Image, Loader2, Music, Pause, Play, Plus, RotateCw, Search, Trash2, X,
+  Check, Clapperboard, Image, Loader2, Music, Pause, Pencil, Play, Plus, RotateCw, Search, Trash2, X,
 } from "lucide-react";
 import { NAVY, SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS } from "../theme.js";
 import { Btn, PageHeader, Modal, Table, useTableSort } from "../ui.jsx";
@@ -75,7 +75,7 @@ const mmss = (s) => { const t = Math.max(0, Math.round(s || 0)); return Math.flo
 const sizeLabel = (bytes) => `${(bytes / 1048576).toFixed(1)}MB`;
 
 // 파일 → store asset(메타 자동). i는 같은 배치 내 id 충돌 방지용. 메타 추출 실패해도 업로드는 진행.
-async function buildAsset(file, partnerName, i) {
+async function buildAsset(file, target, i, partnerName) {
   const kind = kindOf(file);
   let meta = "";
   if (kind === "photo") {
@@ -91,8 +91,8 @@ async function buildAsset(file, partnerName, i) {
     meta = kbps ? `${mmss(m.duration)} · ${kbps}kbps` : mmss(m.duration);
   }
   const asset = { id: `ct-${Date.now()}-${i}`, kind, name: file.name, meta, size: sizeLabel(file.size), file };
-  // 음악은 무조건 공용 BGM 라이브러리. 클립·사진은 현재 파트너 베이스(공통→공용).
-  if (kind !== "audio") { if (partnerName === "공통") asset.shared = true; else asset.partner = partnerName; }
+  // 음악은 무조건 공용 BGM 라이브러리. 클립·사진은 현재 파트너 베이스(공통→공용). 스코핑은 partnerId 기준.
+  if (kind !== "audio") { if (target === "공통") asset.shared = true; else { asset.partnerId = target; asset.partner = partnerName; } }
   return asset;
 }
 
@@ -233,13 +233,14 @@ function ContentPreview({ item, onClose }) {
 export function ContentHub() {
   const tabs = ["전체", "영상", "이미지", "음악"];
   const { content, bgm, partners: allPartners } = useStore();
-  const [partner, setPartner] = useState(allPartners.find((p) => p.active)?.name || allPartners[0].name);
+  const [partner, setPartner] = useState(allPartners.find((p) => p.active)?.id || allPartners[0]?.id);
   const [t, setT] = useState("전체");
   const [q, setQ] = useState("");
   // 백그라운드 업로드 — 파일을 고르면 즉시 표 상단에 행으로 띄우고, 자동으로 메타추출→업로드(진행률%)를 처리.
   //   entry: { upId, name, kind, progress(0~1), status: prep|up|err, file, target, targetLabel }
   const [uploads, setUploads] = useState([]);
   const [preview, setPreview] = useState(null); // 미리보기 중인 자산
+  const [editing, setEditing] = useState(null); // 인라인 이름 변경 { id, value }
   const fileRef = useRef(null);
   const queueRef = useRef([]);   // 대기 중 업로드 entry
   const activeRef = useRef(0);   // 동시 업로드 수
@@ -249,7 +250,7 @@ export function ContentHub() {
   const runUpload = async (entry) => {
     patchUp(entry.upId, { status: "prep", progress: 0 });
     try {
-      const asset = await buildAsset(entry.file, entry.target, entry.upId);
+      const asset = await buildAsset(entry.file, entry.target, entry.upId, entry.targetLabel);
       patchUp(entry.upId, { status: "up" });
       await actions.addContent(asset, { onProgress: (p) => patchUp(entry.upId, { progress: p }) });
       setUploads((u) => u.filter((e) => e.upId !== entry.upId));
@@ -269,7 +270,7 @@ export function ContentHub() {
   const onFiles = (list) => {
     const files = Array.from(list || []);
     if (!files.length) return;
-    const targetLabel = partner === "공통" ? "공용(모든 파트너)" : partner; // 음악은 항상 공용 BGM
+    const targetLabel = partner === "공통" ? "공용(모든 파트너)" : (allPartners.find((p) => p.id === partner)?.name || partner); // 음악은 항상 공용 BGM
     const entries = files.map((file, k) => ({
       upId: `up-${Date.now()}-${k}-${Math.random().toString(36).slice(2, 6)}`,
       name: file.name, kind: kindOf(file), progress: 0, status: "prep", file, target: partner, targetLabel,
@@ -277,10 +278,17 @@ export function ContentHub() {
     setUploads((u) => [...entries, ...u]); // 즉시 행으로 표시
     enqueue(entries);                       // 백그라운드 처리
   };
+  // 인라인 이름 변경 — 음악은 BGM 라이브러리, 그 외는 콘텐츠 자산. 빈값/무변경이면 저장 생략.
+  const startRename = (c) => setEditing({ id: c.id, value: c.name });
+  const saveRename = (c) => {
+    const nm = (editing?.value || "").trim();
+    if (nm && nm !== c.name) (c.kind === "audio" ? actions.renameBgm : actions.renameContent)(c.id, nm);
+    setEditing(null);
+  };
   // 음악(BGM)은 공용 라이브러리(memoria.bgm) → 모든 파트너사 공통. 클립·사진은 파트너사별.
   const items = content.concat(bgm.map((b) => ({ id: b.id, kind: "audio", name: b.name, meta: b.meta, size: b.size || "", shared: true, storagePath: b.storagePath, src: b.src })));
   const filtered = items
-    .filter((c) => partner === "공통" ? c.shared : (c.partner === partner || c.shared))
+    .filter((c) => partner === "공통" ? c.shared : (c.partnerId === partner || c.shared))
     .filter((c) => t === "전체" || (t === "영상" && c.kind === "clip") || (t === "이미지" && c.kind === "photo") || (t === "음악" && c.kind === "audio"))
     .filter((c) => matchQuery(q, c.name, c.meta));
   const { rows: sorted, sort, onSortChange } = useTableSort(filtered, { value: contentSortValue });
@@ -313,7 +321,7 @@ export function ContentHub() {
       {/* 파트너사 베이스 (+ 공통 공용 자산) */}
       <div className="mb-3 flex items-center gap-2">
         <SearchSelect value={partner} onChange={setPartner} placeholder="파트너사"
-          options={[{ value: "공통", label: "공통 (공용 자산)" }, ...partners.map((p) => ({ value: p.name, label: p.name }))]} />
+          options={[{ value: "공통", label: "공통 (공용 자산)" }, ...partners.map((p) => ({ value: p.id, label: p.name }))]} />
         <span className="text-[12px]" style={{ color: FAINT }}>{sorted.length}개</span>
       </div>
       <div className="mb-3 flex gap-1.5">
@@ -321,7 +329,7 @@ export function ContentHub() {
           <button key={x} onClick={() => setT(x)} className="px-3 py-1.5 text-[12px] font-semibold" style={{ borderRadius: RADIUS, background: t === x ? GOLD_SOFT : SURFACE, color: t === x ? GOLD_D : MUTE, border: "1px solid " + (t === x ? GOLD_SOFT : LINE) }}>{x}</button>
         ))}
       </div>
-      <Table cols={cols} rows={rows} empty="자산이 없습니다" sort={sort} onSortChange={onSortChange} onRowClick={(c) => { if (!c._uploading) setPreview(c); }} renderCell={(c, k) => {
+      <Table cols={cols} rows={rows} empty="자산이 없습니다" sort={sort} onSortChange={onSortChange} onRowClick={(c) => { if (!c._uploading && editing?.id !== c.id) setPreview(c); }} renderCell={(c, k) => {
         // 백그라운드 업로드 진행 행 — 종류 아이콘 + 진행률 바/%. 완료되면 사라지고 실데이터 행이 대체.
         if (c._uploading) {
           const Icon = KIND_ICON[c.kind] || Clapperboard;
@@ -364,29 +372,60 @@ export function ContentHub() {
           const Icon = KIND_ICON[c.kind] || Clapperboard;
           return <span className="inline-flex items-center gap-1.5 text-[12.5px]" style={{ color: MUTE }}><Icon className="h-3.5 w-3.5" style={{ color: KIND_ICON_C[c.kind], opacity: 0.7 }} />{KIND_LABEL[c.kind] || "—"}</span>;
         }
-        if (k === "name") return (
-          <span className="inline-flex items-center gap-1.5">
-            <span className="font-semibold" style={{ color: INK }}>{c.name}</span>
-            {c.shared && <span className="shrink-0 px-1.5 py-[1px] text-[10px] font-semibold" style={{ background: "#e9eef5", color: "#3f5e87", borderRadius: 3 }}>공용</span>}
-          </span>
-        );
+        if (k === "name") {
+          if (editing?.id === c.id) return (
+            <input
+              autoFocus value={editing.value}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => setEditing((ed) => ({ ...ed, value: e.target.value }))}
+              onKeyDown={(e) => { if (e.key === "Enter") saveRename(c); else if (e.key === "Escape") setEditing(null); }}
+              onBlur={() => saveRename(c)}
+              className="w-full bg-transparent text-[13px] font-semibold outline-none"
+              style={{ color: INK, borderBottom: "1px solid " + GOLD_D, minWidth: 160 }} />
+          );
+          return (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="font-semibold" style={{ color: INK }}>{c.name}</span>
+              {c.shared && <span className="shrink-0 px-1.5 py-[1px] text-[10px] font-semibold" style={{ background: "#e9eef5", color: "#3f5e87", borderRadius: 3 }}>공용</span>}
+            </span>
+          );
+        }
         if (k === "fmt") return <span style={{ color: MUTE }}>{fmtLabel(c)}</span>;
         if (k === "len") return <span className="tabular-nums" style={{ color: MUTE }}>{durLabel(c)}</span>;
         if (k === "act") {
           const isBgm = c.kind === "audio";
-          const canDelete = isBgm ? bgm.some((b) => b.id === c.id) : content.some((x) => x.id === c.id);
-          return canDelete ? (
-            <button
-              onClick={async (e) => {
-                e.stopPropagation();
-                if (await confirm({ title: isBgm ? "음악 삭제" : "자산 삭제", message: `"${c.name}"${isBgm ? " 음악을" : " 자산을"} 삭제합니다.`, danger: true }))
-                  isBgm ? actions.removeBgm(c.id) : actions.removeContent(c.id);
-              }}
-              className="rounded p-1.5 outline-none transition hover:bg-[#f0ece4]"
-              title="삭제" style={{ color: FAINT }}>
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          ) : null;
+          const canEdit = isBgm ? bgm.some((b) => b.id === c.id) : content.some((x) => x.id === c.id);
+          if (!canEdit) return null;
+          if (editing?.id === c.id) return (
+            <span className="inline-flex items-center gap-0.5">
+              <button onClick={(e) => { e.stopPropagation(); saveRename(c); }}
+                className="rounded p-1.5 outline-none transition hover:bg-[#f0ece4]" title="저장" style={{ color: "#2f8f5b" }}>
+                <Check className="h-3.5 w-3.5" />
+              </button>
+              <button onMouseDown={(e) => e.preventDefault()} onClick={(e) => { e.stopPropagation(); setEditing(null); }}
+                className="rounded p-1.5 outline-none transition hover:bg-[#f0ece4]" title="취소" style={{ color: FAINT }}>
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </span>
+          );
+          return (
+            <span className="inline-flex items-center gap-0.5">
+              <button onClick={(e) => { e.stopPropagation(); startRename(c); }}
+                className="rounded p-1.5 outline-none transition hover:bg-[#f0ece4]" title="이름 변경" style={{ color: FAINT }}>
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  if (await confirm({ title: isBgm ? "음악 삭제" : "자산 삭제", message: `"${c.name}"${isBgm ? " 음악을" : " 자산을"} 삭제합니다.`, danger: true }))
+                    isBgm ? actions.removeBgm(c.id) : actions.removeContent(c.id);
+                }}
+                className="rounded p-1.5 outline-none transition hover:bg-[#f0ece4]"
+                title="삭제" style={{ color: FAINT }}>
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </span>
+          );
         }
         return c[k];
       }} />

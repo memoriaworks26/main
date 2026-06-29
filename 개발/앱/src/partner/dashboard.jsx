@@ -343,12 +343,12 @@ export function PDashboard({ onNew, onDetail }) {
   const PARTNER = usePartner();
   const { rooms, reservations, devices } = useStore(); // 목 DB — 호실 명칭·위치 편집 + 예약 + 사이니지 전파
   // 호실 ↔ 사이니지 디바이스 매핑(자사) — 실시간 표출 상태 표시용
-  const myDevices = devices.filter((d) => d.partner === PARTNER.name);
+  const myDevices = devices.filter((d) => d.partnerId === PARTNER.id);
   const deviceOf = (r) => myDevices.find((d) => d.room === r.name);
 
   // 오늘 예약 — 자사 예약 중 오늘자만. 퇴실 처리는 이 화면에서만 가능(예약 목록에서는 불가).
   // (목업: 고정 today 상수가 없어 자사 예약의 최신 날짜를 '오늘'로 사용)
-  const mine = reservations.filter((r) => r.partner === PARTNER.name);
+  const mine = reservations.filter((r) => r.partnerId === PARTNER.id);
   const today = mine.reduce((m, r) => (r.date > m ? r.date : m), "");
   const todayRows = mine.filter((r) => r.date === today);
   const inProgressCount = todayRows.filter((r) => r.status === "rendering" || r.status === "confirm").length;

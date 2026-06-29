@@ -21,7 +21,7 @@ export function PList({ onDetail, onNew }) {
   const [to, setTo] = useState("2026-06-30");
   const reservState = (st) => st === "published" ? "published" : (st === "review" ? "review" : "rendering");
 
-  const base = reservations.filter((r) => r.partner === PARTNER.name);
+  const base = reservations.filter((r) => r.partnerId === PARTNER.id);
   const ranged = base.filter((r) => (!from || r.date >= from) && (!to || r.date <= to));
   const filtered = ranged
     .filter((r) => sf === "all" || reservState(r.status) === sf)

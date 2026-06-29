@@ -265,7 +265,7 @@ export function Intake({ prefill } = {}) {
 
   // 호실별 충돌 — 자정 넘김까지 비교하려고 날짜를 절대 분으로 환산(같은 날 필터 대신 전체 자사 예약과 대조)
   const newResv = { id: "__new__", slot: newSlot, date, endDate };
-  const mine = reservations.filter((r) => r.partner === PARTNER.name);
+  const mine = reservations.filter((r) => r.partnerId === PARTNER.id);
   const slotConflict = (roomName) => !timeInvalid && mine.some(
     (x) => x.room === roomName && overlaps(newResv, x)
   );

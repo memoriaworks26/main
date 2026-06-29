@@ -177,7 +177,7 @@ export function Production({ onOpenEditor, account }) {
   const tabDef = PROD_TABS.find((t) => t.key === tab);
   const rows = reservations
     .filter((r) => inTab(r, tabDef))
-    .filter((r) => pf === "all" || r.partner === pf)
+    .filter((r) => pf === "all" || r.partnerId === pf)
     .sort((a, b) => String(a.requestedAt ?? "").localeCompare(String(b.requestedAt ?? ""))); // 먼저 요청된 순(null 안전)
 
   const count = (t) => reservations.filter((r) => inTab(r, t)).length;
@@ -188,7 +188,7 @@ export function Production({ onOpenEditor, account }) {
         <div className="flex items-center gap-2">
           <Btn size="sm" variant="neutral" onClick={() => setPromptModal(true)}><SlidersHorizontal className="h-3.5 w-3.5" /> 기본 프롬프트</Btn>
           <SearchSelect value={pf} onChange={setPf} placeholder="전체 파트너사"
-            options={[{ value: "all", label: "전체 파트너사" }, ...partners.filter((p) => p.active).map((p) => ({ value: p.name, label: p.name }))]} />
+            options={[{ value: "all", label: "전체 파트너사" }, ...partners.filter((p) => p.active).map((p) => ({ value: p.id, label: p.name }))]} />
         </div>
       } />
 
@@ -345,7 +345,7 @@ export function SecondEdit({ onOpenEditor, account }) {
   const loadedIds = jobs.map((j) => j.reservId);
   const candidates = reservations
     .filter((r) => r.status === "published" && !loadedIds.includes(r.id))
-    .filter((r) => lf === "전체" || r.partner === lf)
+    .filter((r) => lf === "전체" || r.partnerId === lf)
     .filter((r) => matchQuery(q, r.deceased, r.chief, r.partner, r.phone));
 
   const pill = (st) => { const s = SE_STATUS[st]; return <span className="inline-flex shrink-0 whitespace-nowrap px-2 py-[3px] text-[11px] font-semibold" style={{ borderRadius: 3, color: s.c, background: s.bg }}>{s.label}</span>; };
@@ -363,7 +363,7 @@ export function SecondEdit({ onOpenEditor, account }) {
             <span className="text-[12.5px] font-bold" style={{ color: INK }}>1차 완료 건 불러오기</span>
             <div className="flex items-center gap-2">
               <SearchSelect value={lf} onChange={setLf} placeholder="전체 파트너사" width={200}
-                options={[{ value: "전체", label: "전체 파트너사" }, ...partners.map((p) => ({ value: p.name, label: p.name }))]} />
+                options={[{ value: "전체", label: "전체 파트너사" }, ...partners.map((p) => ({ value: p.id, label: p.name }))]} />
               <div className="flex items-center px-2.5" style={{ height: 30, width: 240, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS }}>
                 <Search className="h-3.5 w-3.5" style={{ color: FAINT }} strokeWidth={1.9} />
                 <input value={q} onChange={(e) => setQ(e.target.value)} className="ml-2 w-full bg-transparent text-[12.5px] outline-none" placeholder="반려동물·보호자 검색" style={{ color: INK }} />

@@ -45,6 +45,11 @@ const LIVE = BACKEND_LIVE && !DEV_PREVIEW;
 // 시드 사업부(메모리아웍스) — 기존 더미 데이터는 전부 이 사업부 소속.
 const SEED_BIZ = D.BIZ_UNITS[0].id;
 
+// 목업 파트너 이름→id 맵. 목업 데이터(예약·기기·정산·콘텐츠)는 partner(이름)만 들고 있어
+// id 기준 스코핑이 안 되므로, 시드 시 partnerId를 주입한다. (라이브는 매퍼가 이미 partnerId 부여)
+const PID_BY_NAME = Object.fromEntries(D.PARTNERS.map((p) => [p.name, p.id]));
+const withPid = (r) => ({ ...r, partnerId: r.partnerId ?? PID_BY_NAME[r.partner] });
+
 let state = {
   // 사업부 (최상위 테넌트) — 파트너사·고객·폼 등 모든 데이터가 bizUnit으로 묶임 [Phase4-1 배선]
   bizUnits: LIVE ? [] : D.BIZ_UNITS.map((b) => ({ ...b })),
@@ -52,9 +57,9 @@ let state = {
   termConfigs: {},                                     // 사업부별 용어 설정 { [bizId]: { [termKey]: { partner, user } } }
   userText: {},                                        // 사업부별 유저링크 텍스트 오버라이드 { [bizId]: { [key]: string } }
   userPhotos: {},                                      // 사업부별 예시 사진 오버라이드 { [bizId]: { good, bad } (dataURL) }
-  reservations: LIVE ? [] : D.RESERVATIONS.map((r) => ({ ...r })),  // [Phase4-2 배선]
+  reservations: LIVE ? [] : D.RESERVATIONS.map(withPid),  // [Phase4-2 배선]
   accounts: LIVE ? [] : D.ADMIN_ACCOUNTS.map((a) => ({ ...a })),  // [Phase3b 배선]
-  devices: LIVE ? [] : D.DEVICES.map((d) => ({ ...d })),  // [Phase4-6 배선]
+  devices: LIVE ? [] : D.DEVICES.map(withPid),  // [Phase4-6 배선]
   signageSources: LIVE ? [] : D.SIGNAGE_SOURCES.map((s) => ({ ...s })), // 표출 소스 [Phase4-6 배선]
   signageNotice: { ...D.SIGNAGE_NOTICE }, // 알림 문구(라이브=파트너 hydrate로 덮어씀, 없으면 이 기본값)
   currentPartnerId: null,                 // [Phase4-6] 파트너 세션의 partner_id(소스·알림 쓰기용)
@@ -75,10 +80,10 @@ let state = {
   rooms: LIVE ? [] : D.ROOMS.map((r) => ({ ...r })),   // 호실 [Phase4-1b 배선] — 파트너 세션에서 hydrate
   partners: LIVE ? [] : D.PARTNERS.map((p) => ({ ...p, bizUnit: p.bizUnit || SEED_BIZ })),  // 파트너사 [Phase4-1 배선]
 
-  settlementItems: LIVE ? [] : D.SETTLEMENT_ITEMS.map((i) => ({ ...i })), // 정산 매출 건 [Phase4-5 배선]
-  settlementDeposits: LIVE ? [] : D.SETTLEMENT_DEPOSITS.map((d) => ({ ...d })), // 입금 내역 [Phase4-5b 배선]
-  statements: LIVE ? [] : D.STATEMENTS.map((x) => ({ ...x })),                 // 거래명세서 [Phase4-5b 배선]
-  content: LIVE ? [] : D.CONTENT.map((c) => ({ ...c })),  // 콘텐츠 허브 자산 [Phase4-4b 배선]
+  settlementItems: LIVE ? [] : D.SETTLEMENT_ITEMS.map(withPid), // 정산 매출 건 [Phase4-5 배선]
+  settlementDeposits: LIVE ? [] : D.SETTLEMENT_DEPOSITS.map(withPid), // 입금 내역 [Phase4-5b 배선]
+  statements: LIVE ? [] : D.STATEMENTS.map(withPid),                 // 거래명세서 [Phase4-5b 배선]
+  content: LIVE ? [] : D.CONTENT.map((c) => c.shared ? { ...c } : withPid(c)),  // 콘텐츠 허브 자산 [Phase4-4b 배선]
   bgm: LIVE ? [] : D.BGM.map((b) => ({ ...b, kind: "audio", shared: true })),  // 공용 BGM 라이브러리(콘텐츠 허브 음악 탭)
   company: { ...D.COMPANY },                            // 회사정보 — 고객센터 연락처 등 편집값(설정 ↔ 유저링크 공유)
 };
@@ -102,21 +107,21 @@ export function useStore() {
 }
 
 // ── 사업부 스코핑 헬퍼 ─────────────────────────────────────────
-// 현재 사업부의 파트너사 목록. (예약/고객은 partner 이름으로 연결되므로 이름 집합도 함께)
+// 현재 사업부의 파트너사 목록. (동명이인 방지를 위해 모든 스코핑은 partner_id 기준)
 export const bizPartners = (s) => s.partners.filter((p) => p.bizUnit === s.bizUnit);
-export const bizPartnerNames = (s) => new Set(bizPartners(s).map((p) => p.name));
+export const bizPartnerIds = (s) => new Set(bizPartners(s).map((p) => p.id));
 // 현재 사업부 예약(고객) — 소속 파트너의 예약만
-export const bizReservations = (s) => { const names = bizPartnerNames(s); return s.reservations.filter((r) => names.has(r.partner)); };
+export const bizReservations = (s) => { const ids = bizPartnerIds(s); return s.reservations.filter((r) => ids.has(r.partnerId)); };
 // 연월 "YYYY-MM"(KST). off로 전월(-1) 등 상대월 계산. — "이번달 예약" 집계 단일 기준.
 export const ymKST = (off = 0) => { const d = new Date(Date.now() + 9 * 3600 * 1000); d.setUTCMonth(d.getUTCMonth() + off); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`; };
-// 특정 월(YYYY-MM)의 예약 수 — partnerName 주면 그 파트너만. reservation.date(reserve_date) 기준.
-export const countReservInMonth = (reservations, month, partnerName) =>
-  reservations.filter((r) => (!partnerName || r.partner === partnerName) && String(r.date || "").startsWith(month)).length;
+// 특정 월(YYYY-MM)의 예약 수 — partnerId 주면 그 파트너만. reservation.date(reserve_date) 기준.
+export const countReservInMonth = (reservations, month, partnerId) =>
+  reservations.filter((r) => (!partnerId || r.partnerId === partnerId) && String(r.date || "").startsWith(month)).length;
 // [QA-P1] 파트너 정산 집계(매출건·청구·입금·미수금) — 단일 기준(대시보드·파트너상세·정산 공용).
-export const partnerSettle = (s, partnerName) => {
-  const items = s.settlementItems.filter((i) => i.partner === partnerName);
+export const partnerSettle = (s, partnerId) => {
+  const items = s.settlementItems.filter((i) => i.partnerId === partnerId);
   const billed = items.reduce((a, i) => a + i.amount, 0);
-  const paid = s.settlementDeposits.filter((d) => d.partner === partnerName).reduce((a, d) => a + d.amount, 0);
+  const paid = s.settlementDeposits.filter((d) => d.partnerId === partnerId).reduce((a, d) => a + d.amount, 0);
   return { count: items.length, billed, paid, unpaid: billed - paid };
 };
 // [QA-P1] 예약의 보호자 제작링크(submission) 조회 — 고객상세·예약상세 공용.
@@ -125,7 +130,7 @@ export const submissionFor = (s, reservationId) => s.submissions.find((x) => x.r
 export const videoFor = (s, reservationId) => s.videos.find((x) => x.reservationId === reservationId) || null;
 // 현재 사업부 전체 정산 합계.
 export const bizSettleTotals = (s) => bizPartners(s).reduce((acc, p) => {
-  const r = partnerSettle(s, p.name);
+  const r = partnerSettle(s, p.id);
   return { billed: acc.billed + r.billed, paid: acc.paid + r.paid, unpaid: acc.unpaid + r.unpaid };
 }, { billed: 0, paid: 0, unpaid: 0 });
 // 사업부 용어 조회 — 설정값 없으면 기본 용어. (파트너 콘솔·유저 링크 라벨이 이걸 쓰면 텍스트만 사업부별로 바뀜)
@@ -660,7 +665,7 @@ export const actions = {
       return Promise.resolve();
     }
     if (LIVE) {
-      const pid = asset.shared ? null : state.partners.find((p) => p.name === asset.partner)?.id;
+      const pid = asset.shared ? null : asset.partnerId;
       if (!asset.shared && !pid) { toast("파트너를 찾을 수 없습니다."); return Promise.reject(new Error("파트너 없음")); }
       // 파일 업로드(있으면) → 클립 썸네일 캡처(실패 무시) → DB 행 삽입 → 목록 prepend. 단일 에러 경로로 토스트.
       const run = async () => {
@@ -697,6 +702,18 @@ export const actions = {
     }
     set((s) => ({ content: s.content.filter((c) => c.id !== id) }));
   },
+  // 콘텐츠 허브 자산 이름 변경 (클립·사진) — 빈 이름/무변경은 무시.
+  renameContent: (id, name) => {
+    const nm = (name || "").trim();
+    if (!nm) return;
+    if (LIVE) {
+      content.renameContent(id, nm)
+        .then(() => set((s) => ({ content: s.content.map((c) => (c.id === id ? { ...c, name: nm } : c)) })))
+        .catch((e) => toast("이름 변경 실패: " + e.message));
+      return;
+    }
+    set((s) => ({ content: s.content.map((c) => (c.id === id ? { ...c, name: nm } : c)) }));
+  },
   // 공용 BGM 삭제 (콘텐츠 허브 음악 탭) — 라이브러리 행·파일 제거 + 템플릿 참조 정리.
   removeBgm: (id) => {
     if (LIVE) {
@@ -706,6 +723,18 @@ export const actions = {
       return;
     }
     set((s) => ({ bgm: s.bgm.filter((b) => b.id !== id) }));
+  },
+  // 공용 BGM 이름 변경 (콘텐츠 허브 음악 탭) — 음원·storage_path는 그대로.
+  renameBgm: (id, name) => {
+    const nm = (name || "").trim();
+    if (!nm) return;
+    if (LIVE) {
+      bgmData.renameBgm(id, nm)
+        .then(() => set((s) => ({ bgm: s.bgm.map((b) => (b.id === id ? { ...b, name: nm } : b)) })))
+        .catch((e) => toast("이름 변경 실패: " + e.message));
+      return;
+    }
+    set((s) => ({ bgm: s.bgm.map((b) => (b.id === id ? { ...b, name: nm } : b)) }));
   },
 
   // 유저 입력 폼 (파트너별 선택항목 설정 — key별 patch) [Phase4-7 배선]
@@ -787,7 +816,7 @@ export const actions = {
   // 정산 매출 건 (추가·금액수정·삭제) [Phase4-5 배선]
   addSettlementItem: (item) => {
     if (LIVE) {
-      const pid = state.partners.find((p) => p.name === item.partner)?.id;
+      const pid = item.partnerId;
       if (!pid) { toast("파트너를 찾을 수 없습니다."); return; }
       settle.addItem(pid, item)
         .then((it) => set((s) => ({ settlementItems: [...s.settlementItems, it] })))
@@ -821,7 +850,7 @@ export const actions = {
   // 정산 입금 내역 [Phase4-5b 배선]
   addDeposit: (dp) => {
     if (LIVE) {
-      const pid = state.partners.find((p) => p.name === dp.partner)?.id;
+      const pid = dp.partnerId;
       if (!pid) { toast("파트너를 찾을 수 없습니다."); return; }
       settle.addDeposit(pid, dp).then((d) => set((s) => ({ settlementDeposits: [...s.settlementDeposits, d] }))).catch((e) => toast("입금 추가 실패: " + e.message));
       return;
@@ -844,7 +873,7 @@ export const actions = {
   },
   addStatement: (st) => {
     if (LIVE) {
-      const pid = state.partners.find((p) => p.name === st.partner)?.id;
+      const pid = st.partnerId;
       if (!pid) { toast("파트너를 찾을 수 없습니다."); return; }
       settle.addStatement(pid, st).then((x) => set((s) => ({ statements: [x, ...s.statements] }))).catch((e) => toast("명세서 발행 실패: " + e.message));
       return;
@@ -872,15 +901,14 @@ export const actions = {
     }
     set((s) => ({ partners: s.partners.map((p) => (priceMap[p.id] != null ? { ...p, unitPrice: priceMap[p.id] } : p)) }));
   },
-  replacePartnerSettlement: (partner, items) => {                               // [Phase4-5] 파트너 매출 일괄 저장
+  replacePartnerSettlement: (partnerId, items) => {                             // [Phase4-5] 파트너 매출 일괄 저장
     if (LIVE) {
-      const pid = state.partners.find((p) => p.name === partner)?.id;
-      if (!pid) { toast("파트너를 찾을 수 없습니다."); return; }
-      settle.replacePartnerItems(pid, items)
-        .then((rows) => set((s) => ({ settlementItems: [...s.settlementItems.filter((i) => i.partner !== partner), ...rows] })))
+      if (!partnerId) { toast("파트너를 찾을 수 없습니다."); return; }
+      settle.replacePartnerItems(partnerId, items)
+        .then((rows) => set((s) => ({ settlementItems: [...s.settlementItems.filter((i) => i.partnerId !== partnerId), ...rows] })))
         .catch((e) => toast("정산 저장 실패: " + e.message));
       return;
     }
-    set((s) => ({ settlementItems: [...s.settlementItems.filter((i) => i.partner !== partner), ...items] }));
+    set((s) => ({ settlementItems: [...s.settlementItems.filter((i) => i.partnerId !== partnerId), ...items] }));
   },
 };

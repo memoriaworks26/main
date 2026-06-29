@@ -158,7 +158,7 @@ export function Templates() {
           const bgm = bgmLib.find((b) => b.id === tpl.bgm);
           // 콘텐츠 허브: 해당 파트너 영상(clip) + 이미지(photo)
           const assetOpts = content
-            .filter((c) => (c.kind === "clip" || c.kind === "photo") && c.partner === p.name)
+            .filter((c) => (c.kind === "clip" || c.kind === "photo") && c.partnerId === p.id)
             .map((c) => ({ value: c.id, label: (c.kind === "clip" ? "🎬 영상 · " : "🖼 이미지 · ") + c.name }));
           const noHub = assetOpts.length === 0;
           // BGM 옵션 — 실 공용 라이브러리(콘텐츠 허브 음악 탭과 동일 소스). 워커는 templates.bgm_id로 조회하므로 실 id 필수.

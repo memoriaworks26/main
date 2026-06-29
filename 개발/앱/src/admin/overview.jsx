@@ -14,8 +14,8 @@ export function Dashboard({ go }) {
   const { bizUnits, bizUnit } = store;
   // 현재 사업부 스코핑 — 소속 파트너사 + 그 예약만
   const partners = store.partners.filter((p) => p.bizUnit === bizUnit);
-  const bizNames = new Set(partners.map((p) => p.name));
-  const reservations = store.reservations.filter((r) => bizNames.has(r.partner));
+  const bizIds = new Set(partners.map((p) => p.id));
+  const reservations = store.reservations.filter((r) => bizIds.has(r.partnerId));
   const total = partners.length;
   const active = partners.filter((p) => p.active).length;
   // [QA] 이번달 예약 = store 예약에서 현재 월 집계(목업 reservThisMonth 제거). 전월 대비 실차이 표기.

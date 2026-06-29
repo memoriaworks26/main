@@ -37,7 +37,7 @@ export const CUSTOMER_COLS = [
 const STAGE_RANK = { review: 0, rendering: 1, confirm: 2, published: 3 };
 export const customerSortValue = (r, k) => (k === "video" || k === "progress") ? (STAGE_RANK[r.status] ?? 99) : (r[k] ?? "");
 // 예약 1건 → 고객관리 행 형태 (대시보드 최근예약과 공유)
-export const toCustomerRow = (r) => ({ id: r.id, deceased: r.deceased, chief: r.chief, phone: r.phone, partner: r.partner, date: r.date || (r.requestedAt || "").split(" ")[0], room: r.room, slot: r.slot, endDate: r.endDate, status: r.status, assignee: r.assignee });
+export const toCustomerRow = (r) => ({ id: r.id, deceased: r.deceased, chief: r.chief, phone: r.phone, partner: r.partner, partnerId: r.partnerId, date: r.date || (r.requestedAt || "").split(" ")[0], room: r.room, slot: r.slot, endDate: r.endDate, status: r.status, assignee: r.assignee });
 // 고객관리 행 셀 렌더 (대시보드 최근예약과 동일 표현)
 export const renderCustomerCell = (r, k) =>
   k === "deceased" ? <span style={{ fontFamily: SERIF, fontWeight: 700, color: INK }}>{r.deceased}</span> :
@@ -164,19 +164,18 @@ export function Customers({ initialSel = null, account }) {
   const store = useStore(); // 목 DB — 고객관리 = 예약 spine 파생(발행·컨펌 상태 전파)
   // 현재 사업부 스코핑 — 소속 파트너사의 예약만(고객은 partner 이름으로 연결)
   const partners = store.partners.filter((p) => p.bizUnit === store.bizUnit);
-  const bizNames = new Set(partners.map((p) => p.name));
-  const reservations = store.reservations.filter((r) => bizNames.has(r.partner));
+  const bizIds = new Set(partners.map((p) => p.id));
+  const reservations = store.reservations.filter((r) => bizIds.has(r.partnerId));
   const canDelete = account?.role === "master"; // 예약건 삭제는 관리자권한(마스터)만 가능
-  const [partner, setPartner] = useState("전체");
+  const [partner, setPartner] = useState("전체"); // 선택된 파트너 필터(파트너 id 또는 "전체")
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(initialSel); // 상세 보기 중인 예약 id
   const [picked, setPicked] = useState(() => new Set()); // 선택 삭제용 체크된 예약 id
   // 대시보드 최근예약 등 외부에서 특정 예약으로 진입 시 동기화
   useEffect(() => { if (initialSel) setSel(initialSel); }, [initialSel]);
-  const filters = ["전체", ...partners.map((p) => p.name)];
   const filtered = reservations
     .map(toCustomerRow)
-    .filter((c) => partner === "전체" || c.partner === partner)
+    .filter((c) => partner === "전체" || c.partnerId === partner)
     .filter((c) => matchQuery(q, c.chief, c.deceased, c.phone));
   const { rows, sort, onSortChange } = useTableSort(filtered, { key: "date", dir: "desc", value: customerSortValue });
 
@@ -212,7 +211,7 @@ export function Customers({ initialSel = null, account }) {
       } />
       <div className="mb-3 flex items-center gap-2">
         <SearchSelect value={partner} onChange={setPartner} placeholder="전체 파트너사"
-          options={filters.map((x) => ({ value: x, label: x === "전체" ? "전체 파트너사" : x }))} />
+          options={[{ value: "전체", label: "전체 파트너사" }, ...partners.map((p) => ({ value: p.id, label: p.name }))]} />
         <span className="text-[12px]" style={{ color: FAINT }}>{rows.length}건</span>
         {canDelete && pickedVisible.length > 0 && (
           <div className="ml-auto flex items-center gap-2">
