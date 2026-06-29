@@ -105,42 +105,26 @@ function UploadGrid({ items, withTrans, st, onAdd, onFiles, inputRef, onRemove, 
 }
 
 export function StepBody({ step, st }) {
-  // 배경 음악 미리듣기 — 실제 mp3 자산이 없는 목업이라 WebAudio로 잔잔한 톤을 합성해 소리가 나게 한다.
-  // (본운영: b.src(실제 파일)로 <audio> 재생으로 교체)
+  // 배경 음악 미리듣기 — 실제 음원(public/bgm/*.mp3, b.src)을 <audio>로 재생.
   const [playingBgm, setPlayingBgm] = useState(null);
   const [openPrivacy, setOpenPrivacy] = useState(false);   // 동의 0단계 — 개인정보 상세 펼침
   const [openMarketing, setOpenMarketing] = useState(false); // 동의 0단계 — 마케팅 상세 펼침
-  const audioCtxRef = useRef(null);
-  const oscRef = useRef([]);
+  const audioElRef = useRef(null);
   const stopPreview = () => {
-    oscRef.current.forEach((o) => { try { o.stop(); } catch { /* already stopped */ } });
-    oscRef.current = [];
+    const a = audioElRef.current;
+    if (a) { try { a.pause(); a.currentTime = 0; } catch { /* noop */ } }
     setPlayingBgm(null);
   };
   const playPreview = (bi) => {
     stopPreview();
+    const src = D.BGM[bi] && D.BGM[bi].src;
+    if (!src) return;
     try {
-      const ctx = audioCtxRef.current || (audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)());
-      const now = ctx.currentTime;
-      const gain = ctx.createGain();
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(0.1, now + 0.06);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.8);
-      gain.connect(ctx.destination);
-      // 곡마다 살짝 다른 화음(트랙 구분용)
-      const chord = [261.63, 329.63, 392.0].map((f) => f * (1 + bi * 0.05));
-      chord.forEach((f, k) => {
-        const osc = ctx.createOscillator();
-        osc.type = "sine";
-        osc.frequency.value = f;
-        osc.connect(gain);
-        osc.start(now + k * 0.12);
-        osc.stop(now + 1.8);
-        oscRef.current.push(osc);
-      });
-      setPlayingBgm(bi);
-      setTimeout(() => setPlayingBgm((p) => (p === bi ? null : p)), 1800);
-    } catch { /* WebAudio 미지원 환경 — 무음 폴백 */ }
+      let a = audioElRef.current;
+      if (!a) { a = audioElRef.current = new window.Audio(); a.preload = "auto"; a.addEventListener("ended", () => setPlayingBgm(null)); }
+      a.src = src; a.currentTime = 0;
+      a.play().then(() => setPlayingBgm(bi)).catch(() => { /* 자동재생 차단 등 */ });
+    } catch { /* Audio 미지원 — 무음 폴백 */ }
   };
   useEffect(() => stopPreview, []); // 언마운트 시 정지
   // 0 — 개인정보 동의

@@ -11,11 +11,11 @@ export const CONTENT = [
   { id: "ct-7", kind: "photo", partner: "펫포레스트 추모관", name: "추모액자_내추럴.png", meta: "투명 PNG", size: "1.0MB" },
 ];
 
-// BGM 라이브러리 (관리자는 곡 교체만 가능)
+// BGM 라이브러리 — 실제 음원. 미리듣기=웹 번들(public/bgm/*.mp3, src), 최종 렌더=memoria-content 동일본(bgm 테이블 storage_path). 관리자는 곡 교체 가능.
 export const BGM = [
-  { id: "b-1", name: "추모_잔잔한_피아노.mp3", meta: "3:45 · 128kbps", current: true },
-  { id: "b-2", name: "고요한_현악.mp3", meta: "2:58 · 128kbps", current: false },
-  { id: "b-3", name: "따뜻한_어쿠스틱.mp3", meta: "4:12 · 128kbps", current: false },
+  { id: "b-1", name: "추모 · 잔잔한 패드", meta: "1:02 · 루프", src: "/bgm/calm.mp3", current: true },
+  { id: "b-2", name: "고요한 현악 패드", meta: "1:02 · 루프", src: "/bgm/strings.mp3", current: false },
+  { id: "b-3", name: "따뜻한 패드", meta: "1:02 · 루프", src: "/bgm/warm.mp3", current: false },
 ];
 
 // AI 프롬프트 (리스트 선택형 — 타이틀/AI영상)
