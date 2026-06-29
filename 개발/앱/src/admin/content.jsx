@@ -53,10 +53,13 @@ const durLabel = (c) => { const m = durMatch(c); return m ? m[1] + ":" + m[2] : 
 const durSec = (c) => { const m = durMatch(c); return m ? (+m[1] * 60 + +m[2]) : -1; };
 // 길이 부분을 뺀 나머지를 '형식'으로 (해상도·비트레이트·"투명 PNG" 등)
 const fmtLabel = (c) => ((c.meta || "").replace(/\d+:\d{2}\s*·?\s*/, "").trim() || KIND_LABEL[c.kind] || "—");
+// 귀속(대상) 라벨 — 공통(공용) 또는 파트너사명. 음악(BGM)은 항상 공용.
+const ownerLabel = (c) => (c.shared ? "공용" : (c.partner || "—"));
 const contentSortValue = (c, k) =>
   k === "kind" ? (KIND_RANK[c.kind] ?? 9) :
   k === "len" ? durSec(c) :
   k === "fmt" ? fmtLabel(c) :
+  k === "owner" ? ownerLabel(c) :
   k === "name" ? c.name : c[k];
 
 // ── 자동 분류·메타 추출 ── 파일 하나에서 종류·이름·길이·해상도·용량을 모두 자동 산출.
@@ -307,12 +310,13 @@ export function ContentHub() {
     { key: "thumb", label: "미리보기" },
     { key: "kind", label: "종류", sortable: true },
     { key: "name", label: "이름", sortable: true },
+    { key: "owner", label: "대상", sortable: true },
     { key: "fmt", label: "형식", sortable: true },
     { key: "len", label: "길이", align: "right", sortable: true },
     { key: "act", label: "", align: "right" },
   ];
   return (
-    <div style={{ maxWidth: 700 }}>
+    <div style={{ maxWidth: 880 }}>
       <PageHeader title="콘텐츠 허브" sub="파트너사별 선업로드 자산(클립·사진) + 공용 음악 라이브러리" right={
         <div className="flex items-center gap-2">
           <div className="flex items-center px-3" style={{ height: 36, width: 232, background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS }}>
@@ -358,6 +362,7 @@ export function ContentHub() {
               </span>
             </span>
           );
+          if (k === "owner") return <span className="inline-block truncate" style={{ color: MUTE, maxWidth: 120 }}>{c.kind === "audio" ? "공용" : (c.targetLabel || "—")}</span>;
           if (k === "fmt") return <span style={{ color: err ? "#c0392b" : MUTE }}>{UP_STATUS[c.status] || "처리 중"}</span>;
           if (k === "len") return <span className="tabular-nums" style={{ color: err ? "#c0392b" : MUTE }}>{c.status === "up" ? `${pct}%` : err ? "실패" : "준비"}</span>;
           if (k === "act") return err ? (
@@ -390,15 +395,10 @@ export function ContentHub() {
               className="w-full bg-transparent text-[13px] font-semibold outline-none"
               style={{ color: INK, borderBottom: "1px solid " + GOLD_D, minWidth: 160 }} />
           );
-          return (
-            <span className="inline-flex items-center gap-1.5">
-              <span className="font-semibold" style={{ color: INK }}>{c.name}</span>
-              {c.shared && <span className="shrink-0 px-1.5 py-[1px] text-[10px] font-semibold" style={{ background: "#e9eef5", color: "#3f5e87", borderRadius: 3 }}>공용</span>}
-            </span>
-          );
+          return <span className="block truncate font-semibold" style={{ color: INK, maxWidth: 200 }} title={c.name}>{c.name}</span>;
         }
-        if (k === "fmt") {
-          // 편집 중인 클립·사진은 형식 칸을 귀속(파트너/공통) 선택으로 — 음악은 항상 공용이라 그대로.
+        if (k === "owner") {
+          // 편집 중인 클립·사진은 귀속(파트너/공통) 선택 드롭다운 — 음악은 항상 공용이라 라벨 고정.
           if (editing?.id === c.id && c.kind !== "audio") return (
             <select value={editing.partner ?? "공통"}
               onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}
@@ -409,13 +409,14 @@ export function ContentHub() {
               {partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           );
-          return <span style={{ color: MUTE }}>{fmtLabel(c)}</span>;
+          return c.shared
+            ? <span className="px-1.5 py-[1px] text-[11px] font-semibold" style={{ background: "#e9eef5", color: "#3f5e87", borderRadius: 3 }}>공용</span>
+            : <span className="inline-block truncate" style={{ color: MUTE, maxWidth: 140 }} title={ownerLabel(c)}>{c.partner || allPartners.find((p) => p.id === c.partnerId)?.name || "—"}</span>;
         }
+        if (k === "fmt") return <span style={{ color: MUTE }}>{fmtLabel(c)}</span>;
         if (k === "len") return <span className="tabular-nums" style={{ color: MUTE }}>{durLabel(c)}</span>;
         if (k === "act") {
           const isBgm = c.kind === "audio";
-          const canEdit = isBgm ? bgm.some((b) => b.id === c.id) : content.some((x) => x.id === c.id);
-          if (!canEdit) return null;
           if (editing?.id === c.id) return (
             <span className="inline-flex items-center gap-0.5">
               <button onClick={(e) => { e.stopPropagation(); saveEdit(c); }}
