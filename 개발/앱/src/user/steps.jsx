@@ -25,13 +25,17 @@ function SlideCanvas({ frames }) {
       ctx.drawImage(im, x, y, w, h);
     };
     const PER = 2600, FADE = 700; let raf; const t0 = performance.now();
-    const frame = (now) => {
+    // 경과시간은 rAF 콜백 인자(now)가 아니라 performance.now()로 직접 계산한다.
+    // 카톡 등 일부 인앱 웹뷰는 requestAnimationFrame이 콜백에 타임스탬프를 안 넘겨(now=undefined),
+    // now-t0 = NaN → 인덱스 NaN → imgs[NaN].complete 접근에서 크래시했다(유저링크가 카톡으로 열리는 경로라 빈번).
+    const frame = () => {
       const n = imgs.length;
       ctx.fillStyle = "#000"; ctx.fillRect(0, 0, W, H); // 여백색 = 최종 영상 ffmpeg pad(검정)과 일치(WYSIWYG)
       if (n) {
-        const e = now - t0, idx = Math.floor(e / PER) % n, prev = (idx - 1 + n) % n, a = Math.min(1, (e % PER) / FADE);
-        if (n > 1 && imgs[prev].complete && imgs[prev].naturalWidth) drawContain(imgs[prev]);
-        if (imgs[idx].complete && imgs[idx].naturalWidth) { ctx.globalAlpha = n > 1 ? a : 1; drawContain(imgs[idx]); ctx.globalAlpha = 1; }
+        const e = performance.now() - t0, idx = Math.floor(e / PER) % n, prev = (idx - 1 + n) % n, a = Math.min(1, (e % PER) / FADE);
+        const cur = imgs[idx], pre = imgs[prev]; // 방어적 접근 — 인덱스가 어긋나도 .complete를 undefined에서 읽지 않게
+        if (n > 1 && pre?.complete && pre.naturalWidth) drawContain(pre);
+        if (cur?.complete && cur.naturalWidth) { ctx.globalAlpha = n > 1 ? a : 1; drawContain(cur); ctx.globalAlpha = 1; }
       }
       raf = requestAnimationFrame(frame);
     };

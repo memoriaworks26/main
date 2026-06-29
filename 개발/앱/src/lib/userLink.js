@@ -6,7 +6,7 @@
 // 라이브(env 설정)면 Supabase, 아니면 목업으로 동일 인터페이스 폴백.
 // ─────────────────────────────────────────────────────────────
 import { getClient, BACKEND_LIVE, UPLOAD_BUCKET, SUPABASE_URL, SUPABASE_ANON } from "./supabase.js";
-import { imageToJpeg, downscaleVideo } from "./media.js";
+import { imageToJpeg } from "./media.js";
 
 // URL에서 토큰 추출: /u/<token> 경로 또는 ?t=<token> 쿼리. 없으면 null(데모).
 export function getToken() {
@@ -80,12 +80,10 @@ export async function bgmPreviewUrl(storagePath) {
 //   onProgress(pct): 0~100 진행률 콜백(선택).
 export async function uploadAsset(token, file, { kind, onProgress, onStage } = {}) {
   if (kind === "photo") file = await imageToJpeg(file);   // 사진은 업로드 전 JPEG 통일(HEIC·WebP 등 정규화)
-  if (kind === "video") {                                 // 영상은 1080p 다운스케일(과대해상도·대용량만, 실패 시 원본)
-    onStage?.("compress");
-    file = await downscaleVideo(file);
-    onStage?.("upload");
-  }
-  const sizeMB = +(file.size / 1048576).toFixed(1);       // 다운스케일 후 크기 반영
+  // 영상은 원본 그대로 즉시 업로드 — 클라 실시간 재인코딩(다운스케일=영상 길이만큼 걸리고 진행률 없는 '압축 중')
+  //   제거. 어차피 렌더 워커가 최종 1920×1080으로 재인코딩하므로 화질 동일, 업로드가 바로(진행률 표시) 시작된다.
+  if (kind === "video") onStage?.("upload");
+  const sizeMB = +(file.size / 1048576).toFixed(1);
   if (!BACKEND_LIVE || !token) {
     return { storagePath: `demo/${file.name}`, name: file.name, sizeMB, kind };
   }
