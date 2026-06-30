@@ -95,7 +95,8 @@ function TimeInput({ value, onChange }) {
   return <TimeStepper h={h} m={m} onH={(v) => set(v, m)} onM={(v) => set(h, v)} />;
 }
 
-function TodayTimeline({ rows, cont = [], onDetail }) {
+// rows=오늘 예약(렌더·드래그 편집 대상), conflictRows=충돌검사용 전체 자사 예약(자정넘김 크로스데이까지 대조). cont=전일 이어짐(읽기전용 표시).
+function TodayTimeline({ rows, cont = [], conflictRows = rows, onDetail }) {
   const tp = usePartnerTerm(); // 사업부별 파트너 용어
   const CASE_ROOMS = useCaseRooms();
   const [openId, setOpenId] = useState(null);
@@ -171,7 +172,7 @@ function TodayTimeline({ rows, cont = [], onDetail }) {
       if (!d.preview) return;
       const newSlot = slotOf(d.preview.start, d.preview.end);
       const room = d.preview.room;
-      const ok = d.preview.start < d.preview.end && !hasRoomConflict(rows, room, newSlot, d.id, d.date);
+      const ok = d.preview.start < d.preview.end && !hasRoomConflict(conflictRows, room, newSlot, d.id, d.date);
       const changed = newSlot !== slotOf(d.origStart, d.origEnd) || room !== d.room;
       if (!ok || !changed) return; // 충돌·역전이거나 변화 없음 → 취소
       const r = rows.find((x) => x.id === d.id);
@@ -219,7 +220,7 @@ function TodayTimeline({ rows, cont = [], onDetail }) {
                   const left = pct(seg.start);
                   const width = Math.max(1.5, (segOvernight ? 100 : pct(seg.end)) - left);
                   const open = openId === r.id;
-                  const bad = dragging && (seg.start >= seg.end || hasRoomConflict(rows, drag.preview.room, slotOf(seg.start, seg.end), r.id, r.date));
+                  const bad = dragging && (seg.start >= seg.end || hasRoomConflict(conflictRows, drag.preview.room, slotOf(seg.start, seg.end), r.id, r.date));
                   return (
                     <div key={r.id} title={r.deceased + " · " + slotLabel(r.slot)}
                       className="absolute top-1 h-5 select-none text-[11px] font-bold text-white transition-[background] hover:brightness-95"
@@ -282,7 +283,7 @@ function TodayTimeline({ rows, cont = [], onDetail }) {
               const newSlot = te.startStr + "~" + te.endStr;
               const { start: ns, end: ne } = parseSlot(newSlot);
               const timeInvalid = ns === ne; // 길이 0만 무효(자정 넘김 허용)
-              const timeConflict = !timeInvalid && hasRoomConflict(rows, r.room, newSlot, r.id, r.date);
+              const timeConflict = !timeInvalid && hasRoomConflict(conflictRows, r.room, newSlot, r.id, r.date);
               const canSaveTime = !timeInvalid && !timeConflict;
 
               return (
@@ -312,7 +313,7 @@ function TodayTimeline({ rows, cont = [], onDetail }) {
                         className="cursor-pointer px-2 py-1 text-[12px] font-semibold outline-none"
                         style={{ background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK, width: 100 }}>
                         {CASE_ROOMS.map((n) => {
-                          const blocked = n !== r.room && hasRoomConflict(rows, n, r.slot, r.id, r.date);
+                          const blocked = n !== r.room && hasRoomConflict(conflictRows, n, r.slot, r.id, r.date);
                           return (
                             <option key={n} value={n} disabled={blocked}>
                               {n}{blocked ? " (사용중)" : ""}
@@ -451,7 +452,7 @@ export function PDashboard({ onNew, onDetail }) {
         </div>
 
         {/* 타임라인 아코디언 — 호실 카드 위에 표시 */}
-        {timelineOpen && <TodayTimeline rows={todayRows} cont={contRows} onDetail={onDetail} />}
+        {timelineOpen && <TodayTimeline rows={todayRows} cont={contRows} conflictRows={mine} onDetail={onDetail} />}
 
         <div className="flex flex-wrap gap-3.5" style={{ marginTop: timelineOpen ? 16 : 0 }}>
           {rooms.map((r) => {
@@ -470,8 +471,8 @@ export function PDashboard({ onNew, onDetail }) {
         <Table cols={todayCols} rows={todaySorted} sort={sort} onSortChange={onSortChange} empty="오늘 예약이 없습니다." onRowClick={(r) => onDetail(r)} renderCell={(r, k) =>
           k === "deceased" ? <span style={{ fontFamily: SERIF, fontWeight: 700, color: INK }} className="hover:underline">{r.deceased}</span> :
           // 호실·시간 셀은 인라인 편집 컨트롤 — 셀 클릭이 상세 이동으로 번지지 않도록 차단
-          k === "room" ? <span onClick={(e) => e.stopPropagation()}><RoomSelect value={r.room} rows={todayRows} slot={r.slot} id={r.id} date={r.date} onChange={(v) => actions.setReservationRoom(r.id, v)} /></span> :
-          k === "slot" ? <span onClick={(e) => e.stopPropagation()}><SlotEditCell r={r} rows={todayRows} /></span> :
+          k === "room" ? <span onClick={(e) => e.stopPropagation()}><RoomSelect value={r.room} rows={mine} slot={r.slot} id={r.id} date={r.date} onChange={(v) => actions.setReservationRoom(r.id, v)} /></span> :
+          k === "slot" ? <span onClick={(e) => e.stopPropagation()}><SlotEditCell r={r} rows={mine} /></span> :
           renderCustomerCell(r, k)
         } />
       </div>
