@@ -218,16 +218,31 @@ export async function makeSlideshow(items, out) {
 }
 
 // 편지 영상 — 텍스트가 아래 → 위로 흐르는 크레딧 스크롤(편집기 미리보기와 동일 연출).
-export async function letterScrollSegment(text, fontFile, out) {
+// 편지 스크롤(아래→위). 날짜(처음 만난 날·무지개다리 건넌 날)도 고정 카드가 아니라 편지 본문에 이어
+//   같은 스크롤로 마지막에 올라온다(라벨 작게·날짜 크게). dates={metDate,partDate} (없으면 본문만).
+export async function letterScrollSegment(text, dates, fontFile, out) {
   const font = fontFile ? `fontfile='${fontFile}':` : "";
-  const wrapped = wrapText(text, 28);
-  const lines = wrapped.split("\n").length;
-  const fontsize = 40, lineh = fontsize + 16, TH = lines * lineh;
-  const dur = Math.min(40, Math.max(12, Math.round((H + TH) / 55))); // 읽기 속도 ~55px/s
-  const y = `(h-(h+${TH})*t/${dur})`;                                 // h(아래) → -TH(위)
+  const wrapped = wrapText(text || "", 28);
+  const hasBody = !!wrapped.trim();
+  // 콘텐츠 요소들(본문 + 날짜 라벨/값)에 누적 y오프셋 부여 → 하나의 블록으로 함께 스크롤.
+  const els = [];
+  let h = 0;
+  if (hasBody) { els.push({ text: wrapped, size: 40, ls: 16, off: 0, color: "0xf3e9c8" }); h = wrapped.split("\n").length * 56; }
+  const addDate = (label, val) => {
+    if (!val) return;
+    h += hasBody || els.length ? 110 : 0;                                  // 본문/직전 항목과 간격
+    els.push({ text: label, size: 32, ls: 6, off: h, color: "0xbda77f" }); h += 46; // 라벨(작게·흐린 골드)
+    els.push({ text: String(val), size: 60, ls: 6, off: h, color: "0xf6ecd2" }); h += 84; // 날짜(크게·밝게)
+  };
+  addDate("우리 처음 만난 날", dates?.metDate);
+  addDate("무지개다리 건넌 날", dates?.partDate);
+  if (!els.length) els.push({ text: " ", size: 40, ls: 16, off: 0, color: "0xf3e9c8" }); // 안전장치(빈 편지·날짜)
+  const totalH = Math.max(h, 1);
+  const dur = Math.min(52, Math.max(12, Math.round((H + totalH) / 55)));   // 읽기 속도 ~55px/s
+  const top = `(h-(h+${totalH})*t/${dur})`;                                // 콘텐츠 상단 y: h(아래) → -totalH(위)
+  const vf = els.map((e) => `drawtext=${font}text='${escText(e.text)}':fontcolor=${e.color}:fontsize=${e.size}:line_spacing=${e.ls}:x=(w-text_w)/2:y=(${top}+${e.off})`).join(",");
   await ff(["-y", "-f", "lavfi", "-i", `color=c=0x161310:s=${W}x${H}:d=${dur}`,
-    "-vf", `drawtext=${font}text='${escText(wrapped)}':fontcolor=0xf3e9c8:fontsize=${fontsize}:line_spacing=16:x=(w-text_w)/2:y=${y}`,
-    "-r", String(FPS), ...ENC, out]);
+    "-vf", vf, "-r", String(FPS), ...ENC, out]);
   return { path: out, dur };
 }
 

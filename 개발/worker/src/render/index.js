@@ -130,14 +130,12 @@ export async function composeFinal(job, assets) {
     }
     // 추억 영상(개별 클립) — 원본 사운드 유지(mem). 첫 클립만 경계 페이드. vols[i]=영상별 음량%(편집기 슬라이더).
     async function emitMemVideos(fade, vols) { for (let i = 0; i < memVideos.length; i++) { await dl(memVideos[i], `m${i}.mp4`); segs.push({ type: "video", path: path.join(dir, `m${i}.mp4`), mem: true, vol: Array.isArray(vols) ? vols[i] : undefined, fade: fade && i === 0 }); } }
-    // 편지(아래→위 스크롤) + 날짜 카드.
+    // 편지(아래→위 스크롤) — 날짜(처음 만난 날·무지개다리 건넌 날)도 고정 카드 없이 편지에 이어 같은 스크롤로 올라온다.
     async function emitLetter(fade) {
-      if (letterText) { const lv = path.join(dir, "letter.mp4"); await letterScrollSegment(letterText, FONT, lv); segs.push({ type: "video", path: lv, fade }); }
-      if (metDate || partDate) {
-        const bg = await makeSolid("0x161310", path.join(dir, "dbg.png"));
-        const cap = [metDate ? `우리 처음 만난 날\n${fmtDate(metDate)}` : "", partDate ? `무지개다리 건넌 날\n${fmtDate(partDate)}` : ""].filter(Boolean).join("\n\n");
-        segs.push({ type: "image", path: bg, dur: 6, caption: cap, letter: true });
-      }
+      if (!letterText && !metDate && !partDate) return;
+      const lv = path.join(dir, "letter.mp4");
+      await letterScrollSegment(letterText, { metDate: metDate ? fmtDate(metDate) : null, partDate: partDate ? fmtDate(partDate) : null }, FONT, lv);
+      segs.push({ type: "video", path: lv, fade });
     }
     // 콘텐츠 허브 클립(영상/이미지) — 템플릿에서 지정한 자산을 id로 조회·다운로드해 합성. 자산 미지정/유실이면 조용히 생략.
     async function emitClip(assetId, fade, vol) {
