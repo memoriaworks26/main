@@ -95,7 +95,7 @@ function TimeInput({ value, onChange }) {
   return <TimeStepper h={h} m={m} onH={(v) => set(v, m)} onM={(v) => set(h, v)} />;
 }
 
-function TodayTimeline({ rows, onDetail }) {
+function TodayTimeline({ rows, cont = [], onDetail }) {
   const tp = usePartnerTerm(); // 사업부별 파트너 용어
   const CASE_ROOMS = useCaseRooms();
   const [openId, setOpenId] = useState(null);
@@ -198,9 +198,10 @@ function TodayTimeline({ rows, onDetail }) {
       </div>
 
       {/* 호실별 행 — 드래그 중인 예약은 드롭 대상 호실 행에 표시(effRoom) */}
-      {rows.length > 0 && caseRooms.map((roomName, ri) => {
+      {(rows.length > 0 || cont.length > 0) && caseRooms.map((roomName, ri) => {
         const effRoom = (r) => (drag && drag.id === r.id && drag.mode === "move") ? drag.preview.room : r.room;
         const roomRows = sorted.filter((r) => effRoom(r) === roomName);
+        const contRoomRows = cont.filter((r) => r.room === roomName); // 전일 자정넘김 이어짐(읽기전용)
         const dropTarget = drag && drag.mode === "move" && drag.preview.room === roomName && drag.room !== roomName;
         return (
           <div key={roomName} style={{ borderBottom: ri < caseRooms.length - 1 ? "1px solid " + LINE : undefined }}>
@@ -247,6 +248,26 @@ function TodayTimeline({ rows, onDetail }) {
                         <span className="absolute -top-5 left-0 z-20 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-bold tabular-nums"
                           style={{ background: bad ? "#b04a3a" : INK, color: "#fff" }}>{slotOf(seg.start, seg.end)}{drag.preview.room !== drag.room ? " · " + drag.preview.room : ""}</span>
                       )}
+                    </div>
+                  );
+                })}
+                {/* 전일 자정넘김 이어짐 — 00:00~종료, 왼쪽 페이드(전일에서 들어옴)·읽기전용(클릭=상세). 편집은 어제 날짜 화면에서. */}
+                {contRoomRows.map((r) => {
+                  const { end } = parseSlot(r.slot);
+                  const width = Math.max(1.5, pct(end));
+                  return (
+                    <div key={"cont-" + r.id} title={r.deceased + " · 전일 " + slotLabel(r.slot) + " (이어짐)"}
+                      onClick={() => onDetail(r)}
+                      className="absolute top-1 h-5 cursor-pointer select-none overflow-hidden text-[11px] font-bold text-white hover:brightness-95"
+                      style={{ left: 0, width: width + "%",
+                        background: `linear-gradient(90deg, ${BLOCK_COLOR}55 0%, ${BLOCK_COLOR} 45%)`,
+                        borderRadius: 3, borderTopLeftRadius: 0, borderBottomLeftRadius: 0, zIndex: 1 }}>
+                      <div className="flex h-full items-center gap-1 px-2">
+                        <span className="shrink-0 rounded px-1 text-[8.5px] font-bold" style={{ background: "rgba(255,255,255,.85)", color: GOLD_D }}>전일</span>
+                        <span className="truncate">{r.deceased}</span>
+                      </div>
+                      {/* 전일에서 이어짐 화살표 — 00:00 경계 밖(왼쪽)에서 들어옴 */}
+                      <span className="absolute top-1/2 z-20 -translate-y-1/2 text-[13px] font-bold" style={{ left: -11, color: BLOCK_COLOR }}>›</span>
                     </div>
                   );
                 })}
@@ -331,7 +352,7 @@ function TodayTimeline({ rows, onDetail }) {
         );
       })}
 
-      {rows.length === 0 && (
+      {rows.length === 0 && cont.length === 0 && (
         <div className="px-4 py-6 text-center text-[12.5px]" style={{ color: FAINT }}>오늘 예약이 없습니다.</div>
       )}
     </div>
@@ -366,6 +387,8 @@ export function PDashboard({ onNew, onDetail }) {
   // (오늘 예약 리스트/건수는 today만 보지만, 점유 표시는 새벽 시간대 이어짐을 반영해야 빈 호실로 잘못 뜨지 않음)
   const yesterday = prevDay(today);
   const occupants = mine.filter((r) => r.date === today || (r.date === yesterday && isOvernight(r.slot)));
+  // 어제 시작해 자정 넘겨 오늘 새벽까지 이어지는 예약 — 타임라인에 '전일 이어짐'(00:00~종료) 읽기전용 막대로 표시.
+  const contRows = mine.filter((r) => r.date === yesterday && isOvernight(r.slot));
   const activeReservOf = (roomName) => occupants.find((r) => {
     if (r.room !== roomName) return false;
     const { start, end } = parseSlot(r.slot);
@@ -428,7 +451,7 @@ export function PDashboard({ onNew, onDetail }) {
         </div>
 
         {/* 타임라인 아코디언 — 호실 카드 위에 표시 */}
-        {timelineOpen && <TodayTimeline rows={todayRows} onDetail={onDetail} />}
+        {timelineOpen && <TodayTimeline rows={todayRows} cont={contRows} onDetail={onDetail} />}
 
         <div className="flex flex-wrap gap-3.5" style={{ marginTop: timelineOpen ? 16 : 0 }}>
           {rooms.map((r) => {
