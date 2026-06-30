@@ -15,7 +15,12 @@ function subPos(s) {
 // 영상 위 실시간 자막 — currentTime에 활성인 자막 + 선택 자막을 표시, 드래그로 위치 세팅.
 function SubtitleLayer({ boxRef, subs, time, selSubId, onSubEdit, onSelSub }) {
   const [boxW, setBoxW] = useState(360);
+  // drag = 자막 위치 표시용 state. 핸들러가 '최신 위치'를 읽을 ref를 함께 유지(timeline.jsx setBoth와 동일 패턴).
+  //   pointerup의 부모 setState(onSubEdit)를 setDrag '업데이터 안'에서 부르면 렌더 도중 부모가 갱신돼
+  //   렌더가 계속 재시작 → #185(Maximum update depth). 부작용은 반드시 업데이터 '밖'에서 ref로 처리한다.
   const [drag, setDrag] = useState(null);
+  const dragRef = useRef(null);
+  const setDragBoth = (v) => { dragRef.current = v; setDrag(v); };
   useEffect(() => {
     const el = boxRef.current; if (!el) return;
     const ro = new ResizeObserver(() => setBoxW(el.clientWidth || 360));
@@ -25,16 +30,21 @@ function SubtitleLayer({ boxRef, subs, time, selSubId, onSubEdit, onSelSub }) {
   useEffect(() => {
     if (!drag) return;
     const move = (e) => {
-      const r = boxRef.current?.getBoundingClientRect(); if (!r) return;
+      const r = boxRef.current?.getBoundingClientRect(); if (!r || !dragRef.current) return;
       const xPct = Math.min(100, Math.max(0, ((e.clientX - r.left) / r.width) * 100));
       const yPct = Math.min(100, Math.max(0, ((e.clientY - r.top) / r.height) * 100));
-      setDrag((d) => (d ? { ...d, xPct, yPct } : d));
+      setDragBoth({ ...dragRef.current, xPct, yPct });
     };
-    const up = () => { setDrag((d) => { if (d) onSubEdit(d.id, { xPct: +d.xPct.toFixed(1), yPct: +d.yPct.toFixed(1) }); return null; }); };
+    // 부작용(부모 편집값 커밋)은 업데이터가 아니라 여기서 — ref의 최신 위치를 읽어 커밋 후 드래그 종료.
+    const up = () => {
+      const d = dragRef.current;
+      if (d) onSubEdit(d.id, { xPct: +d.xPct.toFixed(1), yPct: +d.yPct.toFixed(1) });
+      setDragBoth(null);
+    };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up, { once: true });
     return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); };
-  }, [drag, boxRef, onSubEdit]);
+  }, [drag?.id, boxRef, onSubEdit]); // eslint-disable-line react-hooks/exhaustive-deps -- 위치는 dragRef로 읽어 id 변화에만 재구독
   const shown = subs.filter((s) => (time >= s.start && time <= s.end) || s.id === selSubId);
   return (
     <>
@@ -44,7 +54,7 @@ function SubtitleLayer({ boxRef, subs, time, selSubId, onSubEdit, onSelSub }) {
         const sel = s.id === selSubId;
         return (
           <div key={s.id}
-            onPointerDown={(e) => { e.stopPropagation(); onSelSub && onSelSub(s.id); setDrag({ id: s.id, ...p }); }}
+            onPointerDown={(e) => { e.stopPropagation(); onSelSub && onSelSub(s.id); setDragBoth({ id: s.id, ...p }); }}
             className="absolute select-none px-1 text-center leading-snug"
             style={{
               left: p.xPct + "%", top: p.yPct + "%", transform: "translate(-50%,-50%)",
