@@ -148,21 +148,66 @@ export async function compose({ segments, bgmPath, bgmVol = 70, bgmFadeIn = 1, b
   }
 }
 
-// 타이틀 영상(20초) — ① 페이드인 + "사랑하는 X" 자막 페이드인(~10초) → ② 오버랩(크로스페이드) → 끝.
-//   img1/img2: 타이틀 결과 이미지 2장(Seedream). caption: 자막(없으면 생략).
+// 타이틀 영상 — 영정 이미지에 "사랑하는 X" 자막을 서서히 띄움.
+//   img1: 영정 이미지(필수). img2: (옵션·구버전 호환) 있으면 ②로 크로스페이드. caption: 자막(없으면 생략).
+//   ※ 타이틀 단순화(2026-06-30): 기본은 영정 1장 → 18초 단일 클립. img2가 주어지면 기존 2장 오버랩 유지.
 export async function makeTitleVideo(img1, img2, caption, fontFile, out) {
   const dir = path.dirname(out);
   const font = fontFile ? `fontfile='${fontFile}':` : "";
-  const seg1 = path.join(dir, "_tt1.mp4"), seg2 = path.join(dir, "_tt2.mp4");
   // 자막: 큰 글씨(100), 3초까지 투명 → 8초까지 아주 천천히 서서히 → 유지. border가 text alpha와 함께 페이드.
   const cap = caption
     ? `,drawtext=${font}text='${escText(caption)}':fontcolor=white:fontsize=100:borderw=4:bordercolor=black:x=(w-text_w)/2:y=h-260:alpha='if(lt(t,3),0,if(lt(t,8),(t-3)/5,1))'`
     : "";
+  if (!img2) {
+    // 단일 영정 타이틀 — 18초, 천천히 3초 페이드인 + 자막 서서히. (+faststart: 편집기 미리보기 즉시 재생)
+    await ff(["-y", "-loop", "1", "-t", "18", "-i", img1, "-vf", `${FIT},fade=t=in:st=0:d=3${cap}`, "-r", String(FPS), ...ENC, "-movflags", "+faststart", out]);
+    return out;
+  }
+  const seg1 = path.join(dir, "_tt1.mp4"), seg2 = path.join(dir, "_tt2.mp4");
   // ① 이미지1 14초(천천히 3초 페이드인 + 자막 서서히). xfade offset10+dur4=14 안에 들어와야 함. ② 이미지2 10초.
   await ff(["-y", "-loop", "1", "-t", "14", "-i", img1, "-vf", `${FIT},fade=t=in:st=0:d=3${cap}`, "-r", String(FPS), ...ENC, seg1]);
   await ff(["-y", "-loop", "1", "-t", "10", "-i", img2, "-vf", FIT, "-r", String(FPS), ...ENC, seg2]);
   // 10초 지점에서 ②로 크로스페이드(천천히 4초) → 총 ~19초. +faststart: moov를 앞으로(편집기 미리보기 즉시 재생)
   await ff(["-y", "-i", seg1, "-i", seg2, "-filter_complex", "[0][1]xfade=transition=fade:duration=4:offset=10,format=yuv420p", "-r", String(FPS), ...ENC, "-movflags", "+faststart", out]);
+  return out;
+}
+
+// 추억 슬라이드쇼 — 보호자 사진 N장을 각 dur초 노출 + 사진 사이 xfade 전환으로 한 클립 합성.
+//   items: [{ path, dur, xfade }] — xfade=그 사진으로 넘어올 때 전환(ffmpeg xfade 명, 첫 장은 무시).
+//   각 장을 16:9(1920×1080)/30fps로 정규화 → xfade 체인(offset 누적). 미지원/'none' 전환명은 fade로 폴백.
+const XFADE_OK = new Set([
+  "fade", "fadeblack", "fadewhite", "dissolve", "distance", "pixelize", "radial",
+  "wipeleft", "wiperight", "wipeup", "wipedown", "slideleft", "slideright", "slideup", "slidedown",
+  "smoothleft", "smoothright", "smoothup", "smoothdown", "circleopen", "circleclose", "circlecrop", "rectcrop",
+  "zoomin", "hlslice", "hrslice", "vuslice", "vdslice", "diagtl", "diagtr", "diagbl", "diagbr",
+]);
+const XFADE_DUR = 1.0; // 전환 길이(초) — dur보다 작아야 함(슬라이드 7초 기준 여유).
+export async function makeSlideshow(items, out) {
+  if (!items?.length) throw new Error("slideshow: 사진 없음");
+  const dir = path.dirname(out);
+  // 1장 — 단일 이미지 클립(페이드인).
+  if (items.length === 1) {
+    await imageSegment(items[0].path, items[0].dur || 7, out, null, null, false, true);
+    return out;
+  }
+  // 각 장을 정규화 세그먼트로(첫 장만 가벼운 페이드인, 나머지는 xfade가 처리).
+  const segs = [];
+  for (let i = 0; i < items.length; i++) {
+    const s = path.join(dir, `_ss${i}.mp4`);
+    await imageSegment(items[i].path, items[i].dur || 7, s, null, null, false, i === 0);
+    segs.push(s);
+  }
+  // xfade 체인 — [0][1]xfade@off1[v1]; [v1][2]xfade@off2[v2]; … 마지막은 [vout].
+  const args = ["-y"]; segs.forEach((s) => args.push("-i", s));
+  const fc = []; let prev = "[0:v]"; let off = (items[0].dur || 7) - XFADE_DUR;
+  for (let i = 1; i < segs.length; i++) {
+    const t = XFADE_OK.has(items[i].xfade) ? items[i].xfade : "fade";
+    const label = i === segs.length - 1 ? "[vout]" : `[v${i}]`;
+    fc.push(`${prev}[${i}:v]xfade=transition=${t}:duration=${XFADE_DUR}:offset=${off.toFixed(2)}${label}`);
+    prev = label; off += (items[i].dur || 7) - XFADE_DUR;
+  }
+  args.push("-filter_complex", fc.join(";"), "-map", "[vout]", "-r", String(FPS), ...ENC, "-movflags", "+faststart", out);
+  await ff(args);
   return out;
 }
 

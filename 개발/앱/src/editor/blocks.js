@@ -29,6 +29,8 @@ export function buildBlocks(tpl, content, reservation) {
       const asset = content.find((a) => a.id === b.assetId);
       return {
         id: b.id, type: "clip", label: def.label || "클립",
+        assetId: b.assetId || null,                 // 렌더 플랜이 콘텐츠 허브 자산을 참조할 수 있게(워커가 id로 조회)
+        clipKind: asset ? asset.kind : null,        // photo=이미지 / clip=영상
         source: asset ? asset.name : "자산 미지정",
         detail: "콘텐츠 허브 · " + (asset && asset.kind === "photo" ? "이미지" : "영상"),
         dur: def.dur || 10, status: asset ? "done" : "standby",
@@ -62,7 +64,7 @@ export function buildRenderPlan({ orderedVisible, edits = {}, subs = [] }) {
     else if (b.type === "slide") plan.push({ kind: "slide", fade });
     else if (b.type === "video") plan.push({ kind: "video", fade });
     else if (b.type === "letter") plan.push({ kind: "letter", fade });
-    // clip 등은 워커 미지원 → 제외
+    else if (b.type === "clip" && b.assetId) plan.push({ kind: "clip", assetId: b.assetId, fade }); // 콘텐츠 허브 클립(자산 미지정은 건너뜀)
   });
   // 편지 오버라이드(관리자 편집본) — 편지 블록에 편집값이 있을 때만.
   const letterBlk = orderedVisible.find((b) => b.type === "letter");

@@ -13,7 +13,9 @@ import * as st from "../storage.js";
 import { loadConfig } from "../config.js";
 import { log } from "../log.js";
 import { generateTitleImage, generateMemoryVideo } from "./higgsfield.js";
-import { makeTitleVideo, faststartRemux } from "./ffmpeg.js";
+import { makeTitleVideo, makeSlideshow, faststartRemux } from "./ffmpeg.js";
+
+const SLIDE_DUR_DEF = 7; // 슬라이드 미리보기 장당(초) — 최종 합성(index.js)과 정합
 
 const FONT = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../assets/NotoSansKR-Regular.otf");
 
@@ -68,6 +70,9 @@ async function buildCtx(job, assets) {
   const titleA = photos.filter((a) => a.role === "title" && a.selected).sort(_bySort)[0] || photos.find((a) => a.role === "title") || photos[0];
   const aiSel = photos.filter((a) => a.role === "ai_video" && a.selected).sort(_bySort);
   const aiPhotos = aiSel.length ? aiSel : photos.filter((a) => a.role === "ai_video").sort(_bySort);
+  // 추억 슬라이드 사진(보호자) — sort 순. 전환효과는 보호자가 위저드에서 고른 것(transition_map = 사진순 xfade명 배열).
+  const slidePhotos = photos.filter((a) => a.role === "slide_photo").sort(_bySort);
+  const slideXfades = Array.isArray(job.transition_map) ? job.transition_map : [];
   const sign = (a) => st.safeImageUrl(cfg.uploadBucket, a.storage_path, 3600); // B: 힉스필드 안전 포맷(jpg/png) 보장
   const ins = (row) => db.from("submission_assets").insert(row);
   // 버전 히스토리 — 삭제 대신 기존 비활성(selected=false) + 새 버전 활성 삽입. 기존본도 나중에 선택 가능.
@@ -81,7 +86,7 @@ async function buildCtx(job, assets) {
   const titleStyle1 = await activePrompt("이미지1");
   const titleStyle2 = await activePrompt("이미지2");
   const aiStyle = await activePrompt("AI영상");
-  return { job, token, name, titleA, aiPhotos, sign, ins, deselect, uniq, curTitleImg, pRef, titleStyle1, titleStyle2, aiStyle };
+  return { job, token, name, titleA, aiPhotos, slidePhotos, slideXfades, sign, ins, deselect, uniq, curTitleImg, pRef, titleStyle1, titleStyle2, aiStyle };
 }
 
 // 타이틀 이미지1(Seedream): 독사진 + 영정배경 + (선택)프롬프트 참고이미지 + 텍스트. 새 버전 활성.
@@ -111,25 +116,48 @@ async function genTitleImg1(ctx) {
   await ins({ submission_id: job.id, kind: "photo", role: "title_result", name: "이미지2", storage_path: p, sort_order: 1, selected: true });
   log.info("  타이틀 이미지2 생성(Seedream, 화풍변경) +버전"); return 1;
 }
-// 타이틀 영상화(ffmpeg): 이미지1·2 → 완성 클립(20초, 크레딧 없음)
+// 타이틀 영상화(ffmpeg): 영정 이미지 1장 → 완성 클립(18초, 자막 페이드인, 크레딧 없음).
+//   ※ 타이틀 단순화(2026-06-30): 영정 1장만 사용. (이미지2 화풍변경 단계 폐지)
 async function genTitleVideo(ctx) {
   const { job, token, name, ins, deselect, uniq, curTitleImg } = ctx;
-  const a0 = await curTitleImg(0), a1 = await curTitleImg(1);
-  if (!a0 || !a1) throw new Error("이미지 1·2를 먼저 생성하세요");
+  const a0 = await curTitleImg(0);
+  if (!a0) throw new Error("이미지1(영정)을 먼저 생성하세요");
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mw-title-"));
   try {
     await st.downloadTo(await st.signedUrl(cfg.uploadBucket, a0, 3600), path.join(dir, "t0.png"));
-    await st.downloadTo(await st.signedUrl(cfg.uploadBucket, a1, 3600), path.join(dir, "t1.png"));
     const tv = path.join(dir, "title.mp4");
-    await makeTitleVideo(path.join(dir, "t0.png"), path.join(dir, "t1.png"), `사랑하는 ${name}`, FONT, tv);
+    await makeTitleVideo(path.join(dir, "t0.png"), null, `사랑하는 ${name}`, FONT, tv);
     const vp = `${token}/results/title_${uniq()}.mp4`;                    // 버전 누적(고유 경로)
     await deselect("title_video"); await st.uploadTo(cfg.uploadBucket, vp, await fs.readFile(tv), "video/mp4");
     await ins({ submission_id: job.id, kind: "video", role: "title_video", name: "타이틀 영상", storage_path: vp, sort_order: 0, selected: true });
-    log.info("  타이틀 영상화(ffmpeg) +버전");
+    log.info("  타이틀 영상화(ffmpeg, 영정 1장) +버전");
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
   return 0;
 }
-async function genTitleAll(ctx) { let c = await genTitleImg0(ctx); c += await genTitleImg1(ctx); await genTitleVideo(ctx); return c; }
+// 타이틀 일괄 — 영정 이미지1 → 영상화. (이미지2 화풍변경은 폐지, 필요 시 편집기에서 title:1로 수동 생성 가능)
+async function genTitleAll(ctx) { const c = await genTitleImg0(ctx); await genTitleVideo(ctx); return c; }
+
+// 추억 슬라이드 영상(ffmpeg, 크레딧 없음) — 보호자 사진 N장 + 사이 전환을 한 클립으로. 「사진으로 만들기」/최종합성 공용.
+async function genSlides(ctx) {
+  const { job, token, slidePhotos, slideXfades, ins, deselect, uniq } = ctx;
+  if (!slidePhotos.length) { log.info("  슬라이드 사진 없음 — 슬라이드 영상 생략"); return 0; }
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mw-slides-"));
+  try {
+    const items = [];
+    for (let i = 0; i < slidePhotos.length; i++) {
+      const fn = path.join(dir, `s${i}.img`);
+      await st.downloadTo(await st.signedUrl(cfg.uploadBucket, slidePhotos[i].storage_path, 3600), fn);
+      items.push({ path: fn, dur: SLIDE_DUR_DEF, xfade: slideXfades[i] || "fade" });
+    }
+    const out = path.join(dir, "slides.mp4");
+    await makeSlideshow(items, out);
+    const vp = `${token}/results/slides_${uniq()}.mp4`;
+    await deselect("slide_video", 0); await st.uploadTo(cfg.uploadBucket, vp, await fs.readFile(out), "video/mp4");
+    await ins({ submission_id: job.id, kind: "video", role: "slide_video", name: "슬라이드 영상", storage_path: vp, sort_order: 0, selected: true });
+    log.info(`  슬라이드 영상 합성(ffmpeg, ${slidePhotos.length}장) +버전`);
+  } finally { await fs.rm(dir, { recursive: true, force: true }); }
+  return 1;
+}
 // AI영상 i번(Kling) — 해당 독사진 1장 → 영상. 새 버전 활성, 기존본은 히스토리로 보관.
 async function genAi(ctx, i) {
   const { job, token, aiPhotos, sign, ins, deselect, uniq, aiStyle } = ctx;
@@ -160,16 +188,22 @@ export async function generateBlocks(job, assets) {
   else if (target === "title:0") count += await genTitleImg0(ctx);
   else if (target === "title:1") count += await genTitleImg1(ctx);
   else if (target === "title:video") await genTitleVideo(ctx);
+  else if (target === "slides") count += await genSlides(ctx);
   else if (target && target.startsWith("ai:")) count += await genAi(ctx, Number(target.slice(3)));
   else {
-    // 병렬 발사 — 타이틀체인(이미지1→2→영상화)과 AI영상 N개는 서로 독립이라 동시 진행.
-    //   (이미지2는 이미지1 출력에 의존 → genTitleAll 내부에서만 순차 유지)
-    //   힉스필드 한 키 동시처리 실측 확인(4개 병렬 OK, 429 없음). 하나라도 실패하면 throw→작업 재시도.
-    const counts = await Promise.all([
+    // 병렬 발사 — 타이틀체인(영정→영상화)과 AI영상 N개는 서로 독립이라 동시 진행.
+    //   힉스필드 한 키 동시처리 실측 확인(4개 병렬 OK, 429 없음).
+    //   ※ allSettled — 하나(예: Kling 1개)가 실패해도 나머지(타이틀·다른 AI영상)는 살린다(blocks_ready).
+    //     전부 실패한 경우에만 throw → 작업 재시도/실패. (실패분은 편집기에서 개별 「AI 생성」으로 재시도)
+    const settled = await Promise.allSettled([
       genTitleAll(ctx),
       ...ctx.aiPhotos.map((_, i) => genAi(ctx, i)),
     ]);
-    count += counts.reduce((a, b) => a + b, 0);
+    settled.filter((r) => r.status === "rejected")
+      .forEach((r) => log.error("  블록 일부 생성 실패: " + (r.reason?.message || r.reason)));
+    const ok = settled.filter((r) => r.status === "fulfilled");
+    if (!ok.length) throw (settled[0]?.reason || new Error("블록 생성 전부 실패"));
+    count += ok.reduce((a, r) => a + (r.value || 0), 0);
   }
   return { count };
 }

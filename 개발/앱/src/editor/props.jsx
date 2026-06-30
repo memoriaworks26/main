@@ -251,7 +251,6 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
   const srcAsset = k === "title" ? _titlePhoto : k === "ai" ? _aiSrcSel[(item.aiIndex || 1) - 1] : null; // 블록 소스 사진(활성)
   const _titleVidVers = slotVers("title_video", 0), _titleVideo = selOf(_titleVidVers);
   const _img1Vers = slotVers("title_result", 0), _img1 = selOf(_img1Vers);
-  const _img2Vers = slotVers("title_result", 1), _img2 = selOf(_img2Vers);
   const _slideResult = _assets.find((a) => a.role === "slide_video" && a.url);
   const genResults = (k === "slide" && _slideResult) ? [{ kind: "video", url: _slideResult.url, label: "슬라이드 영상" }] : [];
   const name = reservation?.deceased || D.EDITOR_RESERVATION.deceased;
@@ -305,16 +304,13 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
             </div>
             <AssetCard label="보호자 독사진" hint="원본 소스 · 추가/선택" asset={_titlePhoto} kind="image" onAdd={addV("title", _titleSrcSlot, "image")}
               history={hist(_titleSrcVers)} onSelect={selV("title", _titleSrcSlot)} onDeleteVersion={delV} />
-            <AssetCard label="① 이미지1" hint="독사진 → 영정·배경" asset={_img1} kind="image" generating={isGen("title:0")} onGenerate={() => gen("title:0")} genLabel={_img1 ? "재생성" : "AI 생성"} onAdd={addV("title_result", 0, "image")}
+            <AssetCard label="① 영정 이미지" hint="독사진 → 영정·배경" asset={_img1} kind="image" generating={isGen("title:0")} onGenerate={() => gen("title:0")} genLabel={_img1 ? "재생성" : "AI 생성"} onAdd={addV("title_result", 0, "image")}
               promptSlot={<PromptPicker target="이미지1" onManage={() => setPromptModal(true)} />}
               history={hist(_img1Vers)} onSelect={selV("title_result", 0)} onDeleteVersion={delV} />
-            <AssetCard label="② 이미지2" hint="이미지1 → 화풍·배경 변경" asset={_img2} kind="image" generating={isGen("title:1")} onGenerate={() => gen("title:1")} genLabel={_img2 ? "재생성" : "AI 생성"} onAdd={addV("title_result", 1, "image")}
-              promptSlot={<PromptPicker target="이미지2" onManage={() => setPromptModal(true)} />}
-              history={hist(_img2Vers)} onSelect={selV("title_result", 1)} onDeleteVersion={delV} />
-            <AssetCard label="③ 영상화" hint="이미지1+2 → 완성 클립 20초" asset={_titleVideo} kind="video" generating={isGen("title:video")} onGenerate={() => gen("title:video")} genLabel={_titleVideo ? "다시 만들기" : "영상 만들기"} onAdd={addV("title_video", 0, "video")} addAccept="video/*"
+            <AssetCard label="② 영상화" hint="영정 이미지 → 완성 클립 18초" asset={_titleVideo} kind="video" generating={isGen("title:video")} onGenerate={() => gen("title:video")} genLabel={_titleVideo ? "다시 만들기" : "영상 만들기"} onAdd={addV("title_video", 0, "video")} addAccept="video/*"
               history={hist(_titleVidVers)} onSelect={selV("title_video", 0)} onDeleteVersion={delV} />
             <div className="mb-2 px-3 py-2.5 text-[11px] leading-relaxed" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
-              ① 이미지1+자막이 서서히 나타나고 <b style={{ color: INK }}>10초</b>에 ② 이미지2가 오버랩 → 페이드아웃(총 20초). 이미지를 바꾸면 <b style={{ color: INK }}>③ 영상화</b>를 다시 눌러 반영하세요.
+              ① 영정 이미지+자막이 서서히 나타나며 약 <b style={{ color: INK }}>18초</b> 유지(페이드인). 이미지를 바꾸면 <b style={{ color: INK }}>② 영상화</b>를 다시 눌러 반영하세요.
             </div>
           </>
           );
@@ -359,7 +355,7 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
                 <button onClick={() => toast("실제 예약에서만 추가할 수 있습니다")} className="mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-[12.5px] font-semibold" style={{ border: "1px dashed " + LINE2, borderRadius: RADIUS, color: GOLD_D }}><Plus className="h-3.5 w-3.5" /> 슬라이드 사진 추가</button>
               )}
             </Field>
-            <button onClick={() => onGenerate(item.id)} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className="h-4 w-4" /> 사진으로 만들기</button>
+            <button onClick={() => onGenerate(item.id)} disabled={isGen("slides")} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white disabled:opacity-60" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className={"h-4 w-4" + (isGen("slides") ? " animate-spin" : "")} /> {isGen("slides") ? "슬라이드 영상 만드는 중…" : "사진으로 만들기"}</button>
             <GenHistory results={genResults} />
 
             {/* 배경 음악 — 추억 슬라이드(보호자 사진)에만 깔린다. 추억 영상(유저 영상)은 원본 사운드 유지. */}

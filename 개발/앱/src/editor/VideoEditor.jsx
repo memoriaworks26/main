@@ -162,10 +162,11 @@ export default function VideoEditor({ reservation, onClose }) {
     let target = null;
     if (blk.type === "title") target = "title";
     else if (blk.type === "ai") target = "ai:" + ((blk.aiIndex || 1) - 1);
-    else { toast("슬라이드·편지는 최종 렌더에서 구성됩니다(AI 생성 대상 아님)"); return; }
-    if (!reservation?.id) { toast("실제 예약에서만 AI 생성이 동작합니다"); return; }
+    else if (blk.type === "slide") target = "slides";       // 보호자 사진 + 전환 → 슬라이드 영상(ffmpeg, 크레딧 없음)
+    else { toast("편지는 최종 렌더에서 구성됩니다(개별 생성 대상 아님)"); return; }
+    if (!reservation?.id) { toast("실제 예약에서만 생성이 동작합니다"); return; }
     actions.regenBlock(reservation.id, target);
-    toast("AI 재생성을 요청했습니다 — 1~2분 후 결과가 자동 갱신됩니다");
+    toast(blk.type === "slide" ? "슬라이드 영상을 만들고 있습니다 — 1~2분 후 자동 갱신됩니다" : "AI 재생성을 요청했습니다 — 1~2분 후 결과가 자동 갱신됩니다");
   };
   // 자막 추가/삭제 — 기본 없음에서 「자막 추가」로 넣고 미리보기/타임라인에서 배치. 텍스트·시간·위치는 edits로.
   const addSub = () => {

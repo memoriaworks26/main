@@ -224,8 +224,11 @@ export function useUserWizard(previewBizId, stepCtl, previewOverride) {
         ...photos.map((u, i) => ({ kind: "photo", role: "slide_photo", name: u.name, sizeMB: parseMB(u.size), storagePath: u.storagePath, sortOrder: i })),
         ...videos.map((u, i) => ({ kind: "video", role: "memory_video", name: u.name, sizeMB: parseMB(u.size), storagePath: u.storagePath, sortOrder: photos.length + i })),
       ];
+      // 슬라이드 전환 — 사진 순서(=slide_photo sortOrder)대로 ffmpeg xfade 명 배열로 해석해 워커에 전달.
+      //   transMap[u.id](사진별 선택) 없으면 기본(trans). transMap 자체가 임시 id 키라 워커가 직접 못 쓰므로 여기서 해소.
+      const transMapResolved = photos.map((u) => (TRANSITIONS[transMap[u.id] ?? trans] || {}).x || "fade");
       const res = await submitLink(link.token || token, {
-        petName: petName.trim(), titleIndex: titleSel, transDefault: trans, transMap, bgmId: bgmList[bgm]?.id, letter, metDate, partDate, assets, skipAi,
+        petName: petName.trim(), titleIndex: titleSel, transDefault: trans, transMap: transMapResolved, bgmId: bgmList[bgm]?.id, letter, metDate, partDate, assets, skipAi,
         privacyAgreed: agreed, marketingAgreed,
       });
       if (!res.ok) { toast(res.error || "제출에 실패했습니다. 다시 시도해 주세요."); return; }
