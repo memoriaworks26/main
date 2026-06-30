@@ -15,7 +15,14 @@ import * as st from "../storage.js";
 import { compose, makeSolid, makeTitleVideo, makeSlideshow, letterScrollSegment } from "./ffmpeg.js";
 
 const cfg = loadConfig();
-const FONT = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../assets/NotoSansKR-Regular.otf");
+const ASSETS = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../assets");
+const FONT = path.join(ASSETS, "NotoSansKR-Regular.otf"); // 기본(캡션·편지·자막 폴백)
+// 자막 폰트 key→파일 — 앱 data/editor.js SUBTITLE_FONTS와 동일 key. 파일 없으면 burnSubtitles가 FONT로 폴백.
+const SUB_FONTS = {
+  myeongjo: path.join(ASSETS, "NanumMyeongjo-Regular.ttf"),
+  gothic: path.join(ASSETS, "NotoSansKR-Regular.otf"),
+  pen: path.join(ASSETS, "NanumPenScript-Regular.ttf"),
+};
 
 // 완성본 서명URL 만료 — 예약 종료일(end_date) 자정(KST)까지. 보호자 링크(submissions.expires_at)와 동일 시점으로 묶임.
 //   end_date 없으면 기본값, 임박/과거(재렌더 등)면 최소 floor로 보정해 즉시 만료 방지.
@@ -179,7 +186,7 @@ export async function composeFinal(job, assets) {
     }
 
     const out = path.join(dir, "final.mp4");
-    await compose({ segments: segs, fontFile: FONT, bgmPath, bgmVol, bgmFadeIn, bgmFadeOut, subs: render?.subs || null, memVol: render?.memVol ?? 100, outPath: out });
+    await compose({ segments: segs, fontFile: FONT, subFonts: SUB_FONTS, bgmPath, bgmVol, bgmFadeIn, bgmFadeOut, subs: render?.subs || null, memVol: render?.memVol ?? 100, outPath: out });
     const finalPath = `${partnerId || "unknown"}/${job.id}_final.mp4`;
     const { size } = await fs.stat(out);                 // RAM에 통째로 안 올림 — 크기는 stat으로
     await st.uploadFinalStream(finalPath, out, "video/mp4"); // 디스크→스트림 PUT(긴 영상 OOM 방지)

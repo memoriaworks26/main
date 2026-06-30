@@ -78,6 +78,7 @@ export function buildRenderPlan({ orderedVisible, edits = {}, subs = [] }) {
   const subsOut = (subs || []).filter((s) => (s.text || "").trim()).map((s) => ({
     text: s.text, start: s.start ?? 0, end: s.end ?? 3, pos: s.pos || "하단",
     size: s.size ?? 48, color: s.color || "#f3e9c8",
+    font: s.font || "myeongjo", effect: s.effect || "박스",
     xPct: s.xPct ?? null, yPct: s.yPct ?? null,
   }));
   return { plan, letter, memVol, subs: subsOut };

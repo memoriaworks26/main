@@ -442,21 +442,40 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
         )}
 
         {k === "subtitle" && (() => {
-          const fontVal = D.SUBTITLE_FONTS[0].css; // 렌더는 단일 폰트(NotoSansKR) — 미리보기 표시용 기본값
+          const font = item.font ?? D.SUBTITLE_FONT_DEFAULT;
+          const fontVal = D.subtitleFontCss(font);
           const size = item.size ?? 48;
+          const color = item.color || "#f3e9c8";
+          const effect = item.effect || D.SUBTITLE_EFFECT_DEFAULT;
+          const fx = D.subtitleEffectStyle(effect);
           return (
           <>
             <Field label="자막 글자"><textarea rows={3} value={item.text ?? ""} onChange={(e) => onEdit(item.id, { text: e.target.value })} className="w-full resize-none p-3 text-[13.5px] leading-relaxed outline-none" style={{ ...inputStyle, height: "auto", fontFamily: fontVal }} /></Field>
             <Field label="위치"><select className={inputCls} style={inputStyle} value={item.xPct != null ? "직접배치" : (item.pos || "하단")} onChange={(e) => onEdit(item.id, { pos: e.target.value, xPct: null, yPct: null })}>{item.xPct != null && <option value="직접배치">직접배치(드래그)</option>}{D.SUBTITLE_POS.map((p) => <option key={p}>{p}</option>)}</select></Field>
+            <Field label="폰트"><select className={inputCls} style={{ ...inputStyle, fontFamily: fontVal }} value={font} onChange={(e) => onEdit(item.id, { font: e.target.value })}>{D.SUBTITLE_FONTS.map((f) => <option key={f.key} value={f.key} style={{ fontFamily: f.css }}>{f.name}</option>)}</select></Field>
             <Field label={`글자 크기 (${size}px)`}>
               <div className="flex items-center gap-2">
                 <input type="range" min="20" max="80" step="1" value={size} onChange={(e) => onEdit(item.id, { size: +e.target.value })} className="flex-1" style={{ accentColor: GOLD }} />
                 <input type="number" min="20" max="80" value={size} onChange={(e) => onEdit(item.id, { size: Math.max(20, Math.min(80, +e.target.value || 0)) })} className="w-16 px-2 text-[13px] outline-none" style={{ height: 34, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK }} />
               </div>
             </Field>
+            <Field label="글자 색상">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {D.SUBTITLE_COLORS.map((c) => {
+                  const on = color.toLowerCase() === c.toLowerCase();
+                  return <button key={c} type="button" onClick={() => onEdit(item.id, { color: c })} title={c} className="h-7 w-7 rounded-full outline-none" style={{ background: c, border: "2px solid " + (on ? GOLD : LINE2), boxShadow: c.toLowerCase() === "#ffffff" ? "inset 0 0 0 1px " + LINE2 : "none" }} />;
+                })}
+                <input type="color" value={color} onChange={(e) => onEdit(item.id, { color: e.target.value })} title="직접 선택" className="h-7 w-9 cursor-pointer outline-none" style={{ border: "1px solid " + LINE2, borderRadius: 5, background: "#fff", padding: 1 }} />
+              </div>
+            </Field>
+            <Field label="글자 효과">
+              <select className={inputCls} style={inputStyle} value={effect} onChange={(e) => onEdit(item.id, { effect: e.target.value })}>
+                {D.SUBTITLE_EFFECTS.map((ef) => <option key={ef} value={ef}>{ef === "박스" ? "박스 (반투명 배경)" : ef === "그림자" ? "그림자" : ef === "외곽선" ? "외곽선 (검정 테두리)" : "없음"}</option>)}
+              </select>
+            </Field>
             <Field label="미리보기">
-              <div className="flex items-center justify-center px-3 py-4" style={{ background: "#1c232c", borderRadius: RADIUS, overflow: "hidden" }}>
-                <span className="text-center leading-snug" style={{ fontFamily: fontVal, fontSize: Math.min(size, 34), color: item.color || "#f3e9c8", textShadow: "0 2px 8px rgba(0,0,0,.6)" }}>{item.text || "자막 미리보기"}</span>
+              <div className="flex items-center justify-center px-3 py-5" style={{ background: "#1c232c", borderRadius: RADIUS, overflow: "hidden" }}>
+                <span className="text-center leading-snug" style={{ fontFamily: fontVal, fontSize: Math.min(size, 34), color, borderRadius: 4, ...fx }}>{item.text || "자막 미리보기"}</span>
               </div>
             </Field>
             <Field label="보이는 구간"><div className="px-3 py-2.5 text-[12.5px] tabular-nums" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: INK }}>{item.start}초 ~ {item.end}초 <span style={{ color: FAINT }}>· 타임라인에서 끌어 옮기거나 양끝으로 길이 조절</span></div></Field>

@@ -78,9 +78,38 @@ export const USER_TRANSITIONS = [
   { ko: "줌인", x: "zoomin" },
 ];
 export const SUBTITLE_POS = ["상단", "중앙", "하단"];
-// 자막 폰트 — 표시명 + CSS family(미리보기·렌더 매핑). 저장값은 css.
+// 자막 폰트 — key(저장값·앱↔워커 공유) + 표시명 + CSS family(미리보기) + file(워커 fontfile).
+//   워커 assets/에 같은 파일이 번들돼 있어야 렌더에 반영됨(없으면 본고딕으로 폴백).
 export const SUBTITLE_FONTS = [
-  { name: "나눔명조", css: "'Nanum Myeongjo', serif" },
-  { name: "프리텐다드", css: "'Pretendard', sans-serif" },
-  { name: "본고딕", css: "system-ui, sans-serif" },
+  { key: "myeongjo", name: "명조", css: "'Nanum Myeongjo', serif", file: "NanumMyeongjo-Regular.ttf" },
+  { key: "gothic", name: "고딕", css: "'Noto Sans KR', system-ui, sans-serif", file: "NotoSansKR-Regular.otf" },
+  { key: "pen", name: "손글씨", css: "'Nanum Pen Script', cursive", file: "NanumPenScript-Regular.ttf" },
 ];
+export const SUBTITLE_FONT_DEFAULT = "myeongjo"; // 추모 영상 기본은 명조(serif)
+// 저장된 폰트값(key) → 미리보기 CSS. 레거시(css 문자열로 저장된 옛 자막)도 흡수.
+export function subtitleFontCss(font) {
+  const f = SUBTITLE_FONTS.find((x) => x.key === font) || SUBTITLE_FONTS.find((x) => x.css === font);
+  if (f) return f.css;
+  return typeof font === "string" && /['",]/.test(font) ? font : SUBTITLE_FONTS[0].css;
+}
+
+// 자막 효과(배경/그림자/외곽선) — 미리보기 CSS와 워커 drawtext가 같은 key를 공유. 기본 박스(기존 모양 유지).
+export const SUBTITLE_EFFECTS = ["박스", "그림자", "외곽선", "없음"];
+export const SUBTITLE_EFFECT_DEFAULT = "박스";
+// 효과 key → 미리보기 CSS 조각(텍스트 그림자/박스 배경/외곽선). 워커는 ffmpeg drawtext로 동일 의미 재현.
+export function subtitleEffectStyle(effect) {
+  switch (effect) {
+    case "그림자":
+      return { textShadow: "1px 2px 5px rgba(0,0,0,.8), 0 0 3px rgba(0,0,0,.7)" };
+    case "외곽선":
+      return { textShadow: "-1.5px -1.5px 0 #000, 1.5px -1.5px 0 #000, -1.5px 1.5px 0 #000, 1.5px 1.5px 0 #000" };
+    case "없음":
+      return {};
+    case "박스":
+    default:
+      return { background: "rgba(0,0,0,.4)", padding: "2px 10px", textShadow: "0 1px 3px rgba(0,0,0,.5)" };
+  }
+}
+
+// 자막 글자색 프리셋 스와치(직접 선택기도 함께 제공). 첫 값이 기본.
+export const SUBTITLE_COLORS = ["#f3e9c8", "#ffffff", "#f2d98d", "#e8c4c4", "#cfe0d8", "#1c232c"];

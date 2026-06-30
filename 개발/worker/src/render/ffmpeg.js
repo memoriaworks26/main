@@ -90,7 +90,7 @@ function hasAudio(file) {
 
 // segments: [{ type:'image'|'video', path, dur, caption?, letter?, mem? }] (mem=추억영상: 원본사운드 유지·BGM 덕킹)
 // bgmPath?, bgmVol(0~100), bgmFadeIn/Out(초), fontFile?(한글캡션), outPath
-export async function compose({ segments, bgmPath, bgmVol = 70, bgmFadeIn = 1, bgmFadeOut = 2, fontFile, subs = null, memVol = 100, outPath }) {
+export async function compose({ segments, bgmPath, bgmVol = 70, bgmFadeIn = 1, bgmFadeOut = 2, fontFile, subs = null, subFonts = null, memVol = 100, outPath }) {
   if (!segments?.length) throw new Error("compose: 세그먼트 없음");
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mw-render-"));
   try {
@@ -108,7 +108,7 @@ export async function compose({ segments, bgmPath, bgmVol = 70, bgmFadeIn = 1, b
 
     // 자막 — 편집기 자막 트랙을 최종 타임라인 절대시간으로 번인(있을 때만 영상 재인코딩). 없으면 무비용.
     let base = concat;
-    if (subs && subs.length) { const subbed = path.join(dir, "subbed.mp4"); await burnSubtitles(concat, subbed, subs, fontFile); base = subbed; }
+    if (subs && subs.length) { const subbed = path.join(dir, "subbed.mp4"); await burnSubtitles(concat, subbed, subs, fontFile, subFonts); base = subbed; }
 
     // ── 오디오 트랙 구성 ── 추억영상 원본 사운드(해당 구간 배치) + BGM(볼륨·페이드, 추억영상 구간 덕킹)
     const durs = []; for (const p of parts) durs.push(await durationOf(p));
@@ -232,17 +232,30 @@ export async function faststartRemux(inPath, outPath) {
   return outPath;
 }
 
-// 자막 번인 — 편집기 자막 트랙(절대시간 start~end)을 최종 영상 위에 그려 재인코딩. pos(상단/중앙/하단) 또는 xPct/yPct.
-export async function burnSubtitles(inPath, outPath, subs, fontFile) {
-  const font = fontFile ? `fontfile='${fontFile}':` : "";
+// 자막 효과 → drawtext 조각(박스/그림자/외곽선/없음). 앱 미리보기 subtitleEffectStyle과 같은 의미. 콜론(:)으로 끝남.
+function subEffectFilter(effect) {
+  switch (effect) {
+    case "그림자": return "shadowcolor=black@0.75:shadowx=3:shadowy=3:";
+    case "외곽선": return "borderw=4:bordercolor=black:";
+    case "없음": return "";
+    case "박스":
+    default: return "box=1:boxcolor=black@0.4:boxborderw=16:"; // 기본(옛 자막 호환)
+  }
+}
+
+// 자막 번인 — 편집기 자막 트랙(절대시간 start~end)을 최종 영상 위에 그려 재인코딩.
+//   위치 pos(상단/중앙/하단)·xPct/yPct, 색상, 폰트(key→subFonts 파일, 없으면 기본), 효과(박스/그림자/외곽선) 반영.
+export async function burnSubtitles(inPath, outPath, subs, fontFile, subFonts = null) {
   const filters = (subs || []).filter((s) => (s.text || "").trim()).map((s) => {
+    const ffile = (subFonts && subFonts[s.font]) || fontFile;  // 폰트 key→파일(미지정·옛자막은 기본 폰트)
+    const font = ffile ? `fontfile='${ffile}':` : "";
     const size = Math.max(20, Math.min(80, Number(s.size) || 48));
     const color = (s.color || "#f3e9c8").replace("#", "0x");
     const x = s.xPct != null ? `(w*${(s.xPct / 100).toFixed(4)})` : "(w-text_w)/2";
     const y = s.yPct != null ? `(h*${(s.yPct / 100).toFixed(4)})`
       : s.pos === "상단" ? "h*0.10" : s.pos === "중앙" ? "(h-text_h)/2" : "h-200";
     const st = Number(s.start) || 0, en = Number(s.end) || st + 3;
-    return `drawtext=${font}text='${escText(s.text)}':fontcolor=${color}:fontsize=${size}:x=${x}:y=${y}:box=1:boxcolor=black@0.4:boxborderw=16:enable='between(t,${st.toFixed(2)},${en.toFixed(2)})'`;
+    return `drawtext=${font}text='${escText(s.text)}':fontcolor=${color}:fontsize=${size}:x=${x}:y=${y}:${subEffectFilter(s.effect)}enable='between(t,${st.toFixed(2)},${en.toFixed(2)})'`;
   });
   if (!filters.length) { await ff(["-y", "-i", inPath, "-c", "copy", outPath]); return outPath; }
   await ff(["-y", "-i", inPath, "-vf", filters.join(","), "-r", String(FPS), ...ENC, outPath]);
