@@ -307,16 +307,17 @@ function DeviceModal({ dev, onClose }) {
 // canDelete=false: 삭제 비노출(읽기전용) · finalOnly=true: 최종본만(원본/혼합 대상 토글 숨김) — 협력파트너 다운로드 전용.
 function PeriodDownload({ canDelete = true, finalOnly = false }) {
   const { partners, videos } = useStore();  // [QA-P1] 발행 영상 = store(워커 산출물), 목업 제거
-  const [from, setFrom] = useState("2026-04-01");
-  const [to, setTo] = useState("2026-06-18");
+  const [from, setFrom] = useState("");  // 빈 값 = 하한 없음(전체). 과거 고정 기본값은 신규 발행본을 가려서 제거.
+  const [to, setTo] = useState("");      // 빈 값 = 상한 없음(전체)
   const [partner, setPartner] = useState("all");
   const [target, setTarget] = useState("final"); // final | source | both
   const [sel, setSel] = useState(() => new Set());
 
   const partnerOpts = [{ value: "all", label: "전체 파트너사" }, ...partners.map((p) => ({ value: p.id, label: p.name }))];
   const rows = videos
-    .filter((v) => (partner === "all" || v.partnerId === partner) && (!from || v.date >= from) && (!to || v.date <= to))
-    .sort((a, b) => String(b.datetime).localeCompare(String(a.datetime)));
+    // date(장례일)가 없는 발행본(워커 메타 누락)도 숨기지 않음 — 범위 지정 시에만 걸러냄.
+    .filter((v) => (partner === "all" || v.partnerId === partner) && (!from || (v.date && v.date >= from)) && (!to || (v.date && v.date <= to)))
+    .sort((a, b) => String(b.datetime ?? "").localeCompare(String(a.datetime ?? "")));
 
   const ids = rows.map((r) => r.id);
   const allOn = ids.length > 0 && ids.every((id) => sel.has(id));
@@ -350,7 +351,7 @@ function PeriodDownload({ canDelete = true, finalOnly = false }) {
   const selSize = selRows.reduce((s, r) => s + sz(r), 0);
   const totalSize = rows.reduce((s, r) => s + sz(r), 0);
   const fmtSize = (mb) => (mb >= 1024 ? (mb / 1024).toFixed(1) + " GB" : mb + " MB");
-  const fmtDt = (dt) => `${dt.slice(0, 2)}.${dt.slice(2, 4)}.${dt.slice(4, 6)} ${dt.slice(6, 8)}:${dt.slice(8, 10)}`;
+  const fmtDt = (dt) => (dt && dt.length >= 10) ? `${dt.slice(0, 2)}.${dt.slice(2, 4)}.${dt.slice(4, 6)} ${dt.slice(6, 8)}:${dt.slice(8, 10)}` : "—";
 
   // 헤더 클릭 정렬 (파일명·반려동물·생성일시·용량)
   const [sort, setSort] = useState({ key: "datetime", dir: "desc" });

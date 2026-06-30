@@ -3,6 +3,21 @@ import { loadConfig } from "./config.js";
 
 const cfg = loadConfig();
 
+// 예약 room_label('1호실'·'특1호실') → 호실 번호(int). 숫자 없으면 null.
+function roomNoOf(label) {
+  const m = /(\d+)/.exec(String(label ?? ""));
+  return m ? Number(m[1]) : null;
+}
+// 예약 reserve_date('YYYY-MM-DD') + slot('14:00~17:20') → 장례일시 'YYMMDDHHmm'(파일명 규칙). 날짜 없으면 null.
+function funeralAtOf(reserveDate, slot) {
+  const d = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(reserveDate ?? ""));
+  if (!d) return null;
+  const t = /(\d{1,2}):(\d{2})/.exec(String(slot ?? ""));  // slot 시작시각(없으면 0000)
+  const hh = t ? String(t[1]).padStart(2, "0") : "00";
+  const mm = t ? t[2] : "00";
+  return `${d[1].slice(2)}${d[2]}${d[3]}${hh}${mm}`;
+}
+
 // 가장 오래된 queued 1건을 원자적으로 claim(→rendering). 없으면 null.
 export async function claimJob() {
   const { data, error } = await db.rpc("claim_render_job");
@@ -61,15 +76,20 @@ export async function completeJob(job, result) {
   if (error) throw new Error("complete 실패: " + error.message);
 
   try {
-    let partnerId = null;
+    let partnerId = null, resv = null;
     if (job.reservation_id) {
-      const { data: r } = await db.from("reservations").select("partner_id").eq("id", job.reservation_id).maybeSingle();
+      // 스토리지(기간별 다운로드·파일명 규칙)용 메타를 예약에서 함께 적재.
+      const { data: r } = await db.from("reservations")
+        .select("partner_id, reserve_date, slot, room_label, deceased").eq("id", job.reservation_id).maybeSingle();
+      resv = r || null;
       partnerId = r?.partner_id || null;
     }
     if (partnerId) {
       await db.from("videos").upsert({
         id: `vid_${job.id}`, partner_id: partnerId, reservation_id: job.reservation_id,
-        deceased: job.pet_name, status: "published",
+        deceased: resv?.deceased || job.pet_name, status: "published",
+        room_no: roomNoOf(resv?.room_label), funeral_date: resv?.reserve_date || null,
+        funeral_at: funeralAtOf(resv?.reserve_date, resv?.slot),
         final_path: result?.finalPath || videoUrl, final_mb: result?.finalMB ?? null,
         storage_provider: "supabase", issued_at: new Date().toISOString(), expires_at: expiresAt,
       });

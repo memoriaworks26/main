@@ -93,13 +93,18 @@ export const DOWNLOAD_TARGETS = [
   { key: "both", label: "최종본+원본", ext: "" },
 ];
 
-// 발행 최종본 파일명 규칙: {파트너코드4}_{호실2}_{장례일시YYMMDDHHmm}.mp4
-//   파트너코드 = 등록순 4자리, 호실 = 숫자 2자리, 장례일시 = 년월일시분(24시간) — 예: 0001_01_2606171030.mp4
-export const videoFileName = (v) =>
-  `${PARTNER_CODE[v.partnerId] || "0000"}_${String(v.room).padStart(2, "0")}_${v.datetime}.mp4`;
+// 파일명 스템: {파트너코드4}_{호실2}_{장례일시YYMMDDHHmm} — 예: 0001_01_2606171030
+//   호실·장례일시 미상(워커 메타 누락)이면 자리표시자(00 / video id)로 대체해 파일명이 깨지지 않게 함.
+const fileStem = (v) => {
+  const code = PARTNER_CODE[v.partnerId] || "0000";
+  const room = (v.room != null && v.room !== "") ? String(v.room).padStart(2, "0") : "00";
+  const dt = v.datetime || String(v.id || "").replace(/[^0-9a-z]/gi, "").slice(0, 10) || "unknown";
+  return `${code}_${room}_${dt}`;
+};
+// 발행 최종본 파일명 규칙: 스템.mp4 — 예: 0001_01_2606171030.mp4
+export const videoFileName = (v) => `${fileStem(v)}.mp4`;
 // 원본 소스 묶음 파일명 — 보호자 업로드 원본(사진·영상) 일체 zip
-export const sourceFileName = (v) =>
-  `${PARTNER_CODE[v.partnerId] || "0000"}_${String(v.room).padStart(2, "0")}_${v.datetime}_src.zip`;
+export const sourceFileName = (v) => `${fileStem(v)}_src.zip`;
 // 다운로드 대상별 용량(MB) — final | source | both
 export const assetSize = (v, target) =>
   target === "source" ? (v.srcMB || 0) : target === "both" ? (v.sizeMB || 0) + (v.srcMB || 0) : (v.sizeMB || 0);
