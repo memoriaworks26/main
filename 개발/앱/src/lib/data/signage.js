@@ -98,6 +98,16 @@ export async function updateDevice(id, patch) {
   if (error) throw new Error(error.message);
 }
 
+// 호실(room_id) 기준 모드 일괄 전환 — 발행 시 해당 호실 디스플레이를 자동으로 제작영상으로.
+//   디바이스 id를 몰라도 예약의 room_id만으로 전환(해당 호실 디바이스 없으면 no-op). 갱신된 id 배열 반환.
+export async function setRoomMode(roomId, mode) {
+  const d = need();
+  if (!roomId) return [];
+  const { data, error } = await d.from("signage_devices").update({ mode }).eq("room_id", roomId).select("id");
+  if (error) throw new Error("호실 모드 전환 실패: " + error.message);
+  return (data || []).map((r) => r.id);
+}
+
 // ── 표출 소스(광고·대기·알림) — 파트너별 ──
 const mapSource = (r) => ({ id: r.id, cat: r.cat, name: r.name, kind: r.kind, file: r.file, storagePath: r.storage_path, active: r.active });
 

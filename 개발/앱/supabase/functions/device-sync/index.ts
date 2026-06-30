@@ -57,8 +57,15 @@ Deno.serve(async (req) => {
 
   const mode = dev.mode || "대기";
   const today = todayKST();
-  const sign = (bucket: string, path: string) =>
-    admin.storage.from(bucket).createSignedUrl(path, 3600).then((r) => r.data?.signedUrl ?? null);
+  const sign = (bucket: string, path: string, ttl = 3600) =>
+    admin.storage.from(bucket).createSignedUrl(path, ttl).then((r) => r.data?.signedUrl ?? null);
+  // 서명URL 수명 — 재생 도중 만료 방지. 예약 종료(미리보기 만료)까지, 최소 1h~최대 7d.
+  // (디스플레이는 같은 영상의 URL을 재발급받아도 교체하지 않으므로, 첫 URL이 슬롯 내내 살아 있어야 함)
+  const signTtl = (expiresAt: string | null) => {
+    if (!expiresAt) return 3600;
+    const secs = Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000);
+    return Math.max(3600, Math.min(secs, 7 * 86400));
+  };
 
   // ── 콘텐츠 해석 ──
   let content: any = { kind: "none" };
@@ -78,7 +85,8 @@ Deno.serve(async (req) => {
       const live = vid && vid.final_path && (!vid.expires_at || new Date(vid.expires_at) > new Date());
       // v1: supabase 저장분만 서명. (r2 전환분은 추후 분기)
       if (live && (vid.storage_provider ?? "supabase") === "supabase") {
-        const url = await sign("memoria-final", vid.final_path);
+        // 장시간 재생(예약 슬롯 내내)에도 서명URL이 만료되지 않도록 예약 종료까지 발급.
+        const url = await sign("memoria-final", vid.final_path, signTtl(vid.expires_at ?? null));
         if (url) content = { kind: "video", id: vid.id, url, expires_at: vid.expires_at ?? null };
       }
     }

@@ -381,7 +381,20 @@ export const actions = {
     set((s) => ({ reservations: [...s.reservations, r] }));
     return Promise.resolve(r);
   },
-  setReservationStatus: (id, status) => actions.updateReservation(id, { status }),
+  setReservationStatus: (id, status) => {
+    actions.updateReservation(id, { status });
+    // 발행 시 해당 호실 사이니지를 자동으로 제작영상 모드로 전환 → 디바이스 접속만 되면 바로 예약 영상 표출.
+    if (status === "published") actions.publishToSignage(id);
+  },
+  // 발행 영상 → 호실 사이니지 자동 표출(모드 전환). 디바이스 접속(폴링) 없이도 DB 모드는 미리 잡아둠.
+  publishToSignage: (id) => {
+    if (!LIVE) return;
+    const r = state.reservations.find((x) => x.id === id);
+    if (!r?.roomId) return;
+    signage.setRoomMode(r.roomId, "제작영상")
+      .then((ids) => { if (ids?.length) set((s) => ({ devices: s.devices.map((d) => ids.includes(d.id) ? { ...d, mode: "제작영상" } : d) })); })
+      .catch(() => {});
+  },
   setReservationAssignee: (id, assignee) => actions.updateReservation(id, { assignee }),
   setReservationRoom: (id, room) => actions.updateReservation(id, { room }),
   updateReservation: (id, patch) => {

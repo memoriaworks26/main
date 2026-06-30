@@ -73,10 +73,16 @@ export default function SignageDisplay() {
         const r = await syncDevice(token, curIdRef.current);
         if (!alive) return;
         setErr(""); setResp(r);
-        // 콘텐츠 — id 바뀔 때만 교체(같은 영상은 끊김 없이 계속 재생)
+        // 콘텐츠 — id 바뀔 때만 교체(같은 영상은 끊김 없이 계속 재생).
+        // 서명URL은 device-sync 폴링(3초)마다 새로 발급되므로 url은 동일성 비교에서 제외한다.
+        // (url까지 비교하면 매 폴링 src가 바뀌어 영상이 1초 남짓 재생되다 리로드되는 무한 새로고침이 됨)
         const c = r.content || { kind: "none" };
-        setContent((prev) => (prev.kind === c.kind && prev.id === c.id && prev.url === c.url ? prev : c));
-        curIdRef.current = c.kind === "video" || c.kind === "image" ? (c.id ?? null) : null;
+        const keyed = c.kind === "video" || c.kind === "image";
+        setContent((prev) => {
+          const same = keyed ? prev.kind === c.kind && prev.id === c.id : prev.kind === c.kind;
+          return same ? prev : c;
+        });
+        curIdRef.current = keyed ? (c.id ?? null) : null;
         // 일회성 명령
         if (r.cmd === "reboot") { stopped = true; window.location.reload(); return; }
         if (r.cmd === "restart" || r.cmd === "refresh" || r.cmd === "redownload") {
