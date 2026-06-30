@@ -124,6 +124,17 @@ export function useUserWizard(previewBizId, stepCtl, previewOverride) {
   // 배경 음악 선택지 — 실 보호자 링크면 토큰 사업부의 공용 BGM 라이브러리(linkConfig.bgm), 아니면 데모 시드.
   //   cfg 로드 전/데모/미리보기는 D.BGM 폴백. 라이브러리가 비어도 그대로 빈 목록(목 곡 노출 방지).
   const bgmList = cfg?.bgm || D.BGM;
+  // BGM 미리듣기 지연 최소화 — 목록이 뜨면 서명URL을 미리 발급해 캐시(탭 시 네트워크 왕복 없이 즉시 재생).
+  const [bgmUrls, setBgmUrls] = useState({});
+  useEffect(() => {
+    if (!liveMode) return;
+    const paths = [...new Set(bgmList.map((b) => b.storage_path).filter(Boolean))];
+    if (!paths.length) return;
+    let alive = true;
+    Promise.all(paths.map((p) => bgmPreviewUrl(p).then((u) => [p, u]).catch(() => [p, null])))
+      .then((pairs) => { if (alive) setBgmUrls(Object.fromEntries(pairs.filter(([, u]) => u))); });
+    return () => { alive = false; };
+  }, [liveMode, bgmList]);
   const company = cfg ? {
     ...store.company,
     csPhone: cfg.cs_phone ?? store.company.csPhone,
@@ -249,7 +260,7 @@ export function useUserWizard(previewBizId, stepCtl, previewOverride) {
   // StepBody에 넘기는 화면 상태·핸들러 묶음
   const st = { T, photos: examplePhotos, preview, agreed, setAgreed, marketingAgreed, setMarketingAgreed,
     slidePhotos: photos, videos, PHOTO_MAX, VIDEO_MAX_SEC, removePhoto, removeVideo, addPhoto, addVideo, onPhotoFiles, onVideoFiles, photoRef, videoRef, reorderPhotos, reorderVideos, photoOver, videoSecs, videoOver, videoMeasuring,
-    aiPhotos, addAiPhoto, onAiFiles, removeAiPhoto, aiFileRef, skipAi, setSkipAi, petName, setPetName, trans, setTrans, bgm, setBgm, bgmList, signBgm: bgmPreviewUrl, letter, setLetter, metDate, setMetDate, partDate, setPartDate, titleSel, setTitleSel, transMap, setItemTrans, randomizeTrans, totalMB, overLimit, link, shareUrl, videoStatus, company, openPolicy: () => setPolicyOpen(true) };
+    aiPhotos, addAiPhoto, onAiFiles, removeAiPhoto, aiFileRef, skipAi, setSkipAi, petName, setPetName, trans, setTrans, bgm, setBgm, bgmList, bgmUrls, signBgm: bgmPreviewUrl, letter, setLetter, metDate, setMetDate, partDate, setPartDate, titleSel, setTitleSel, transMap, setItemTrans, randomizeTrans, totalMB, overLimit, link, shareUrl, videoStatus, company, openPolicy: () => setPolicyOpen(true) };
 
   const last = STEPS.length - 1;
   const previewStep = last - 1;

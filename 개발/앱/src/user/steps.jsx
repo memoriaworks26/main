@@ -215,8 +215,8 @@ export function StepBody({ step, st }) {
   const playPreview = async (bi) => {
     stopPreview();
     const item = st.bgmList[bi];
-    // 정적 데모곡은 src, 실 라이브러리 곡은 storage_path를 anon 서명URL로 변환해 재생.
-    let src = item?.src;
+    // 정적 데모곡은 src, 실 라이브러리 곡은 미리 발급된 서명URL(즉시) 우선, 없으면 그때 발급.
+    let src = item?.src || (item?.storage_path && st.bgmUrls?.[item.storage_path]);
     if (!src && item?.storage_path && st.signBgm) src = await st.signBgm(item.storage_path);
     if (!src) return;
     try {
@@ -584,7 +584,7 @@ export function StepBody({ step, st }) {
             <>
               <Loader2 className="h-8 w-8 animate-spin text-white" style={{ opacity: 0.85 }} />
               <span className="text-[11.5px] font-semibold text-white" style={{ opacity: 0.8 }}>
-                {st.videoStatus === "rendering" ? "제작 중…" : "제작 대기 중…"}
+                추모영상 제작 중…
               </span>
             </>
           )}
