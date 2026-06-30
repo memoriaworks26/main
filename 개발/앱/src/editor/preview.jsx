@@ -3,6 +3,7 @@ import React, { useRef, useState, useEffect } from "react";
 import { Play, Pause, SplitSquareHorizontal } from "lucide-react";
 import { SERIF, NAVY, INK, MUTE, FAINT, GOLD_D, GOLD_SOFT } from "../theme.js";
 import { blockFrame, KIND_LABEL } from "./blocks.js";
+import { subtitleFontCss, subtitleEffectStyle, SUBTITLE_EFFECT_DEFAULT } from "../data.js";
 
 // 자막 위치 — 저장된 xPct/yPct 우선, 없으면 상/중/하 프리셋(가로 중앙).
 function subPos(s) {
@@ -48,8 +49,8 @@ function SubtitleLayer({ boxRef, subs, time, selSubId, onSubEdit, onSelSub }) {
             style={{
               left: p.xPct + "%", top: p.yPct + "%", transform: "translate(-50%,-50%)",
               maxWidth: "92%", cursor: "move", whiteSpace: "pre-wrap", zIndex: 20,
-              fontFamily: s.font || "serif", fontSize: fontPx, color: s.color || "#f3e9c8",
-              textShadow: "0 2px 8px rgba(0,0,0,.85), 0 0 2px rgba(0,0,0,.9)",
+              fontFamily: subtitleFontCss(s.font), fontSize: fontPx, color: s.color || "#f3e9c8",
+              ...subtitleEffectStyle(s.effect || SUBTITLE_EFFECT_DEFAULT),
               outline: sel ? "1px dashed rgba(212,175,90,.9)" : "none", borderRadius: 3,
             }}>
             {s.text || "자막"}
@@ -178,22 +179,29 @@ export function Preview({ sel, blocks, gens, name, sourceVideoUrl, blockMedia = 
     <div>
       <div className="mb-2 flex items-center gap-2">
         <SplitSquareHorizontal className="h-4 w-4" style={{ color: GOLD_D }} />
-        <span className="text-[13px] font-bold" style={{ color: INK }}>미리보기 · 원본과 비교</span>
+        <span className="text-[13px] font-bold" style={{ color: INK }}>미리보기{isClip ? "" : " · 원본과 비교"}</span>
         {label && <span className="text-[11.5px]" style={{ color: FAINT }}>· 지금 보는 블록: <b style={{ color: MUTE }}>{label}</b></span>}
       </div>
-      <div className="grid grid-cols-2 gap-4">
-        {/* 원본 = 보호자가 올린 실제 소스. 없으면 완성영상(있으면)·목업 폴백. (편집값인 자막은 여기 표시 안 함 — 비교용 원본) */}
-        <PreviewBox label={isClip ? "콘텐츠 허브 클립" : "유저가 만든 원본"} badge={isClip ? "템플릿 고정 클립" : srcMedia ? "보호자 원본" : sourceVideoUrl ? "완성본 · 재생" : "원본 · 수정불가"} badgeColor={{ bg: "rgba(90,100,112,.15)", c: "#5a6470" }}
-          name={name} src={origSrc} videoSrc={sourceVideoUrl} media={srcMedia} />
-        {/* 작업본 = AI 생성 결과(타이틀 Seedream·AI영상 Kling). 자막 미리보기·드래그는 편집 중인 이쪽에 표시. */}
-        <PreviewBox label={isClip ? "최종본에 그대로 삽입" : "내가 편집 중"} badge={isClip ? "수정 없음" : resMedia ? "작업본 · AI 결과" : "작업본 · 생성 전"} badgeColor={{ bg: GOLD_SOFT, c: GOLD_D }} big name={name} src={editedSrc} media={resMedia}
-          subs={subtitles} selSubId={selSubId} onSubEdit={onSubEdit} onSelSub={onSelSub} />
-      </div>
+      {isClip ? (
+        // 클립 = 템플릿 고정 자산(원본 vs 작업본 비교가 없음) → 중앙 한 칸만.
+        <div className="mx-auto" style={{ maxWidth: 560 }}>
+          <PreviewBox label="콘텐츠 허브 클립" badge={resMedia ? "최종본에 그대로 삽입" : "자산 미연결"} badgeColor={{ bg: GOLD_SOFT, c: GOLD_D }} big name={name} src={editedSrc} media={resMedia} />
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-4">
+          {/* 원본 = 보호자가 올린 실제 소스. 없으면 완성영상(있으면)·목업 폴백. (편집값인 자막은 여기 표시 안 함 — 비교용 원본) */}
+          <PreviewBox label="유저가 만든 원본" badge={srcMedia ? "보호자 원본" : sourceVideoUrl ? "완성본 · 재생" : "원본 · 수정불가"} badgeColor={{ bg: "rgba(90,100,112,.15)", c: "#5a6470" }}
+            name={name} src={origSrc} videoSrc={sourceVideoUrl} media={srcMedia} />
+          {/* 작업본 = AI 생성 결과(타이틀 Seedream·AI영상 Kling). 자막 미리보기·드래그는 편집 중인 이쪽에 표시. */}
+          <PreviewBox label="내가 편집 중" badge={resMedia ? "작업본 · AI 결과" : "작업본 · 생성 전"} badgeColor={{ bg: GOLD_SOFT, c: GOLD_D }} big name={name} src={editedSrc} media={resMedia}
+            subs={subtitles} selSubId={selSubId} onSubEdit={onSubEdit} onSelSub={onSelSub} />
+        </div>
+      )}
       <div className="mt-1.5 text-[11.5px]" style={{ color: FAINT }}>
         {subtitles.length
           ? "자막을 끌어 위치를 잡으세요. 영상 재생 시 설정한 시간 구간에만 표시됩니다(최종 렌더에 그대로 반영)."
           : isClip
-          ? (srcMedia ? "콘텐츠 허브에 연결된 클립입니다 — 좌·우 모두 최종본에 그대로 들어갈 실제 클립을 재생합니다(편집 없음)." : "이 클립에 콘텐츠 허브 자산이 연결되지 않았습니다 — 템플릿에서 클립 자산을 지정하세요.")
+          ? (resMedia ? "콘텐츠 허브에 연결된 클립입니다 — 최종본에 그대로 들어갈 실제 클립입니다(편집 없음)." : "이 클립에 콘텐츠 허브 자산이 연결되지 않았습니다 — 템플릿에서 클립 자산을 지정하세요.")
           : resMedia
           ? "왼쪽 보호자 원본 → 오른쪽 AI 변환 결과(타이틀 Seedream·AI영상 Kling). 「AI로 만들기」로 재생성합니다."
           : srcMedia

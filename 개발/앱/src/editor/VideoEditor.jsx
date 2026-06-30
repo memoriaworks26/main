@@ -204,7 +204,7 @@ export default function VideoEditor({ reservation, onClose }) {
   // 자막 추가/삭제 — 기본 없음에서 「자막 추가」로 넣고 미리보기/타임라인에서 배치. 텍스트·시간·위치는 edits로.
   const addSub = () => {
     const id = "sub-" + Date.now();
-    const s = { id, text: "자막을 입력하세요", start: 0, end: 3, pos: "하단", font: D.SUBTITLE_FONTS[0].css, size: 48, color: "#f3e9c8" };
+    const s = { id, text: "자막을 입력하세요", start: 0, end: 3, pos: "하단", font: D.SUBTITLE_FONT_DEFAULT, size: 48, color: "#f3e9c8", effect: D.SUBTITLE_EFFECT_DEFAULT };
     commit({ ...doc, subs: [...subsBase, s] });
     setSel({ scope: "subtitle", kind: "subtitle", id });
     toast("자막을 추가했습니다 — 미리보기에서 위치를 잡으세요");
