@@ -6,5 +6,5 @@
 //   editor/blocks.js       — 블록 상수·순수 로직(buildBlocks·segments·blockFrame·seedGens)
 //   editor/timeline.jsx    — BlockList(왼쪽) + Timeline(가운데 하단)
 //   editor/preview.jsx     — Preview(원본 vs 작업본 2분할)
-//   editor/props.jsx       — PropPanel(오른쪽) + PromptManager·GenHistory
+//   editor/props.jsx       — PropPanel(오른쪽) + AssetCard·PromptManager
 export { default } from "./editor/VideoEditor.jsx";

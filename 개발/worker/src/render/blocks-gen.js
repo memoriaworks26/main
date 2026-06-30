@@ -194,8 +194,10 @@ export async function generateBlocks(job, assets) {
   await normalizeMemoryVideos(job, assets);
   // target: null=전체 / "title"(전체) / "title:0"(이미지1) / "title:1"(이미지2) / "title:video"(영상화) / "ai:i"
   const target = job.regen_target;
-  if (job.skip_ai && !target) { log.info("  AI 변환 안함 — 블록 생성 생략"); return { count: 0 }; }
   const ctx = await buildCtx(job, assets);
+  // AI 변환 안함(전체 자동) — AI 블록은 생략하되, 슬라이드 영상(ffmpeg·크레딧 없음)은 사진 있으면 미리 합성
+  //   → 편집기 슬라이드 섹션 내역에 「슬라이드 영상」이 자동으로 뜬다. 사진 없으면 0 반환.
+  if (job.skip_ai && !target) { const n = await genSlides(ctx); log.info("  AI 변환 안함 — 슬라이드만 합성" + (n ? "" : "(사진 없음)")); return { count: n }; }
   let count = 0;
   if (target === "title") count += await genTitleAll(ctx);
   else if (target === "title:0") count += await genTitleImg0(ctx);
@@ -204,12 +206,15 @@ export async function generateBlocks(job, assets) {
   else if (target === "slides") count += await genSlides(ctx);
   else if (target && target.startsWith("ai:")) count += await genAi(ctx, Number(target.slice(3)));
   else {
-    // 병렬 발사 — 타이틀체인(영정→영상화)과 AI영상 N개는 서로 독립이라 동시 진행.
-    //   힉스필드 한 키 동시처리 실측 확인(4개 병렬 OK, 429 없음).
-    //   ※ allSettled — 하나(예: Kling 1개)가 실패해도 나머지(타이틀·다른 AI영상)는 살린다(blocks_ready).
+    // 병렬 발사 — 타이틀체인(영정→영상화)·슬라이드(ffmpeg)·AI영상 N개는 서로 독립이라 동시 진행.
+    //   힉스필드 한 키 동시처리 실측 확인(4개 병렬 OK, 429 없음). 슬라이드는 크레딧 없는 ffmpeg.
+    //   ※ 슬라이드도 여기서 미리 합성 → 편집기 슬라이드 섹션 내역에 「슬라이드 영상」이 자동으로 뜬다
+    //     (최종합성 때만 만들면 편집 중엔 안 보였음). 사진 없으면 genSlides가 0 반환(안전).
+    //   ※ allSettled — 하나(예: Kling 1개)가 실패해도 나머지(타이틀·슬라이드·다른 AI영상)는 살린다(blocks_ready).
     //     전부 실패한 경우에만 throw → 작업 재시도/실패. (실패분은 편집기에서 개별 「AI 생성」으로 재시도)
     const settled = await Promise.allSettled([
       genTitleAll(ctx),
+      genSlides(ctx),
       ...ctx.aiPhotos.map((_, i) => genAi(ctx, i)),
     ]);
     settled.filter((r) => r.status === "rejected")

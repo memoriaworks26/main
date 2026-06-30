@@ -97,7 +97,7 @@ export default function VideoEditor({ reservation, onClose }) {
     const aiSrc = a.filter((x) => x.role === "ai_video" && x.url && x.selected).sort(bySort); // 활성 소스만
     const aiRes = a.filter((x) => x.role === "ai_video_result" && x.url && x.selected).sort(bySort); // 활성 버전만
     const slideSrc = a.filter((x) => x.role === "slide_photo" && x.url).map((x) => x.url);
-    const slideRes = a.find((x) => x.role === "slide_video" && x.url);
+    const slideRes = a.find((x) => x.role === "slide_video" && x.url && x.selected) || a.find((x) => x.role === "slide_video" && x.url);
     const vidSrc = a.filter((x) => x.role === "memory_video" && x.url).map((x) => x.url);
     editedBlocks.forEach((b) => {
       if (b.type === "title") m[b.id] = {

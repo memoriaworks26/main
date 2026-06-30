@@ -1,4 +1,4 @@
-// 편집기 — 오른쪽 속성 패널(PropPanel) + 보조(PromptPicker·PromptModal·GenHistory).
+// 편집기 — 오른쪽 속성 패널(PropPanel) + 보조(AssetCard·PromptPicker·PromptModal).
 // 선택(sel)에 따라 블록/전환/음악의 편집 컨트롤을 보여준다. 편집값은 상위(VideoEditor)의 edits로 컨트롤드.
 import React, { useState, useRef, useEffect } from "react";
 import { Image as ImageIcon, Music, Upload, Plus, RefreshCw, Trash2, ArrowRightLeft, Check, Type, SlidersHorizontal, X, Film, Download, Loader2 } from "lucide-react";
@@ -195,32 +195,6 @@ function PromptPicker({ target, onManage }) {
   );
 }
 
-// AI 생성 결과물 — 실제 산출물(타이틀 Seedream 이미지·AI영상 Kling 영상)을 표시. 없으면 '생성 전' 안내.
-function GenHistory({ results = [] }) {
-  if (!results.length) {
-    return (
-      <div className="mt-3 px-3 py-3 text-center text-[11.5px]" style={{ background: "#f6f3ec", border: "1px dashed " + LINE2, borderRadius: RADIUS, color: FAINT }}>
-        아직 AI 생성 전입니다 — 「AI로 만들기」를 누르면 결과가 여기에 표시됩니다.
-      </div>
-    );
-  }
-  return (
-    <div className="mt-3">
-      <div className="mb-1.5 text-[11.5px] font-semibold" style={{ color: MUTE }}>AI 생성 결과 <span className="font-normal" style={{ color: FAINT }}>({results.length})</span></div>
-      <div className="grid grid-cols-2 gap-2">
-        {results.map((r, i) => (
-          <div key={i} className="overflow-hidden" style={{ borderRadius: 6, border: "2px solid " + GOLD }}>
-            {r.kind === "video"
-              ? <video src={r.url} controls playsInline preload="metadata" className="block w-full" style={{ aspectRatio: "16/9", background: "#000" }} />
-              : <img src={r.url} alt="" className="block w-full" style={{ aspectRatio: "16/9", objectFit: "cover", background: "#000" }} />}
-            <div className="px-1.5 py-1 text-[10.5px] font-semibold" style={{ color: GOLD_D, background: GOLD_SOFT }}>{r.label || `결과 ${i + 1}`}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, reservation, partnerId, bgmName, media, onGenerate, sel }) {
   const [promptModal, setPromptModal] = useState(false); // AI 문구 관리 모달
   const _store = useStore();                    // BGM 설정(파트너 템플릿) — 훅은 early-return 위에서 무조건 호출(hooks 규칙)
@@ -252,8 +226,9 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
   const _titleVidVers = slotVers("title_video", 0), _titleVideo = selOf(_titleVidVers);
   const _img1Vers = slotVers("title_result", 0), _img1 = selOf(_img1Vers);
   const _img2Vers = slotVers("title_result", 1), _img2 = selOf(_img2Vers);
-  const _slideResult = _assets.find((a) => a.role === "slide_video" && a.url);
-  const genResults = (k === "slide" && _slideResult) ? [{ kind: "video", url: _slideResult.url, label: "슬라이드 영상" }] : [];
+  // 슬라이드 영상 — 버전 내역(최신 우선) + 활성본. 자동생성(유저 요청)/「사진으로 만들기」가 버전 누적(deselect+삽입).
+  const _slideVers = slotVers("slide_video", 0);
+  const _slideResult = selOf(_slideVers);
   const name = reservation?.deceased || D.EDITOR_RESERVATION.deceased;
   // 편집값(컨트롤드) — 전환은 "trans-"+id, 음악은 "audio" 키로 보관
   const transKey = "trans-" + sel.id;
@@ -360,7 +335,20 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
               )}
             </Field>
             <button onClick={() => onGenerate(item.id)} disabled={isGen("slides")} className="flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white disabled:opacity-60" style={{ background: GOLD, borderRadius: RADIUS }}><RefreshCw className={"h-4 w-4" + (isGen("slides") ? " animate-spin" : "")} /> {isGen("slides") ? "슬라이드 영상 만드는 중…" : "사진으로 만들기"}</button>
-            <GenHistory results={genResults} />
+            {/* 생성 결과 — 활성본 미리보기 + 내역(버전 선택/삭제). 자동생성·「사진으로 만들기」 결과가 여기 누적된다. */}
+            {(() => {
+              const canEdit = !!(reservation?.id && media?.token);
+              const selSlide = (vid) => canEdit ? actions.selectAsset(reservation.id, _subId, vid, "slide_video", 0) : null;
+              const delSlide = (vid) => canEdit ? actions.deleteAsset(reservation.id, vid) : null;
+              const slideHist = _slideVers.map((v) => ({ id: v.id, url: v.url, selected: v.selected }));
+              return (
+                <div className="mt-3">
+                  <AssetCard label="슬라이드 영상" hint="사진 → 영상(현재 적용본)" asset={_slideResult} kind="video"
+                    generating={isGen("slides")} history={slideHist}
+                    onSelect={canEdit ? selSlide : undefined} onDeleteVersion={canEdit ? delSlide : undefined} />
+                </div>
+              );
+            })()}
 
             {/* 배경 음악 — 추억 슬라이드(보호자 사진)에만 깔린다. 추억 영상(유저 영상)은 원본 사운드 유지. */}
             <div className="mt-5 border-t pt-4" style={{ borderColor: LINE }}>
