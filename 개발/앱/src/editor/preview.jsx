@@ -92,8 +92,25 @@ function MediaView({ media, onTime }) {
         )}
       </>
     );
-  if (media.kind === "videos")
-    return <video src={media.urls[0]} controls playsInline preload="metadata" onError={() => setErr(true)} className="absolute inset-0 h-full w-full" style={{ background: "#000" }} onTimeUpdate={onTime} />;
+  if (media.kind === "videos") {
+    const cur = media.urls[idx % media.urls.length];
+    return (
+      <>
+        <video key={cur} src={cur} controls playsInline preload="metadata" onError={() => setErr(true)} className="absolute inset-0 h-full w-full" style={{ background: "#000" }} onTimeUpdate={onTime} />
+        {media.urls.length > 1 && (
+          <div className="absolute bottom-2 right-2 z-10 flex gap-1">
+            {media.urls.map((_, i) => (
+              <button key={i} onClick={() => setIdx(i)} aria-label={`${i + 1}번 영상`}
+                className="flex h-6 min-w-[24px] items-center justify-center px-1.5 text-[11px] font-bold tabular-nums outline-none"
+                style={{ background: (idx % media.urls.length) === i ? GOLD_D : "rgba(0,0,0,.55)", color: "#fff", borderRadius: 4 }}>
+                {i + 1}
+              </button>
+            ))}
+          </div>
+        )}
+      </>
+    );
+  }
   if (media.kind === "letter") {
     // 아래 → 위 크레딧 스크롤. 끝에 처음 만난 날 / 무지개다리 건넌 날을 크게.
     const dur = Math.max(14, Math.round((media.text || "").length / 12) + 12); // 글 길이에 비례
@@ -175,6 +192,7 @@ export function Preview({ sel, blocks, gens, name, sourceVideoUrl, blockMedia = 
   const srcMedia = bm?.source || null;                      // 보호자 원본
   const resMedia = bm?.result || null;                      // AI 생성 결과(작업본)
   const isClip = block?.type === "clip";                    // 콘텐츠 허브 클립 — 보호자 원본/AI 결과가 아닌 템플릿 고정 자산
+  const isVideoBlk = block?.type === "video";               // 추억 영상 — AI 변환 없이 보호자 원본 그대로(좌·우 동일, 음량만 편집)
   return (
     <div>
       <div className="mb-2 flex items-center gap-2">
@@ -192,14 +210,16 @@ export function Preview({ sel, blocks, gens, name, sourceVideoUrl, blockMedia = 
           {/* 원본 = 보호자가 올린 실제 소스. 없으면 완성영상(있으면)·목업 폴백. (편집값인 자막은 여기 표시 안 함 — 비교용 원본) */}
           <PreviewBox label="유저가 만든 원본" badge={srcMedia ? "보호자 원본" : sourceVideoUrl ? "완성본 · 재생" : "원본 · 수정불가"} badgeColor={{ bg: "rgba(90,100,112,.15)", c: "#5a6470" }}
             name={name} src={origSrc} videoSrc={sourceVideoUrl} media={srcMedia} />
-          {/* 작업본 = AI 생성 결과(타이틀 Seedream·AI영상 Kling). 자막 미리보기·드래그는 편집 중인 이쪽에 표시. */}
-          <PreviewBox label="내가 편집 중" badge={resMedia ? "작업본 · AI 결과" : "작업본 · 생성 전"} badgeColor={{ bg: GOLD_SOFT, c: GOLD_D }} big name={name} src={editedSrc} media={resMedia}
+          {/* 작업본 = AI 생성 결과(타이틀 Seedream·AI영상 DoP) 또는 추억 영상(원본 그대로·음량 편집). 자막 미리보기·드래그는 이쪽에 표시. */}
+          <PreviewBox label="내가 편집 중" badge={isVideoBlk ? (resMedia ? "추억 영상 · 편집 중" : "영상 없음") : resMedia ? "작업본 · AI 결과" : "작업본 · 생성 전"} badgeColor={{ bg: GOLD_SOFT, c: GOLD_D }} big name={name} src={editedSrc} media={resMedia}
             subs={subtitles} selSubId={selSubId} onSubEdit={onSubEdit} onSelSub={onSelSub} />
         </div>
       )}
       <div className="mt-1.5 text-[11.5px]" style={{ color: FAINT }}>
         {subtitles.length
           ? "자막을 끌어 위치를 잡으세요. 영상 재생 시 설정한 시간 구간에만 표시됩니다(최종 렌더에 그대로 반영)."
+          : isVideoBlk
+          ? (resMedia ? "보호자가 올린 추억 영상입니다 — 영상이 2개 이상이면 오른쪽 1·2 버튼으로 각각 재생됩니다. 소리 크기는 오른쪽 속성에서 영상별로 조절합니다." : "올라온 추억 영상이 없습니다.")
           : isClip
           ? (resMedia ? "콘텐츠 허브에 연결된 클립입니다 — 최종본에 그대로 들어갈 실제 클립입니다(편집 없음)." : "이 클립에 콘텐츠 허브 자산이 연결되지 않았습니다 — 템플릿에서 클립 자산을 지정하세요.")
           : resMedia

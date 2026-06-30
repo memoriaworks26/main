@@ -128,8 +128,8 @@ export async function composeFinal(job, assets) {
       await makeSlideshow(items, ss);
       segs.push({ type: "video", path: ss, fade });
     }
-    // 추억 영상(개별 클립) — 원본 사운드 유지(mem). 첫 클립만 경계 페이드.
-    async function emitMemVideos(fade) { for (let i = 0; i < memVideos.length; i++) { await dl(memVideos[i], `m${i}.mp4`); segs.push({ type: "video", path: path.join(dir, `m${i}.mp4`), mem: true, fade: fade && i === 0 }); } }
+    // 추억 영상(개별 클립) — 원본 사운드 유지(mem). 첫 클립만 경계 페이드. vols[i]=영상별 음량%(편집기 슬라이더).
+    async function emitMemVideos(fade, vols) { for (let i = 0; i < memVideos.length; i++) { await dl(memVideos[i], `m${i}.mp4`); segs.push({ type: "video", path: path.join(dir, `m${i}.mp4`), mem: true, vol: Array.isArray(vols) ? vols[i] : undefined, fade: fade && i === 0 }); } }
     // 편지(아래→위 스크롤) + 날짜 카드.
     async function emitLetter(fade) {
       if (letterText) { const lv = path.join(dir, "letter.mp4"); await letterScrollSegment(letterText, FONT, lv); segs.push({ type: "video", path: lv, fade }); }
@@ -140,7 +140,7 @@ export async function composeFinal(job, assets) {
       }
     }
     // 콘텐츠 허브 클립(영상/이미지) — 템플릿에서 지정한 자산을 id로 조회·다운로드해 합성. 자산 미지정/유실이면 조용히 생략.
-    async function emitClip(assetId, fade) {
+    async function emitClip(assetId, fade, vol) {
       if (!assetId) return;
       const { data: a } = await db.from("content_assets").select("kind, storage_path").eq("id", assetId).maybeSingle();
       if (!a?.storage_path) { log.warn(`  클립 자산 없음/미지정(assetId=${assetId}) — 생략`); return; }
@@ -149,7 +149,7 @@ export async function composeFinal(job, assets) {
       try { await st.downloadTo(await st.signedUrl("memoria-content", a.storage_path, 3600), path.join(dir, fn)); }
       catch (e) { log.warn(`  클립 다운로드 실패(${assetId}): ${e.message} — 생략`); return; }
       if (isPhoto) segs.push({ type: "image", path: path.join(dir, fn), dur: CLIP_PHOTO_DUR, fade });
-      else segs.push({ type: "video", path: path.join(dir, fn), fade });
+      else segs.push({ type: "video", path: path.join(dir, fn), clip: true, vol: vol ?? 100, fade }); // 영상 클립은 원본 사운드 + 편집기 음량(미설정 100%)
     }
 
     // 실행 플랜 — 편집본(render.plan) 우선, 없으면 템플릿 blocks의 자연 순서(클립 포함). 둘 다 없으면(파트너 미상 등) 고정 폴백.
@@ -159,9 +159,9 @@ export async function composeFinal(job, assets) {
         if (p.kind === "title") await emitTitle();
         else if (p.kind === "ai") await emitAi(p.i ?? 0, !!p.fade);
         else if (p.kind === "slide") await emitSlides(!!p.fade);
-        else if (p.kind === "video") await emitMemVideos(!!p.fade);
+        else if (p.kind === "video") await emitMemVideos(!!p.fade, p.vols);
         else if (p.kind === "letter") await emitLetter(!!p.fade);
-        else if (p.kind === "clip") await emitClip(p.assetId, !!p.fade);
+        else if (p.kind === "clip") await emitClip(p.assetId, !!p.fade, p.vol);
       }
     } else {
       // 템플릿조차 없을 때 — 기존 고정 순서: 타이틀 → AI A → 슬라이드 → 추억영상 → AI B → 편지

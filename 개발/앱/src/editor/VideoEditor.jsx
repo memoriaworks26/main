@@ -115,9 +115,10 @@ export default function VideoEditor({ reservation, onClose }) {
     const titleRes = a.filter((x) => x.role === "title_result" && x.url && x.selected).sort(bySort); // 활성 버전만
     const aiSrc = a.filter((x) => x.role === "ai_video" && x.url && x.selected).sort(bySort); // 활성 소스만
     const aiRes = a.filter((x) => x.role === "ai_video_result" && x.url && x.selected).sort(bySort); // 활성 버전만
-    const slideSrc = a.filter((x) => x.role === "slide_photo" && x.url).map((x) => x.url);
+    const slideSrc = a.filter((x) => x.role === "slide_photo" && x.url).sort(bySort).map((x) => x.url);
     const slideRes = a.find((x) => x.role === "slide_video" && x.url && x.selected) || a.find((x) => x.role === "slide_video" && x.url);
-    const vidSrc = a.filter((x) => x.role === "memory_video" && x.url).map((x) => x.url);
+    // 추억영상 미리보기(1·2 버튼) 순서를 sortOrder로 — 워커 합성 순서·props 음량 슬라이더와 동일 인덱스.
+    const vidSrc = a.filter((x) => x.role === "memory_video" && x.url).sort(bySort).map((x) => x.url);
     editedBlocks.forEach((b) => {
       if (b.type === "title") m[b.id] = {
         source: titleSrc && { kind: "image", url: titleSrc.url, label: "보호자 독사진" },
@@ -133,7 +134,7 @@ export default function VideoEditor({ reservation, onClose }) {
         source: slideSrc.length && { kind: "images", urls: slideSrc, label: `보호자 사진 ${slideSrc.length}장` },
         result: slideRes && { kind: "videos", urls: [slideRes.url], label: "슬라이드 영상" },
       };
-      else if (b.type === "video" && vidSrc.length) m[b.id] = { source: { kind: "videos", urls: vidSrc, label: `보호자 영상 ${vidSrc.length}개` } };
+      else if (b.type === "video" && vidSrc.length) { const mv = { kind: "videos", urls: vidSrc, label: `보호자 영상 ${vidSrc.length}개` }; m[b.id] = { source: mv, result: mv }; } // 좌=원본·우=편집 중 동일(영상 2개↑면 미리보기 1/2 버튼으로 개별 재생)
       else if (b.type === "letter" && (b.text != null || media.letter)) m[b.id] = {
         // 좌(원본)=보호자 원본 그대로 / 우(작업본)=관리자 편집본(실시간 반영)
         source: media.letter ? { kind: "letter", text: media.letter, metDate: media.metDate ?? null, partDate: media.partDate ?? null } : null,
@@ -232,6 +233,11 @@ export default function VideoEditor({ reservation, onClose }) {
     try { await actions.saveEditDoc(reservation.id, subId, { v: 1, doc, render }); setSavedDoc(doc); toast("저장되었습니다 — 다음 최종 렌더부터 반영됩니다"); }
     catch (e) { toast("저장 실패: " + (e.message || e)); }
   };
+  // 미저장 가드 — 자막·편집을 저장하지 않고 「뒤로」 나가면 사라지므로, dirty면 확인 후 닫기.
+  const closeGuarded = async () => {
+    if (dirty && !(await confirm({ title: "저장하지 않고 나가기", message: "저장하지 않은 편집 내용이 있습니다.\n저장하지 않고 나가면 사라집니다.", danger: true, confirmLabel: "나가기" }))) return;
+    onClose && onClose();
+  };
 
   // 템플릿 변경 등으로 선택한 블록이 사라지면 첫 블록으로 복귀
   useEffect(() => {
@@ -279,7 +285,7 @@ export default function VideoEditor({ reservation, onClose }) {
     <div className="flex flex-col" style={{ height: "calc(100vh - 44px)", background: BG }}>
       <div className="flex items-center justify-between px-4" style={{ background: MASTER, height: 52 }}>
         <div className="flex items-center gap-3">
-          <button onClick={onClose} className="flex items-center gap-1 text-[13px] font-semibold" style={{ color: "#aab2bf" }}><ChevronLeft className="h-4 w-4" /> 뒤로</button>
+          <button onClick={closeGuarded} className="flex items-center gap-1 text-[13px] font-semibold" style={{ color: "#aab2bf" }}><ChevronLeft className="h-4 w-4" /> 뒤로</button>
           <span className="h-4 w-px" style={{ background: "#2c3744" }} />
           <span className="text-[14px] font-bold" style={{ color: "#eef0f3", fontFamily: SERIF }}>{name}</span>
           <span className="text-[12px]" style={{ color: "#5a6472" }}>{secondMode ? "추모영상 편집 · 2차 가공" : "추모영상 편집"}</span>

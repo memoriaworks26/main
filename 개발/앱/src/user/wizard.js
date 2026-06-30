@@ -184,8 +184,9 @@ export function useUserWizard(previewBizId, stepCtl, previewOverride) {
       setList((p) => [...p, {
         id, name: f.name, kind,
         size: (f.size / 1048576).toFixed(1) + "MB",
-        thumb: f.type.startsWith("image") ? URL.createObjectURL(f) : undefined,
-        url: f.type.startsWith("video") ? URL.createObjectURL(f) : undefined, // 미리보기 재생용(세션 한정)
+        // 미리보기 URL은 핸들러가 아는 kind로 판정 — f.type은 iOS .mov/HEIC가 빈값/비표준(특히 카톡 인앱웹뷰)이라 신뢰 불가.
+        thumb: kind === "photo" ? URL.createObjectURL(f) : undefined,
+        url: kind === "video" ? URL.createObjectURL(f) : undefined, // 미리보기 재생용(세션 한정)
         uploading: liveMode, storagePath: null,
       }]);
       uploadAsset(token, f, {

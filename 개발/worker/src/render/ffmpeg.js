@@ -88,7 +88,8 @@ function hasAudio(file) {
   });
 }
 
-// segments: [{ type:'image'|'video', path, dur, caption?, letter?, mem? }] (mem=추억영상: 원본사운드 유지·BGM 덕킹)
+// segments: [{ type:'image'|'video', path, dur, caption?, letter?, mem?, vol? }]
+//   mem=추억영상(원본사운드 유지·BGM 덕킹), vol=0~200 세그별 음량%(없으면 mem은 memVol·그외 100)
 // bgmPath?, bgmVol(0~100), bgmFadeIn/Out(초), fontFile?(한글캡션), outPath
 export async function compose({ segments, bgmPath, bgmVol = 70, bgmFadeIn = 1, bgmFadeOut = 2, fontFile, subs = null, subFonts = null, memVol = 100, outPath }) {
   if (!segments?.length) throw new Error("compose: 세그먼트 없음");
@@ -114,25 +115,30 @@ export async function compose({ segments, bgmPath, bgmVol = 70, bgmFadeIn = 1, b
     const durs = []; for (const p of parts) durs.push(await durationOf(p));
     const total = durs.reduce((a, b) => a + b, 0);
     const offs = []; { let a = 0; for (const d of durs) { offs.push(a); a += d; } }
-    const memAudio = []; const memRanges = [];
+    // 오디오 보유 세그먼트(추억영상·클립 등)를 각자 볼륨으로 믹스. 세그 vol 우선 → 추억영상(mem)은 memVol 폴백 → 그 외 100.
+    //   vol<=0(음소거)이거나 오디오 트랙이 없는 세그(타이틀·슬라이드·AI영상·편지)는 믹스·BGM덕킹 모두 제외.
+    const segAudio = []; const duckRanges = [];
     for (let i = 0; i < segments.length; i++) {
-      if (!segments[i].mem) continue;
-      memRanges.push([offs[i], offs[i] + durs[i]]);
-      if (await hasAudio(segments[i].path)) memAudio.push({ src: segments[i].path, start: offs[i] });
+      const s = segments[i];
+      if (!s.mem && !s.clip) continue;                          // 소스 오디오 세그(추억영상·클립)만 — 타이틀/슬라이드/AI영상/편지는 항상 무음(BGM 덕킹 안 함)
+      const segVol = s.vol != null ? s.vol : (s.mem ? memVol : 100); // 편집기 슬라이더(영상별·클립별)
+      if (segVol <= 0) continue;                                 // 음소거 — 믹스·덕킹 제외
+      if (!(await hasAudio(s.path))) continue;                   // 오디오 트랙 없으면 제외
+      duckRanges.push([offs[i], offs[i] + durs[i]]);
+      segAudio.push({ src: s.path, start: offs[i], gain: (Math.max(0, Math.min(200, segVol)) / 100).toFixed(2) });
     }
-    if (!bgmPath && memAudio.length === 0) { await ff(["-y", "-i", base, "-c", "copy", "-movflags", "+faststart", outPath]); return outPath; } // 무음(+faststart 리먹스)
+    if (!bgmPath && segAudio.length === 0) { await ff(["-y", "-i", base, "-c", "copy", "-movflags", "+faststart", outPath]); return outPath; } // 무음(+faststart 리먹스)
 
     const args = ["-y", "-i", base]; const fc = []; const mix = [];
-    const memGain = (Math.max(0, Math.min(200, memVol)) / 100).toFixed(2); // 추억영상 원본 소리 크기(편집기 슬라이더)
-    memAudio.forEach((m, j) => {
+    segAudio.forEach((m, j) => {
       args.push("-i", m.src); const ms = Math.round(m.start * 1000);
-      fc.push(`[${1 + j}:a]adelay=${ms}|${ms},volume=${memGain}[ma${j}]`); mix.push(`[ma${j}]`);
+      fc.push(`[${1 + j}:a]adelay=${ms}|${ms},volume=${m.gain}[ma${j}]`); mix.push(`[ma${j}]`);
     });
     if (bgmPath) {
-      const bidx = 1 + memAudio.length; args.push("-stream_loop", "-1", "-i", bgmPath);
+      const bidx = 1 + segAudio.length; args.push("-stream_loop", "-1", "-i", bgmPath);
       const vol = (Math.max(0, Math.min(100, bgmVol)) / 100).toFixed(2);
-      const duck = memRanges.length
-        ? `if(${memRanges.map(([s, e]) => `between(t,${s.toFixed(2)},${e.toFixed(2)})`).join("+")},0,${vol})`
+      const duck = duckRanges.length
+        ? `if(${duckRanges.map(([s, e]) => `between(t,${s.toFixed(2)},${e.toFixed(2)})`).join("+")},0,${vol})`
         : `${vol}`;
       let bg = `[${bidx}:a]atrim=0:${total.toFixed(2)},volume='${duck}':eval=frame`;
       if (bgmFadeIn > 0) bg += `,afade=t=in:st=0:d=${bgmFadeIn}`;

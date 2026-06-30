@@ -62,16 +62,16 @@ export function buildRenderPlan({ orderedVisible, edits = {}, subs = [] }) {
     if (b.type === "title") plan.push({ kind: "title" });            // 타이틀은 자체 인트로 페이드
     else if (b.type === "ai") plan.push({ kind: "ai", i: (b.aiIndex || 1) - 1, fade });
     else if (b.type === "slide") plan.push({ kind: "slide", fade });
-    else if (b.type === "video") plan.push({ kind: "video", fade });
+    else if (b.type === "video") plan.push({ kind: "video", fade, vols: edits[b.id]?.vols || null }); // 영상별 음량(없으면 memVol 폴백)
     else if (b.type === "letter") plan.push({ kind: "letter", fade });
-    else if (b.type === "clip" && b.assetId) plan.push({ kind: "clip", assetId: b.assetId, fade }); // 콘텐츠 허브 클립(자산 미지정은 건너뜀)
+    else if (b.type === "clip" && b.assetId) plan.push({ kind: "clip", assetId: b.assetId, fade, vol: edits[b.id]?.volume }); // 콘텐츠 허브 클립(영상이면 음량 적용; 자산 미지정은 건너뜀)
   });
   // 편지 오버라이드(관리자 편집본) — 편지 블록에 편집값이 있을 때만.
   const letterBlk = orderedVisible.find((b) => b.type === "letter");
   const le = letterBlk ? edits[letterBlk.id] : null;
   const letter = le && (le.text != null || le.metDate != null || le.partDate != null)
     ? { text: le.text ?? null, metDate: le.metDate ?? null, partDate: le.partDate ?? null } : null;
-  // 추억 영상 원본 소리 크기(편집기 슬라이더).
+  // 추억 영상 음량 — 영상별 vols(plan.video.vols)가 우선. memVol은 구버전 단일 volume 호환용 전역 폴백.
   const videoBlk = orderedVisible.find((b) => b.type === "video");
   const memVol = videoBlk && edits[videoBlk.id] && edits[videoBlk.id].volume != null ? edits[videoBlk.id].volume : null;
   // 자막 — 빈 텍스트 제외, 워커가 쓰는 필드만.

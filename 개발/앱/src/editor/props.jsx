@@ -206,8 +206,10 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
   if (!item) return null;
   // 실제 보호자 자산(서명URL) — 없으면(미로드·dev) 목업 폴백.
   const _assets = media?.assets || [];
-  const _slidePhotos = _assets.filter((a) => a.role === "slide_photo" && a.url);
-  const _memoryVideos = _assets.filter((a) => a.role === "memory_video" && a.url);
+  const _bySort = (p, q) => (p.sortOrder ?? 0) - (q.sortOrder ?? 0);
+  const _slidePhotos = _assets.filter((a) => a.role === "slide_photo" && a.url).sort(_bySort);
+  // 추억영상은 sortOrder 순 — 워커(emitMemVideos는 sort_order 순)와 인덱스를 맞춰 영상별 음량이 같은 영상에 적용되게.
+  const _memoryVideos = _assets.filter((a) => a.role === "memory_video" && a.url).sort(_bySort);
   // 소스/결과 모두 버전 히스토리(슬롯당 다중) + 활성본 + 생성중 상태.
   const _subId = media?.submissionId;
   const _genActive = ["queued", "rendering"].includes(media?.status);
@@ -378,27 +380,29 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
         {k === "video" && (() => {
           // 추억 영상 — 보호자가 올린 실제 영상(없으면 목업 폴백). 슬라이드 뒤 개별 클립으로 이어붙임.
           const vids = _memoryVideos.length ? _memoryVideos : (D.USER_UPLOADS || []).filter((u) => u.kind === "video");
+          const vols = item.vols || [];
+          const setVol = (i, val) => { const n = item.vols ? item.vols.slice() : vids.map(() => 100); n[i] = val; onEdit(item.id, { vols: n }); };
           return (
           <>
             {_vidMock && <div className="mb-2 px-3 py-2 text-[11px] leading-relaxed" style={{ background: "#fbf3e6", border: "1px solid #ecd9b0", borderRadius: RADIUS, color: "#8a6d3b" }}>샘플 미리보기입니다 — 실제 보호자 영상이 아직 없거나 불러오는 중입니다.</div>}
-            <Field label={`보호자 영상 (${vids.length}개 · 슬라이드 뒤 개별 클립)`}>
-              <div className="space-y-2 px-2.5 py-2.5" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS }}>
+            <Field label={`보호자 영상 (${vids.length}개 · 슬라이드 뒤 개별 클립 · 소리 개별 조절)`}>
+              <div className="space-y-3 px-2.5 py-2.5" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS }}>
                 {vids.length === 0
                   ? <div className="py-2 text-center text-[11.5px]" style={{ color: FAINT }}>올라온 영상이 없습니다.</div>
                   : vids.map((v, i) => (
-                    <div key={v.id || i}>
+                    <div key={v.id || i} className={i > 0 ? "pt-3" : ""} style={i > 0 ? { borderTop: "1px solid " + LINE } : undefined}>
                       <div className="mb-1 flex items-center gap-2">
                         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold" style={{ background: "#e7e2d8", color: MUTE }}>{i + 1}</span>
                         <Film className="h-3.5 w-3.5 shrink-0" style={{ color: GOLD_D }} />
                         <span className="min-w-0 flex-1 truncate text-[12px] font-semibold" style={{ color: INK }}>{v.name || `영상 ${i + 1}`}</span>
                       </div>
                       {v.url && <video src={v.url} controls playsInline preload="metadata" className="w-full" style={{ aspectRatio: "16/9", background: "#000", borderRadius: 4 }} />}
+                      <div className="mt-1.5"><SoundField label={`${i + 1}번 영상 소리 크기`} value={vols[i]} onChange={(val) => setVol(i, val)} /></div>
                     </div>
                   ))}
               </div>
-              <p className="mt-2 text-[11px] leading-relaxed" style={{ color: FAINT }}>※ 추억 슬라이드(사진) 다음에 각 영상이 개별 클립으로 이어집니다. BGM 없이 원본 사운드 유지, 최종 렌더 시 합성됩니다.</p>
+              <p className="mt-2 text-[11px] leading-relaxed" style={{ color: FAINT }}>※ 추억 슬라이드(사진) 다음에 각 영상이 개별 클립으로 이어집니다. 원본 사운드 유지, 영상마다 소리 크기를 따로 조절할 수 있고 0%면 음소거됩니다. 최종 렌더 시 합성됩니다.</p>
             </Field>
-            <SoundField label="원본 소리 크기" value={item.volume} onChange={(val) => onEdit(item.id, { volume: val })} />
           </>
           );
         })()}
@@ -423,9 +427,8 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
               promptSlot={<PromptPicker target={"AI영상 " + String.fromCharCode(65 + i)} onManage={() => setPromptModal(true)} />}
               history={hist(aiResVers)} onSelect={selV("ai_video_result", i)} onDeleteVersion={delV} />
             <div className="mt-1 px-3 py-2.5 text-[11.5px] leading-relaxed" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
-              추억 슬라이드 앞(A) · 추억 영상 뒤(B)로 유저 소스를 감쌉니다.
+              추억 슬라이드 앞(A) · 추억 영상 뒤(B)로 유저 소스를 감쌉니다. AI 영상은 사진으로 생성돼 소리가 없습니다(음량 조절 없음).
             </div>
-            <div className="mt-3"><SoundField label="AI 영상 소리 크기" value={item.volume} onChange={(val) => onEdit(item.id, { volume: val })} /></div>
           </>
           );
         })()}

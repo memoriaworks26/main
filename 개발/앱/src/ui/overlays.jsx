@@ -56,7 +56,7 @@ export function Calendar({ value, onSelect }) {
   });
 
   const navBtn = (onClick, Icon, label) => (
-    <button onClick={onClick} aria-label={label}
+    <button type="button" onClick={onClick} aria-label={label}
       className="flex h-7 w-7 items-center justify-center outline-none transition hover:bg-[#f6f3ec] focus-visible:ring-1"
       style={{ border: "1px solid " + LINE2, borderRadius: RADIUS, color: MUTE }}>
       <Icon className="h-4 w-4" strokeWidth={2} />
@@ -84,7 +84,7 @@ export function Calendar({ value, onSelect }) {
             if (!d) return <div key={i} className="h-9" />;
             const sel_ = isSel(d), tdy = isToday(d);
             return (
-              <button key={i} onClick={() => onSelect?.(toISO(view.y, view.mo, d))}
+              <button type="button" key={i} onClick={() => onSelect?.(toISO(view.y, view.mo, d))}
                 className="mx-auto flex h-9 w-9 items-center justify-center text-[13px] tabular-nums outline-none transition focus-visible:ring-1"
                 style={{
                   borderRadius: RADIUS,
@@ -106,10 +106,12 @@ export function Calendar({ value, onSelect }) {
 }
 
 // 날짜 입력 필드 — 클릭 시 달력 모달 (톤앤매너 일치)
+//   ※ 바깥은 <label>이 아니라 <div> — label로 감싸면 iOS Safari가 내부 탭을 첫 labelable 컨트롤(트리거 버튼)로
+//     재전달해, 달력 날짜 탭이 트리거를 다시 눌러 달력이 디폴트 월로 계속 다시 뜨는 버그가 난다.
 export function DateField({ label, value, onChange, req, placeholder = "YYYY-MM-DD" }) {
   const [open, setOpen] = useState(false);
   return (
-    <label className="block">
+    <div className="block">
       {label && (
         <span className="text-[12px] font-semibold" style={{ color: MUTE }}>
           {label}{req && <span style={{ color: GOLD }}> *</span>}
@@ -124,16 +126,16 @@ export function DateField({ label, value, onChange, req, placeholder = "YYYY-MM-
       <Modal open={open} onClose={() => setOpen(false)} width={320}>
         <Calendar value={value} onSelect={(d) => { onChange?.(d); setOpen(false); }} />
         <div className="flex items-center justify-between px-4" style={{ height: 46, borderTop: "1px solid " + LINE }}>
-          <button onClick={() => { const t = new Date(); onChange?.(toISO(t.getFullYear(), t.getMonth(), t.getDate())); setOpen(false); }}
+          <button type="button" onClick={() => { const t = new Date(); onChange?.(toISO(t.getFullYear(), t.getMonth(), t.getDate())); setOpen(false); }}
             className="text-[12px] font-semibold outline-none transition hover:opacity-80" style={{ color: GOLD_D }}>
             오늘로
           </button>
-          <button onClick={() => setOpen(false)}
+          <button type="button" onClick={() => setOpen(false)}
             className="text-[12px] font-semibold outline-none transition hover:opacity-80" style={{ color: MUTE }}>
             닫기
           </button>
         </div>
       </Modal>
-    </label>
+    </div>
   );
 }
