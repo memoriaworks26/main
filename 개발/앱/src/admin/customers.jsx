@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { SERIF, SURFACE, LINE, GOLD_D, INK, MUTE, FAINT, RADIUS, SUB_LABEL } from "../theme.js";
 import { Tag, Btn, Card, Table, PageHeader, CopyBtn, useTableSort } from "../ui.jsx";
-import { useStore, actions, submissionFor, videoFor } from "../store.js";
+import { useStore, actions, submissionFor, videoFor, term } from "../store.js";
 import { confirm } from "../confirm.jsx";
 import { toast } from "../toast.jsx";
 import { matchQuery } from "../lib/util.js";
@@ -102,6 +102,10 @@ function CustomerDetail({ rid, onBack }) {
   const { reservations } = store;
   const r = reservations.find((x) => x.id === rid);
   if (!r) return null;
+  // 사업부별 세팅(termConfigs) 반영 — 파트너 콘솔과 동일하게 사업부 용어를 따른다(파트너 예약상세와 동일 표기).
+  // 예약의 소속 파트너 사업부 기준(고객목록은 현재 사업부로 스코핑되므로 통상 store.bizUnit과 동일).
+  const reservBiz = store.partners.find((p) => p.id === r.partnerId)?.bizUnit || store.bizUnit;
+  const tp = (key) => term(store, key, "partner", reservBiz);
   // [QA-P1] 발행 링크·영상 = 실제 submission(목업 제거). origin은 보호자 접속 도메인.
   const sub = submissionFor(store, r.id);
   const link = sub ? {
@@ -114,15 +118,15 @@ function CustomerDetail({ rid, onBack }) {
   const file = `${r.deceased}_추모영상.mp4`;
   // [접수 정보] 예약접수에서 캡처한 보호자·반려동물 실데이터 — 파트너 예약상세와 동일 카드(고객관리 진입 시에도 노출).
   const guardianInfo = [
-    { label: "반려동물 이름", value: r.deceased || "—" },
-    { label: "품종", value: r.breed || "—" },
+    { label: tp("subject") + " 이름", value: r.deceased || "—" },
+    { label: tp("breed"), value: r.breed || "—" },
     { label: "나이", value: r.age || "—" },
-    { label: "보호자 성함", value: r.chief || "—" },
+    { label: tp("guardian") + " 성함", value: r.chief || "—" },
     { label: "연락처", value: r.phone || "—" },
   ];
   return (
     <div>
-      <PageHeader title={r.deceased} sub={r.partner + " · " + r.room + " · 보호자 " + r.chief} back={{ onClick: onBack, label: "뒤로" }}
+      <PageHeader title={r.deceased} sub={r.partner + " · " + r.room + " · " + tp("guardian") + " " + r.chief} back={{ onClick: onBack, label: "뒤로" }}
         right={
           <div className="flex items-center gap-2">
             {videoTag(r.status)}
@@ -133,10 +137,10 @@ function CustomerDetail({ rid, onBack }) {
       <div className="grid grid-cols-2 gap-4">
         <Card title="예약 정보">
           <div className="space-y-2 text-[13px]" style={{ color: INK }}>
-            <div className="flex gap-2"><span style={{ color: MUTE }}>반려동물</span><span style={{ fontFamily: SERIF, fontWeight: 700 }}>{r.deceased}</span></div>
-            <div className="flex gap-2"><span style={{ color: MUTE }}>보호자</span><span>{r.chief}</span></div>
+            <div className="flex gap-2"><span style={{ color: MUTE }}>{tp("subject")}</span><span style={{ fontFamily: SERIF, fontWeight: 700 }}>{r.deceased}</span></div>
+            <div className="flex gap-2"><span style={{ color: MUTE }}>{tp("guardian")}</span><span>{r.chief}</span></div>
             <div className="flex gap-2"><span style={{ color: MUTE }}>연락처</span><span className="tabular-nums">{r.phone}</span></div>
-            <div className="flex items-center gap-2"><span style={{ color: MUTE }}>호실·일정</span><span className="inline-flex items-center">{r.room} · {r.date} <span className="ml-1 inline-flex items-center"><SlotText slot={r.slot} /></span></span></div>
+            <div className="flex items-center gap-2"><span style={{ color: MUTE }}>{tp("room")}·일정</span><span className="inline-flex items-center">{r.room} · {r.date} <span className="ml-1 inline-flex items-center"><SlotText slot={r.slot} /></span></span></div>
             <div className="flex gap-2"><span style={{ color: MUTE }}>파트너사</span><span>{r.partner}</span></div>
             <div className="flex gap-2"><span style={{ color: MUTE }}>담당자</span><span>{r.assignee || "미배정"}</span></div>
             <div className="flex items-center gap-2"><span style={{ color: MUTE }}>영상</span>{videoTag(r.status)}</div>
