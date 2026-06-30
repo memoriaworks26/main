@@ -64,8 +64,13 @@ export async function composeFinal(job, assets) {
     const titleVid = pick("title_video")[0];        // 완성 타이틀 클립(우선)
     const titleRes = pick("title_result");          // 영정 이미지(1장; 구버전은 2장)
     const aiRes = pick("ai_video_result");          // 영상 A·B
-    const slideVid = pick("slide_video")[0];        // 사전 합성된 슬라이드 영상(「사진으로 만들기」 결과) — 있으면 우선
+    let slideVid = pick("slide_video")[0];          // 사전 합성된 슬라이드 영상(자동생성/「사진으로 만들기」 결과) — 있으면 우선
     const slidePhotos = pick("slide_photo");
+    // 사전 합성본보다 슬라이드 사진이 더 최신(추가·교체 후 미재생성)이면 사전본 무시 → emitSlides가 현재 사진으로 재합성.
+    if (slideVid && slidePhotos.some((p) => String(p.created_at || "") > String(slideVid.created_at || ""))) {
+      log.info("  슬라이드 사진이 사전 합성본보다 최신 — 사전본 무시하고 현재 사진으로 재합성");
+      slideVid = null;
+    }
     const memVideos = pick("memory_video");
     // 슬라이드 사진 사이 전환 — 보호자가 위저드에서 고른 것(transition_map = 사진순 xfade명 배열). 없으면 fade.
     const slideXfades = Array.isArray(job.transition_map) ? job.transition_map : [];
