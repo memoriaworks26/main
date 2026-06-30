@@ -9,6 +9,7 @@ import path from "node:path";
 import os from "node:os";
 import ffmpegStatic from "ffmpeg-static";
 import ffprobeStatic from "ffprobe-static";
+import { log } from "../log.js";
 
 // 운영(Railway)은 apt ffmpeg(드로텍스트 포함)를 FFMPEG_PATH로 주입 — ffmpeg-static Linux엔 drawtext 없음.
 // 로컬은 ffmpeg-static 폴백.
@@ -170,11 +171,11 @@ export async function makeTitleVideo(img1, img2, caption, fontFile, out) {
     return out;
   }
   const seg1 = path.join(dir, "_tt1.mp4"), seg2 = path.join(dir, "_tt2.mp4");
-  // ① 이미지1 14초(천천히 3초 페이드인 + 자막 서서히). xfade offset10+dur4=14 안에 들어와야 함. ② 이미지2 10초.
-  await ff(["-y", "-loop", "1", "-t", "14", "-i", img1, "-vf", `${FIT},fade=t=in:st=0:d=3${cap}`, "-r", String(FPS), ...ENC, seg1]);
+  // ① 이미지1 14초(천천히 3초 페이드인). xfade offset10+dur4=14 안에 들어와야 함. ② 이미지2 10초. 자막은 세그가 아니라 합성본에 얹음.
+  await ff(["-y", "-loop", "1", "-t", "14", "-i", img1, "-vf", `${FIT},fade=t=in:st=0:d=3`, "-r", String(FPS), ...ENC, seg1]);
   await ff(["-y", "-loop", "1", "-t", "10", "-i", img2, "-vf", FIT, "-r", String(FPS), ...ENC, seg2]);
-  // 10초 지점에서 ②로 크로스페이드(천천히 4초) → 총 ~19초. +faststart: moov를 앞으로(편집기 미리보기 즉시 재생)
-  await ff(["-y", "-i", seg1, "-i", seg2, "-filter_complex", "[0][1]xfade=transition=fade:duration=4:offset=10,format=yuv420p", "-r", String(FPS), ...ENC, "-movflags", "+faststart", out]);
+  // 10초 지점에서 ②로 크로스페이드(천천히 4초) → 총 ~20초. 자막을 최종 합성본에 얹어 20초 끝까지 유지(배경 초상만 화풍 전환, 문구는 고정). +faststart: 편집기 미리보기 즉시 재생.
+  await ff(["-y", "-i", seg1, "-i", seg2, "-filter_complex", `[0][1]xfade=transition=fade:duration=4:offset=10,format=yuv420p${cap}`, "-r", String(FPS), ...ENC, "-movflags", "+faststart", out]);
   return out;
 }
 
@@ -188,22 +189,10 @@ const XFADE_OK = new Set([
   "zoomin", "hlslice", "hrslice", "vuslice", "vdslice", "diagtl", "diagtr", "diagbl", "diagbr",
 ]);
 const XFADE_DUR = 1.0; // 전환 길이(초) — dur보다 작아야 함(슬라이드 7초 기준 여유).
-export async function makeSlideshow(items, out) {
-  if (!items?.length) throw new Error("slideshow: 사진 없음");
-  const dir = path.dirname(out);
-  // 1장 — 단일 이미지 클립(페이드인).
-  if (items.length === 1) {
-    await imageSegment(items[0].path, items[0].dur || 7, out, null, null, false, true);
-    return out;
-  }
-  // 각 장을 정규화 세그먼트로(첫 장만 가벼운 페이드인, 나머지는 xfade가 처리).
-  const segs = [];
-  for (let i = 0; i < items.length; i++) {
-    const s = path.join(dir, `_ss${i}.mp4`);
-    await imageSegment(items[i].path, items[i].dur || 7, s, null, null, false, i === 0);
-    segs.push(s);
-  }
-  // xfade 체인 — [0][1]xfade@off1[v1]; [v1][2]xfade@off2[v2]; … 마지막은 [vout].
+// 전환 「없음」 판정 — "없음"/"none"/빈값이면 xfade 안 함(장면을 뚝 끊어 이어붙임).
+const isCut = (x) => !x || x === "none" || x === "없음";
+// xfade 체인 — [0][1]xfade@off1[v1]; [v1][2]xfade@off2[v2]; … 마지막은 [vout].
+async function xfadeChain(items, segs, out) {
   const args = ["-y"]; segs.forEach((s) => args.push("-i", s));
   const fc = []; let prev = "[0:v]"; let off = (items[0].dur || 7) - XFADE_DUR;
   for (let i = 1; i < segs.length; i++) {
@@ -214,6 +203,39 @@ export async function makeSlideshow(items, out) {
   }
   args.push("-filter_complex", fc.join(";"), "-map", "[vout]", "-r", String(FPS), ...ENC, "-movflags", "+faststart", out);
   await ff(args);
+}
+// 하드컷 이어붙이기 — 균일 세그먼트를 재인코딩 없이 concat(-c copy). 전환 「없음」 기본 + xfade 실패 폴백.
+//   모든 세그가 imageSegment로 동일 규격(1920x1080·yuv420p·30fps)이라 copy concat이 안전.
+async function concatSegs(segs, out) {
+  const dir = path.dirname(out);
+  const list = path.join(dir, "_slides_list.txt");
+  await fs.writeFile(list, segs.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join("\n"));
+  await ff(["-y", "-f", "concat", "-safe", "0", "-i", list, "-c", "copy", "-movflags", "+faststart", out]);
+}
+export async function makeSlideshow(items, out) {
+  if (!items?.length) throw new Error("slideshow: 사진 없음");
+  const dir = path.dirname(out);
+  // 1장 — 단일 이미지 클립(페이드인).
+  if (items.length === 1) {
+    await imageSegment(items[0].path, items[0].dur || 7, out, null, null, false, true);
+    return out;
+  }
+  // 각 장을 정규화 세그먼트로(첫 장만 가벼운 페이드인, 나머지는 xfade/concat가 처리).
+  const segs = [];
+  for (let i = 0; i < items.length; i++) {
+    const s = path.join(dir, `_ss${i}.mp4`);
+    await imageSegment(items[i].path, items[i].dur || 7, s, null, null, false, i === 0);
+    segs.push(s);
+  }
+  // 전환효과가 하나도 없으면(전부 「없음」) xfade 없이 하드컷 concat — 보호자 선택 존중 + 취약한 xfade 체인 회피.
+  //   전환이 있으면 xfade로 겹치되, 운영 ffmpeg가 긴 체인에서 실패(auto_scale 재초기화 등)해도
+  //   하드컷 concat으로 폴백해 슬라이드 영상은 항상 만들어지게 한다(내역에 반드시 뜨도록).
+  const wantXfade = items.slice(1).some((it) => !isCut(it.xfade));
+  if (wantXfade) {
+    try { await xfadeChain(items, segs, out); return out; }
+    catch (e) { log.warn("  슬라이드 xfade 실패 — 하드컷(concat)으로 폴백: " + (e.message || e)); }
+  }
+  await concatSegs(segs, out);
   return out;
 }
 
