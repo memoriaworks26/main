@@ -1,6 +1,6 @@
 // 편집기 — 가운데 미리보기(원본 vs 작업본 2분할) + 실제 보호자 미디어 + 실시간 자막 오버레이.
 import React, { useRef, useState, useEffect } from "react";
-import { Play, SplitSquareHorizontal } from "lucide-react";
+import { Play, Pause, SplitSquareHorizontal } from "lucide-react";
 import { SERIF, NAVY, INK, MUTE, FAINT, GOLD_D, GOLD_SOFT } from "../theme.js";
 import { blockFrame, KIND_LABEL } from "./blocks.js";
 
@@ -63,20 +63,34 @@ function SubtitleLayer({ boxRef, subs, time, selSubId, onSubEdit, onSelSub }) {
 // 블록별 실제 보호자 미디어 — 사진(타이틀/AI소스)·슬라이드(자동순환)·영상(재생)·편지(텍스트).
 function MediaView({ media, onTime }) {
   const [idx, setIdx] = useState(0);
+  const [playing, setPlaying] = useState(false); // 사진 슬라이드 자동재생 X — 재생 버튼으로 순환 시작/정지
   const [err, setErr] = useState(false);
-  useEffect(() => { setErr(false); }, [media]); // 미디어 바뀌면 에러상태 초기화
+  useEffect(() => { setErr(false); setIdx(0); setPlaying(false); }, [media]); // 미디어 바뀌면 초기화(정지·첫 장)
   useEffect(() => {
-    if (media?.kind !== "images" || media.urls.length < 2) return;
+    if (media?.kind !== "images" || media.urls.length < 2 || !playing) return;
     const t = setInterval(() => setIdx((i) => (i + 1) % media.urls.length), 2200);
     return () => clearInterval(t);
-  }, [media]);
+  }, [media, playing]);
   if (!media) return null;
   // 서명URL 만료·스토리지 오류 등으로 로드 실패 시 빈 화면 대신 안내(깨진 이미지/영상 방지).
   if (err) return <div className="absolute inset-0 flex items-center justify-center" style={{ background: "#000" }}><span className="text-[12px]" style={{ color: "#aab2bf" }}>미디어를 불러올 수 없습니다 — 새로고침해 주세요</span></div>;
   if (media.kind === "image")
     return <img src={media.url} alt="" onError={() => setErr(true)} className="absolute inset-0 h-full w-full object-contain" style={{ background: "#000" }} />;
   if (media.kind === "images")
-    return <img src={media.urls[idx % media.urls.length]} alt="" onError={() => setErr(true)} className="absolute inset-0 h-full w-full object-contain" style={{ background: "#000" }} />;
+    return (
+      <>
+        <img src={media.urls[idx % media.urls.length]} alt="" onError={() => setErr(true)} className="absolute inset-0 h-full w-full object-contain" style={{ background: "#000" }} />
+        {media.urls.length > 1 && (
+          <>
+            <button onClick={() => setPlaying((p) => !p)} aria-label={playing ? "정지" : "재생"}
+              className="absolute bottom-2 left-2 z-10 flex h-7 w-7 items-center justify-center rounded-full outline-none" style={{ background: "rgba(0,0,0,.55)" }}>
+              {playing ? <Pause className="h-3.5 w-3.5 text-white" fill="#fff" /> : <Play className="h-3.5 w-3.5 text-white" fill="#fff" />}
+            </button>
+            <span className="absolute bottom-2 right-2 z-10 px-1.5 py-[1px] text-[10px] tabular-nums text-white" style={{ background: "rgba(0,0,0,.5)", borderRadius: 3 }}>{(idx % media.urls.length) + 1}/{media.urls.length}</span>
+          </>
+        )}
+      </>
+    );
   if (media.kind === "videos")
     return <video src={media.urls[0]} controls playsInline preload="metadata" onError={() => setErr(true)} className="absolute inset-0 h-full w-full" style={{ background: "#000" }} onTimeUpdate={onTime} />;
   if (media.kind === "letter") {
