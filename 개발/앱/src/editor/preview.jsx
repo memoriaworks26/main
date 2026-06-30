@@ -167,12 +167,12 @@ export function Preview({ sel, blocks, gens, name, sourceVideoUrl, blockMedia = 
         {label && <span className="text-[11.5px]" style={{ color: FAINT }}>· 지금 보는 블록: <b style={{ color: MUTE }}>{label}</b></span>}
       </div>
       <div className="grid grid-cols-2 gap-4">
-        {/* 원본 = 보호자가 올린 실제 소스. 없으면 완성영상(있으면)·목업 폴백. */}
+        {/* 원본 = 보호자가 올린 실제 소스. 없으면 완성영상(있으면)·목업 폴백. (편집값인 자막은 여기 표시 안 함 — 비교용 원본) */}
         <PreviewBox label="유저가 만든 원본" badge={srcMedia ? "보호자 원본" : sourceVideoUrl ? "완성본 · 재생" : "원본 · 수정불가"} badgeColor={{ bg: "rgba(90,100,112,.15)", c: "#5a6470" }}
-          name={name} src={origSrc} videoSrc={sourceVideoUrl} media={srcMedia}
+          name={name} src={origSrc} videoSrc={sourceVideoUrl} media={srcMedia} />
+        {/* 작업본 = AI 생성 결과(타이틀 Seedream·AI영상 Kling). 자막 미리보기·드래그는 편집 중인 이쪽에 표시. */}
+        <PreviewBox label="내가 편집 중" badge={resMedia ? "작업본 · AI 결과" : "작업본 · 생성 전"} badgeColor={{ bg: GOLD_SOFT, c: GOLD_D }} big name={name} src={editedSrc} media={resMedia}
           subs={subtitles} selSubId={selSubId} onSubEdit={onSubEdit} onSelSub={onSelSub} />
-        {/* 작업본 = AI 생성 결과(타이틀 Seedream·AI영상 Kling). 없으면 생성 전(목업). */}
-        <PreviewBox label="내가 편집 중" badge={resMedia ? "작업본 · AI 결과" : "작업본 · 생성 전"} badgeColor={{ bg: GOLD_SOFT, c: GOLD_D }} big name={name} src={editedSrc} media={resMedia} />
       </div>
       <div className="mt-1.5 text-[11.5px]" style={{ color: FAINT }}>
         {subtitles.length
