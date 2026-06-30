@@ -52,6 +52,13 @@ export function nextDay(dateStr) {
   const dt = new Date(Date.UTC(y, m - 1, d + 1));
   return dt.getUTCFullYear() + "-" + pad2(dt.getUTCMonth() + 1) + "-" + pad2(dt.getUTCDate());
 }
+// "2026-06-15" → 전날 "2026-06-14"
+export function prevDay(dateStr) {
+  const [y, m, d] = (dateStr || "").split("-").map(Number);
+  if (!y) return dateStr || "";
+  const dt = new Date(Date.UTC(y, m - 1, d - 1));
+  return dt.getUTCFullYear() + "-" + pad2(dt.getUTCMonth() + 1) + "-" + pad2(dt.getUTCDate());
+}
 // 슬롯이 자정을 넘기는가 = 종료 < 시작 (예: 22:30~01:30). 같은 값(0길이)은 자정 넘김 아님.
 export function isOvernight(slot) {
   const { start, end } = parseSlot(slot);

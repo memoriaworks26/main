@@ -371,7 +371,9 @@ export const actions = {
     const base = { status: "review", requestedAt: new Date().toISOString(), ...data, id };
     if (LIVE) {
       const partnerId = base.partnerId || state.currentPartnerId;
-      return resv.createReservation({ ...base, partnerId })
+      // 호실명 → room_id 해석(이름변경 staleness 방지). 호실명은 파트너 내 유일(DB 제약)이라 1:1.
+      const roomId = base.room ? (state.rooms.find((r) => r.partnerId === partnerId && r.name === base.room)?.id ?? null) : undefined;
+      return resv.createReservation({ ...base, partnerId, roomId })
         .then((r) => { set((s) => ({ reservations: [...s.reservations, r] })); return r; })
         .catch((e) => { toast("예약 접수 실패: " + e.message); throw e; });
     }
@@ -383,13 +385,20 @@ export const actions = {
   setReservationAssignee: (id, assignee) => actions.updateReservation(id, { assignee }),
   setReservationRoom: (id, room) => actions.updateReservation(id, { room }),
   updateReservation: (id, patch) => {
+    // 호실명 변경 시 room_id도 함께 해석(이름변경 staleness 방지). 호실 외 패치(상태·시간 등)는 그대로.
+    let p = patch;
+    if (patch.room !== undefined) {
+      const rv = state.reservations.find((r) => r.id === id);
+      const pid = patch.partnerId || rv?.partnerId;
+      p = { ...patch, roomId: state.rooms.find((r) => r.partnerId === pid && r.name === patch.room)?.id ?? null };
+    }
     if (LIVE) {
-      resv.updateReservation(id, patch)
+      resv.updateReservation(id, p)
         .then((r) => set((s) => ({ reservations: mapById(s.reservations, id, r) })))
         .catch((e) => toast("예약 저장 실패: " + e.message));
       return;
     }
-    set((s) => ({ reservations: mapById(s.reservations, id, patch) }));
+    set((s) => ({ reservations: mapById(s.reservations, id, p) }));
   },
   removeReservation: (id) => {
     if (LIVE) {

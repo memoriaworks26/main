@@ -11,7 +11,8 @@ export function TradeStatement({ partner, partnerId, items: itemsProp, period, i
   const store = useStore();  // [QA-P1] 공급자·수신처·매출 = store(DB), 목업 제거
   const items = itemsProp || store.settlementItems.filter((i) => !partnerId || i.partnerId === partnerId);
   const C = store.company;
-  const recv = store.partners.find((p) => p.id === partnerId) || store.partners.find((p) => p.name === partner);
+  // 파트너 식별은 id 기준(동명 파트너사 오매칭 방지). id가 아예 없을 때만(레거시 호출) 이름으로 폴백.
+  const recv = partnerId ? store.partners.find((p) => p.id === partnerId) : store.partners.find((p) => p.name === partner);
   const unit = recv ? recv.unitPrice : (items[0] ? items[0].amount : 0);
   const total = items.length * unit;          // 합계(VAT 포함)
   const supply = Math.round(total / 1.1);     // 공급가액

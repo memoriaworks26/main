@@ -1,7 +1,7 @@
 // [시스템·총관리자] 사이니지(Signage) + 스토리지/기간 다운로드(Storage).
 import React, { useState, useEffect } from "react";
 import {
-  AlertTriangle, CheckSquare, Clapperboard, ChevronDown, ChevronUp, ChevronsUpDown, Download, HardDrive, Plus, Printer, RefreshCw, Square, Trash2,
+  AlertTriangle, CheckSquare, Clapperboard, ChevronDown, ChevronUp, ChevronsUpDown, Download, HardDrive, Plus, RefreshCw, Square, Trash2,
 } from "lucide-react";
 import { SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, STATUS, RADIUS } from "../theme.js";
 import { Tag, Btn, Card, Table, PageHeader, DateField, CopyBtn, Modal, useTableSort } from "../ui.jsx";
@@ -19,8 +19,8 @@ export function Signage() {
   const [reg, setReg] = useState(false); // 등록 모달
   const [sel, setSel] = useState(null);  // 관리 모달 대상 디바이스
 
-  // 디바이스 → 파트너 레코드(id 우선, 목업 호환 위해 이름도) → 사업부
-  const partnerOf = (d) => partners.find((p) => p.id === d.partnerId || p.name === d.partner);
+  // 디바이스 → 파트너 레코드(id 기준 — 동명 파트너사 오매칭 방지). partnerId 없을 때만(목업/레거시) 이름 폴백.
+  const partnerOf = (d) => d.partnerId ? partners.find((p) => p.id === d.partnerId) : partners.find((p) => p.name === d.partner);
   const partnerOpts = bf === "all" ? partners : partners.filter((p) => p.bizUnit === bf);
   const filtered = devices.filter((d) => {
     const p = partnerOf(d);
@@ -86,33 +86,6 @@ function downloadProvision(dev, code) {
   const a = document.createElement("a");
   a.href = href; a.download = "provision.json"; a.click();
   setTimeout(() => window.URL.revokeObjectURL(href), 1000);
-}
-
-// 디바이스 부착용 라벨 인쇄 — 파이엔 시리얼 스티커가 없으니 출고 전 케이스에 붙인다.
-//   라벨프린터/일반 프린터/PDF 저장 모두 브라우저 인쇄 대화로 처리. 시리얼은 첫 부팅 후 채워짐.
-function printLabel(d) {
-  const w = window.open("", "_blank", "width=460,height=340");
-  if (!w) { toast("팝업이 차단되었습니다 — 허용 후 다시 시도하세요"); return; }
-  const esc = (s) => String(s ?? "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
-  const row = (k, v) => v ? `<div class="row"><span class="k">${k}</span> ${esc(v)}</div>` : "";
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(d.id)}</title>
-    <style>
-      @page { margin: 6mm; }
-      body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 14px; }
-      .id { font-size: 30px; font-weight: 800; letter-spacing: 1px; }
-      .room { font-size: 15px; margin-top: 2px; color: #444; }
-      .row { font-size: 12.5px; margin-top: 7px; font-family: ui-monospace, monospace; color: #222; }
-      .k { display: inline-block; min-width: 46px; color: #999; }
-    </style></head><body>
-    <div class="id">${esc(d.id)}</div>
-    <div class="room">${esc(d.partner || "")} · ${esc(d.room || "호실 미지정")}</div>
-    ${row("SN", d.hwSerial)}
-    ${row("MAC", d.mac)}
-    ${row("모델", d.model)}
-  </body></html>`);
-  w.document.close();
-  w.focus();
-  w.print();
 }
 
 // 세팅 가이드 — 새 파이 받고 식장 재생까지 단계(랜선/와이파이 자동). 설정파일 다운로드 포함.
@@ -284,10 +257,6 @@ function DeviceModal({ dev, onClose }) {
             {live.mac && <div className="col-span-2">MAC <span style={{ fontFamily: "ui-monospace, monospace", color: INK }}>{live.mac}</span></div>}
           </div>
         )}
-
-        <button onClick={() => printLabel(live)} className="mt-2 flex items-center gap-1.5 px-3 py-1.5 text-[12px] font-semibold" style={{ borderRadius: RADIUS, border: "1px solid " + LINE2, color: INK }}>
-          <Printer className="h-3.5 w-3.5" /> 라벨 인쇄 (케이스 부착용)
-        </button>
 
         {pending ? (
           // 미등록 — 세팅 안내 + 등록코드 + (대기 중 자동 확인)

@@ -23,7 +23,9 @@ const mapReserv = (r) => ({
   partner: r.partner?.name ?? r.partner_id,   // 화면·사업부 스코핑은 이름 사용
   deceased: r.deceased, chief: r.chief, phone: r.phone,
   breed: r.breed, age: r.age,
-  room: r.room_label,
+  // 호실은 room_id의 '현재 이름'(rooms 조인) 우선 → 호실명 변경이 즉시 반영(staleness 없음). 폴백 room_label(레거시·미해석).
+  room: r.room?.name ?? r.room_label,
+  roomId: r.room_id ?? null,
   date: r.reserve_date, endDate: r.end_date, slot: r.slot,
   requestedAt: fmtReqAt(r.requested_at),
   status: r.status,
@@ -40,6 +42,7 @@ const toRow = (p) => {
     deceased: p.deceased, chief: p.chief, phone: p.phone,
     breed: p.breed, age: p.age,
     room_label: p.room,
+    room_id: p.roomId,                  // 호실명 변경 staleness 방지(조회 시 room_id의 현재 이름으로 도출). 호실 변경 시에만 store가 채움.
     reserve_date: p.date, end_date: p.endDate, slot: p.slot,
     requested_at: p.requestedAt,
     status: p.status,
@@ -56,21 +59,21 @@ const toRow = (p) => {
 export async function fetchReservations() {
   const d = need();
   const { data, error } = await d
-    .from("reservations").select("*, partner:partners(name)").order("requested_at", { ascending: true });
+    .from("reservations").select("*, partner:partners(name), room:rooms(name)").order("requested_at", { ascending: true });
   if (error) throw new Error("예약 조회 실패: " + error.message);
   return (data || []).map(mapReserv);
 }
 
 export async function createReservation(r) {
   const d = need();
-  const { data, error } = await d.from("reservations").insert(toRow(r)).select("*, partner:partners(name)").single();
+  const { data, error } = await d.from("reservations").insert(toRow(r)).select("*, partner:partners(name), room:rooms(name)").single();
   if (error) throw new Error(error.message);
   return mapReserv(data);
 }
 
 export async function updateReservation(id, patch) {
   const d = need();
-  const { data, error } = await d.from("reservations").update(toRow(patch)).eq("id", id).select("*, partner:partners(name)").single();
+  const { data, error } = await d.from("reservations").update(toRow(patch)).eq("id", id).select("*, partner:partners(name), room:rooms(name)").single();
   if (error) throw new Error(error.message);
   return mapReserv(data);
 }

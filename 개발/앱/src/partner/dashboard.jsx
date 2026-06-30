@@ -9,7 +9,7 @@ import { RoomCard } from "../roomcard.jsx";
 import { useStore, actions } from "../store.js";
 import { confirm } from "../confirm.jsx";
 import { CUSTOMER_COLS, customerSortValue, toCustomerRow, renderCustomerCell } from "../admin/customers.jsx";
-import { usePartner, usePartnerTerm, pad2, minToStr, useCaseRooms, parseSlot, TIMELINE_START, TIMELINE_END, BLOCK_COLOR, hasRoomConflict, endDateFor, isOvernight, slotLabel, SlotText, todayKST } from "./shared.jsx";
+import { usePartner, usePartnerTerm, pad2, minToStr, useCaseRooms, parseSlot, TIMELINE_START, TIMELINE_END, BLOCK_COLOR, hasRoomConflict, endDateFor, isOvernight, slotLabel, SlotText, todayKST, prevDay } from "./shared.jsx";
 import { TimeStepper } from "./intake.jsx";
 
 function SlotEditCell({ r, rows }) {
@@ -345,7 +345,8 @@ export function PDashboard({ onNew, onDetail }) {
   const { rooms, reservations, devices } = useStore(); // 목 DB — 호실 명칭·위치 편집 + 예약 + 사이니지 전파
   // 호실 ↔ 사이니지 디바이스 매핑(자사) — 실시간 표출 상태 표시용
   const myDevices = devices.filter((d) => d.partnerId === PARTNER.id);
-  const deviceOf = (r) => myDevices.find((d) => d.room === r.name);
+  // 디바이스↔호실 매칭 — roomId(uuid) 우선, 레거시(roomId 없음)만 호실명 폴백. live.jsx와 동일 패턴.
+  const deviceOf = (r) => myDevices.find((d) => (d.roomId && d.roomId === r.id) || (!d.roomId && d.room && d.room === r.name));
 
   // 오늘 예약 — 자사 예약 중 '실제 오늘(KST)'자만. 퇴실 처리는 이 화면에서만 가능(예약 목록에서는 불가).
   const mine = reservations.filter((r) => r.partnerId === PARTNER.id);
@@ -358,8 +359,19 @@ export function PDashboard({ onNew, onDetail }) {
     const t = setInterval(() => { const d = new Date(); setNowMin(d.getHours() * 60 + d.getMinutes()); }, 30000);
     return () => clearInterval(t);
   }, []);
-  // 호실 점유 = 현재 시각이 예약 시간대[시작~종료] 안에 있는 오늘 예약(자사). 퇴실(종료=현재시각) 시 자동으로 빈 호실 처리.
-  const activeReservOf = (roomName) => todayRows.find((r) => { if (r.room !== roomName) return false; const { start, end } = parseSlot(r.slot); return end < start ? (nowMin >= start || nowMin < end) : (start <= nowMin && nowMin < end); });
+  // 호실 점유 = 현재 시각이 예약 시간대 안. 오늘 예약 + '어제 시작해 자정 넘겨 오늘 새벽까지 이어지는' 예약을 함께 본다.
+  //   · 어제 자정넘김 → 오늘 00:00~종료(end)까지 점유
+  //   · 오늘 자정넘김 → 시작~24:00 점유(00:00~end 구간은 '내일' 몫이라 제외)
+  //   · 같은날 → 시작~종료
+  // (오늘 예약 리스트/건수는 today만 보지만, 점유 표시는 새벽 시간대 이어짐을 반영해야 빈 호실로 잘못 뜨지 않음)
+  const yesterday = prevDay(today);
+  const occupants = mine.filter((r) => r.date === today || (r.date === yesterday && isOvernight(r.slot)));
+  const activeReservOf = (roomName) => occupants.find((r) => {
+    if (r.room !== roomName) return false;
+    const { start, end } = parseSlot(r.slot);
+    if (r.date === yesterday) return nowMin < end;
+    return end < start ? nowMin >= start : (start <= nowMin && nowMin < end);
+  });
   // 호실 카드 '신규 예약' → 해당 호실 + 현재 시각을 시작으로 프리필(분은 10분 스냅, 종료는 +3시간·24:00 캡).
   const newReservForRoom = (roomName) => {
     const d = new Date();
