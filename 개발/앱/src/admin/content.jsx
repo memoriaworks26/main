@@ -37,7 +37,7 @@ function ThumbCell({ c }) {
   const src = useThumbSrc(c);
   return (
     <span className="relative flex items-center justify-center overflow-hidden" style={{ width: 52, height: 32, borderRadius: 3, background: c.kind === "audio" ? "linear-gradient(135deg,#202b3a,#3f5e87)" : "#1c232c", border: "1px solid " + LINE }}>
-      {src ? <img src={src} alt="" className="h-full w-full object-cover" /> : <Music className="h-4 w-4" style={{ color: "#fff", opacity: 0.85 }} />}
+      {src ? <img src={src} alt="" className="h-full w-auto max-w-none" /> : <Music className="h-4 w-4" style={{ color: "#fff", opacity: 0.85 }} />}
       {c.kind === "clip" && <span className="absolute flex h-4 w-4 items-center justify-center rounded-full" style={{ background: "rgba(0,0,0,.45)" }}><Play className="h-2 w-2 text-white" style={{ marginLeft: 1 }} fill="#fff" /></span>}
     </span>
   );
@@ -192,10 +192,10 @@ function ContentPreview({ item, onClose }) {
             </div>
           ) : isClip && videoUrl ? (
             <video src={videoUrl} poster={src || undefined} controls playsInline preload="metadata"
-              className="absolute inset-0 h-full w-full object-contain" style={{ background: "#000" }} />
+              className="absolute inset-y-0 left-1/2 h-full w-auto max-w-none -translate-x-1/2" style={{ background: "#000" }} />
           ) : (
             <>
-              <img src={src} alt={item.name} className="absolute inset-0 h-full w-full object-cover" />
+              <img src={src} alt={item.name} className="absolute inset-y-0 left-1/2 h-full w-auto max-w-none -translate-x-1/2" />
               {isClip && (
                 <span className="relative flex h-12 w-12 items-center justify-center rounded-full" style={{ background: "rgba(0,0,0,.45)" }}>
                   <Play className="h-5 w-5 text-white" style={{ marginLeft: 2 }} fill="#fff" />
@@ -236,7 +236,7 @@ function ContentPreview({ item, onClose }) {
 export function ContentHub() {
   const tabs = ["전체", "영상", "이미지", "음악"];
   const { content, bgm, partners: allPartners } = useStore();
-  const [partner, setPartner] = useState(allPartners.find((p) => p.active)?.id || allPartners[0]?.id);
+  const [partner, setPartner] = useState("공통"); // 신규 업로드/조회 기본은 공통(공용 자산)
   const [t, setT] = useState("전체");
   const [q, setQ] = useState("");
   // 백그라운드 업로드 — 파일을 고르면 즉시 표 상단에 행으로 띄우고, 자동으로 메타추출→업로드(진행률%)를 처리.

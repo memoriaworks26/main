@@ -22,9 +22,9 @@ export async function fetchSubmissions() {
 export async function fetchReservationMedia(reservationId) {
   const d = need();
   const { data: sub, error: se } = await d.from("submissions")
-    .select("id, token, letter, met_date, part_date, status, video_url, regen_target, edit_doc").eq("reservation_id", reservationId).maybeSingle();
+    .select("id, token, letter, met_date, part_date, status, video_url, regen_target, edit_doc, bgm_id").eq("reservation_id", reservationId).maybeSingle();
   if (se) throw new Error("제출 조회 실패: " + se.message);
-  if (!sub) return { assets: [], submissionId: null, token: null, letter: null, metDate: null, partDate: null, status: null, videoUrl: null, regenTarget: null, editDoc: null };
+  if (!sub) return { assets: [], submissionId: null, token: null, letter: null, metDate: null, partDate: null, status: null, videoUrl: null, regenTarget: null, editDoc: null, bgmId: null };
   const { data: rows, error: ae } = await d.from("submission_assets")
     .select("id,kind,role,name,storage_path,sort_order,selected,created_at").eq("submission_id", sub.id).order("created_at");
   if (ae) throw new Error("자산 조회 실패: " + ae.message);
@@ -40,7 +40,14 @@ export async function fetchReservationMedia(reservationId) {
   const urls = {};
   paths.forEach((p) => { const c = _urlCache.get(p); if (c) urls[p] = c.url; });
   const assets = list.map((r) => ({ id: r.id, kind: r.kind, role: r.role, name: r.name, sortOrder: r.sort_order, selected: r.selected !== false, createdAt: r.created_at, url: urls[r.storage_path] || null }));
-  return { assets, submissionId: sub.id, token: sub.token, letter: sub.letter, metDate: sub.met_date, partDate: sub.part_date, status: sub.status, videoUrl: sub.video_url, regenTarget: sub.regen_target, editDoc: sub.edit_doc || null };
+  return { assets, submissionId: sub.id, token: sub.token, letter: sub.letter, metDate: sub.met_date, partDate: sub.part_date, status: sub.status, videoUrl: sub.video_url, regenTarget: sub.regen_target, editDoc: sub.edit_doc || null, bgmId: sub.bgm_id || null };
+}
+
+// 이 영상의 배경 음악 지정 — submissions.bgm_id(합성이 템플릿 기본보다 먼저 사용). null이면 템플릿 기본으로.
+export async function setSubmissionBgm(submissionId, bgmId) {
+  const d = need();
+  const { error } = await d.from("submissions").update({ bgm_id: bgmId }).eq("id", submissionId);
+  if (error) throw new Error(error.message);
 }
 
 // 편집기 편집본 저장 — submissions.edit_doc(jsonb). { v, doc, render }. 다음 최종 렌더부터 워커가 render 플랜으로 합성.
@@ -107,6 +114,27 @@ export async function addSlidePhoto(submissionId, token, file) {
   const so = (cur?.[0]?.sort_order ?? -1) + 1;
   const { error } = await d.from("submission_assets").insert({ submission_id: submissionId, kind: "photo", role: "slide_photo", name: file.name, storage_path: path, sort_order: so });
   if (error) throw new Error(error.message);
+}
+
+// 추억 슬라이드 사진 순서 변경 — 표시 순서에서 인접 사진과 자리 교환(sort_order 재부여). 워커는 sort_order 순으로 합성.
+export async function moveSlidePhoto(submissionId, assetId, dir) {
+  const d = need();
+  const { data: rows, error: qe } = await d.from("submission_assets")
+    .select("id, sort_order").eq("submission_id", submissionId).eq("role", "slide_photo")
+    .order("sort_order").order("created_at");
+  if (qe) throw new Error(qe.message);
+  const list = rows || [];
+  const i = list.findIndex((r) => r.id === assetId);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= list.length) return;
+  [list[i], list[j]] = [list[j], list[i]];
+  // 새 순서대로 sort_order를 0..n-1로 재부여 — 값이 바뀐 행만 갱신(삭제로 생긴 갭도 함께 정리).
+  for (let k = 0; k < list.length; k++) {
+    if (list[k].sort_order !== k) {
+      const { error } = await d.from("submission_assets").update({ sort_order: k }).eq("id", list[k].id);
+      if (error) throw new Error(error.message);
+    }
+  }
 }
 
 // 단일 블록 AI 재생성 요청 — regen_target 지정 + status=queued(워커가 해당 블록만 재생성).

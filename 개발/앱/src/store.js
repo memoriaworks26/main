@@ -225,6 +225,14 @@ export const actions = {
       .then((b) => toast(`배경 음악 적용: ${b.name} — 다음 최종 렌더부터 반영`))
       .catch((e) => toast("음악 업로드 실패: " + e.message));
   },
+  // 편집기 전용 — 새 음악 업로드 → 공용 라이브러리 추가 + 이 영상에 즉시 적용(submissions.bgm_id). partnerId 있으면 파트너 기본곡도 갱신.
+  uploadSlideBgm: (reservationId, submissionId, partnerId, file) => {
+    if (!LIVE || !submissionId) return;
+    bgmData.uploadBgm(partnerId, file)
+      .then((b) => { set((s) => ({ bgm: [b, ...s.bgm.filter((x) => x.id !== b.id)] })); return subs.setSubmissionBgm(submissionId, b.id); })
+      .then(() => { actions.loadReservationMedia(reservationId); toast("새 음악을 올려 이 영상에 적용했습니다 — 다음 최종 렌더부터 반영"); })
+      .catch((e) => toast("음악 업로드 실패: " + e.message));
+  },
   // 자산 버전 추가(덮어쓰기 X) — 같은 슬롯에 새 버전 쌓고 활성. 결과·소스 공용.
   addAsset: (reservationId, submissionId, token, file, role, sortOrder, kind) => {
     if (!LIVE) return;

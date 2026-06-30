@@ -228,11 +228,11 @@ export function useUserWizard(previewBizId, stepCtl, previewOverride) {
     setSubmitting(true);
     // 카톡 인앱 등 제약 웹뷰에서 제출 중 예외가 나도 흰화면/멈춤 없이 안내 토스트로 복구.
     try {
-      // 독사진 3장 — 타이틀(GPT i2i) 1장 + AI 영상(Kling i2v) 2장. AI 변환 안함이면 생략.
+      // 독사진 3장 — 타이틀(Seedream i2i) 1장 + AI 영상(Kling i2v) 2장. AI 변환 안함이면 생략.
       const aiAssets = skipAi ? [] : aiPhotos.map((u, i) => ({
         kind: "photo",
         role: i === titleSel ? "title" : "ai_video",
-        engine: i === titleSel ? "gpt-image" : "kling",
+        engine: i === titleSel ? "seedream" : "kling",
         name: u.name, storagePath: u.storagePath, sortOrder: i,
       }));
       // 추억 슬라이드 사진(앞) → 추억 영상(뒤) 순서. sortOrder는 사진 다음에 영상이 이어지도록 연속 부여.

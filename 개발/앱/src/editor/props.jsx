@@ -1,12 +1,13 @@
 // 편집기 — 오른쪽 속성 패널(PropPanel) + 보조(AssetCard·PromptPicker·PromptModal).
 // 선택(sel)에 따라 블록/전환/음악의 편집 컨트롤을 보여준다. 편집값은 상위(VideoEditor)의 edits로 컨트롤드.
 import React, { useState, useRef, useEffect } from "react";
-import { Image as ImageIcon, Music, Upload, Plus, RefreshCw, Trash2, ArrowRightLeft, Check, Type, SlidersHorizontal, X, Film, Download, Loader2 } from "lucide-react";
+import { Image as ImageIcon, Music, Upload, Plus, RefreshCw, Trash2, ArrowRightLeft, ArrowUp, ArrowDown, Check, Type, SlidersHorizontal, X, Film, Download, Loader2, Play } from "lucide-react";
 import { SERIF, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS } from "../theme.js";
 import { DateField, Modal } from "../ui.jsx";
 import { toast } from "../toast.jsx";
 import { confirm } from "../confirm.jsx";
 import * as D from "../data.js";
+import * as storage from "../lib/storage.js";
 import { useStore, actions } from "../store.js";
 import { BLOCK_ICON, KIND_LABEL, blockTrans, exampleLetter, SLIDE_PHOTOS, SLIDE_PER, TITLE_SYSTEM_TEXT } from "./blocks.js";
 
@@ -97,6 +98,59 @@ function AssetCard({ label, hint, asset, kind = "image", generating, onGenerate,
     </div>
   );
 }
+// 작은 아이콘 버튼 — 추억 슬라이드 사진 순서변경(↑↓)·삭제 전용.
+function IcoBtn({ icon, onClick, disabled, title, danger }) {
+  const Ico = icon;
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} title={title} aria-label={title}
+      className="flex h-6 w-6 shrink-0 items-center justify-center outline-none transition disabled:opacity-30 focus-visible:ring-1"
+      style={{ background: "#fff", border: "1px solid " + LINE2, borderRadius: 5, color: danger ? "#a23b3b" : MUTE }}>
+      <Ico className="h-3.5 w-3.5" strokeWidth={2} />
+    </button>
+  );
+}
+
+// 이 영상 배경 음악 — 공용 라이브러리에서 골라 submissions.bgm_id로 지정(합성이 템플릿보다 우선) + 미리듣기.
+//   보호자가 위저드에서 고른 곡이 기본으로 표시되고, 스태프가 이 영상만 다른 곡으로 바꿀 수 있다.
+function SlideBgmPicker({ reservation, submissionId, media, bgmLib, tplBgmId, canEdit }) {
+  const curId = media?.bgmId ?? "";                     // "" = 템플릿 기본
+  const cur = bgmLib.find((b) => b.id === curId) || null;
+  const tpl = bgmLib.find((b) => b.id === tplBgmId) || null;
+  const [url, setUrl] = useState(null);                 // 미리듣기 서명URL(선택 곡)
+  const [loading, setLoading] = useState(false);
+  const audioRef = useRef(null);
+  const pick = (id) => canEdit ? actions.setSubmissionBgm(reservation.id, submissionId, id) : toast("실제 예약에서만 변경할 수 있습니다");
+  // 선택 곡이 바뀌면 미리듣기 초기화(재생 중지 + URL 폐기)
+  useEffect(() => { setUrl(null); if (audioRef.current) audioRef.current.pause(); }, [curId]);
+  const preview = async () => {
+    const b = cur || tpl;
+    if (!b?.storagePath) { toast("미리들을 음원이 없습니다"); return; }
+    setLoading(true);
+    try {
+      const u = await storage.signedUrl(storage.BUCKETS.content, b.storagePath, 600);
+      setUrl(u);
+      setTimeout(() => audioRef.current?.play().catch(() => {}), 0); // src 반영 후 재생
+    } catch { toast("미리듣기 URL 발급에 실패했습니다"); }
+    finally { setLoading(false); }
+  };
+  return (
+    <Field label="이 영상 배경 음악">
+      <select className={inputCls} style={inputStyle} value={curId} onChange={(e) => pick(e.target.value)}>
+        <option value="">템플릿 기본{tpl ? ` · ${tpl.name}` : " · 없음"}</option>
+        {bgmLib.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+      </select>
+      <div className="mt-1.5 flex items-center gap-2">
+        <button type="button" onClick={preview} disabled={loading} className="flex items-center gap-1 px-2.5 py-1.5 text-[12px] font-semibold outline-none disabled:opacity-50" style={{ border: "1px solid " + LINE2, borderRadius: RADIUS, color: GOLD_D }}>
+          {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />} 미리듣기
+        </button>
+        <span className="min-w-0 flex-1 truncate text-[11px]" style={{ color: FAINT }}>{cur ? "이 영상 전용 · " + cur.name : (tpl ? "템플릿 기본곡 사용" : "지정된 곡 없음")}</span>
+      </div>
+      {url && <audio ref={audioRef} src={url} controls className="mt-2 w-full" style={{ height: 34 }} />}
+      {bgmLib.length === 0 && <p className="mt-1.5 text-[11px] leading-relaxed" style={{ color: FAINT }}>공용 음악 라이브러리가 비어 있습니다 — 콘텐츠 허브 「음악」이나 아래 업로드로 추가하세요.</p>}
+    </Field>
+  );
+}
+
 // 소리 크기 슬라이더(0~100%) — 클립·추억영상 공용
 function SoundField({ label, value, onChange }) {
   const v = value != null ? value : 100;
@@ -195,7 +249,7 @@ function PromptPicker({ target, onManage }) {
   );
 }
 
-export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, reservation, partnerId, bgmName, media, onGenerate, sel }) {
+export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, reservation, partnerId, media, onGenerate, sel }) {
   const [promptModal, setPromptModal] = useState(false); // AI 문구 관리 모달
   const _store = useStore();                    // BGM 설정(파트너 템플릿) — 훅은 early-return 위에서 무조건 호출(hooks 규칙)
   let item;
@@ -241,9 +295,18 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
   // 추억 슬라이드 — 실제 보호자 사진(없으면 목업 폴백) + 사진 사이 전환(기본 페이드).
   const _slideMock = !_slidePhotos.length;  // 실제 업로드 사진 없음/로딩 전 → 샘플(렌더엔 안 들어감)
   const _vidMock = !_memoryVideos.length;   // 실제 보호자 영상 없음/로딩 전 → 샘플
-  const slideSrcs = _slidePhotos.length ? _slidePhotos.map((a) => a.url) : SLIDE_PHOTOS;
+  // 실제 사진이면 자산객체(id 보유·순서변경·삭제 가능), 없으면 샘플 URL만.
+  const slideItems = _slidePhotos.length ? _slidePhotos : SLIDE_PHOTOS.map((url) => ({ url }));
+  const slideSrcs = slideItems.map((it) => it.url);
   const slideTrans = item.slideTrans || slideSrcs.slice(1).map(() => "페이드");
   const setSlideTrans = (i, v) => { const n = slideTrans.slice(); n[i] = v; onEdit(item.id, { slideTrans: n }); };
+  // 사진 순서변경·삭제 — 실제 예약(제출물+토큰)에서만. sort_order를 즉시 DB에 반영(내역/버전과 무관한 단일 슬롯).
+  const canEditSlide = !!(reservation?.id && media?.submissionId && media?.token);
+  const moveSlide = (assetId, dir) => actions.moveSlidePhoto(reservation.id, media.submissionId, assetId, dir);
+  const removeSlide = async (assetId) => {
+    if (_slidePhotos.length <= 1) { toast("최소 한 장은 남겨 주세요"); return; }
+    if (await confirm({ title: "사진 삭제", message: "이 사진을 추억 슬라이드에서 삭제합니다.", danger: true })) actions.deleteAsset(reservation.id, assetId);
+  };
   const Icon = BLOCK_ICON[k] || (k === "transition" ? ArrowRightLeft : k === "subtitle" ? Type : ImageIcon);
 
   return (
@@ -304,16 +367,25 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
             {_slideMock && <div className="mb-2 px-3 py-2 text-[11px] leading-relaxed" style={{ background: "#fbf3e6", border: "1px solid #ecd9b0", borderRadius: RADIUS, color: "#8a6d3b" }}>샘플 미리보기입니다 — 실제 업로드 사진이 아직 없거나 불러오는 중이라, 아래 사진은 최종 렌더에 들어가지 않습니다.</div>}
             <Field label={`사진 조합 · 사이 전환 (${slideSrcs.length}장 · 장당 7~10초 · 총 2분30초 이내)`}>
               <div className="max-h-[260px] overflow-y-auto px-2.5 py-2.5" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS }}>
-                {slideSrcs.map((src, i) => (
-                  <React.Fragment key={i}>
-                    {/* 사진 */}
+                {slideItems.map((it, i) => (
+                  <React.Fragment key={it.id || i}>
+                    {/* 사진 — 실제 사진이면 ↑↓로 순서변경·휴지통으로 삭제 */}
                     <div className="flex items-center gap-2.5">
-                      <img src={src} alt="" className="shrink-0" style={{ width: 64, aspectRatio: "16/9", objectFit: "cover", borderRadius: 4, border: "1px solid " + LINE2 }} />
+                      <img src={it.url} alt="" className="shrink-0" style={{ width: 64, aspectRatio: "16/9", objectFit: "cover", borderRadius: 4, border: "1px solid " + LINE2 }} />
                       <span className="text-[12px] font-semibold" style={{ color: INK }}>사진 {i + 1}</span>
-                      <span className="ml-auto text-[10.5px]" style={{ color: FAINT }}>{SLIDE_PER}초</span>
+                      {canEditSlide && !_slideMock ? (
+                        <div className="ml-auto flex items-center gap-1">
+                          <span className="mr-0.5 text-[10.5px]" style={{ color: FAINT }}>{SLIDE_PER}초</span>
+                          <IcoBtn icon={ArrowUp} title="위로" disabled={i === 0} onClick={() => moveSlide(it.id, -1)} />
+                          <IcoBtn icon={ArrowDown} title="아래로" disabled={i === slideItems.length - 1} onClick={() => moveSlide(it.id, 1)} />
+                          <IcoBtn icon={Trash2} title="사진 삭제" danger onClick={() => removeSlide(it.id)} />
+                        </div>
+                      ) : (
+                        <span className="ml-auto text-[10.5px]" style={{ color: FAINT }}>{SLIDE_PER}초</span>
+                      )}
                     </div>
                     {/* 사진 사이 전환 */}
-                    {i < slideSrcs.length - 1 && (
+                    {i < slideItems.length - 1 && (
                       <div className="flex items-center gap-1.5 py-1" style={{ paddingLeft: 26 }}>
                         <span className="h-3.5 w-px" style={{ background: LINE2 }} />
                         <ArrowRightLeft className="h-3 w-3 shrink-0" style={{ color: GOLD_D }} />
@@ -356,18 +428,17 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
             <div className="mt-5 border-t pt-4" style={{ borderColor: LINE }}>
               <div className="mb-2 flex items-center gap-1.5 text-[12.5px] font-bold" style={{ color: INK }}><Music className="h-4 w-4" style={{ color: GOLD_D }} /> 배경 음악 <span className="font-normal" style={{ color: FAINT }}>· 추억 슬라이드(사진)에만</span></div>
               <p className="mb-2 text-[11px] leading-relaxed" style={{ color: FAINT }}>※ 추억 영상(보호자 영상)에는 BGM이 들어가지 않고 원본 사운드가 유지됩니다.</p>
-              {!_pid && <div className="mb-2 px-3 py-2 text-[11px] leading-relaxed" style={{ background: "#fbeaea", border: "1px solid #e6c6c6", borderRadius: RADIUS, color: "#9a3b3b" }}>이 예약에 파트너가 연결되지 않아 배경 음악 설정이 저장되지 않습니다.</div>}
-              <Field label="지금 음악">
-                <div className="px-3 py-2.5 text-[12.5px]" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: INK }}>{bgmName}</div>
-                {_pid ? (
-                  <FileButton accept="audio/*" onFile={(f) => actions.uploadBgm(_pid, f)}
-                    className="mt-2 flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}>
-                    <Upload className="h-4 w-4" /> 음악 파일 업로드
-                  </FileButton>
-                ) : (
-                  <button onClick={() => toast("실제 예약에서만 업로드할 수 있습니다")} className="mt-2 flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><Upload className="h-4 w-4" /> 음악 파일 업로드</button>
-                )}
-              </Field>
+              {!_pid && <div className="mb-2 px-3 py-2 text-[11px] leading-relaxed" style={{ background: "#fbeaea", border: "1px solid #e6c6c6", borderRadius: RADIUS, color: "#9a3b3b" }}>이 예약에 파트너가 연결되지 않아 소리 크기·페이드 설정은 저장되지 않습니다(곡 선택은 이 영상에 적용됩니다).</div>}
+              {/* 이 영상 배경 음악 — 공용 라이브러리에서 골라 이 영상에만 적용(submissions.bgm_id · 합성이 템플릿보다 우선) */}
+              <SlideBgmPicker reservation={reservation} submissionId={media?.submissionId} media={media} bgmLib={_store.bgm || []} tplBgmId={_tb.bgm} canEdit={!!(reservation?.id && media?.submissionId)} />
+              {reservation?.id && media?.submissionId ? (
+                <FileButton accept="audio/*" onFile={(f) => actions.uploadSlideBgm(reservation.id, media.submissionId, _pid, f)}
+                  className="mt-1 flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}>
+                  <Upload className="h-4 w-4" /> 새 음악 올려서 적용
+                </FileButton>
+              ) : (
+                <button onClick={() => toast("실제 예약에서만 업로드할 수 있습니다")} className="mt-1 flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}><Upload className="h-4 w-4" /> 새 음악 올려서 적용</button>
+              )}
               <SoundField label="소리 크기" value={bgmVol} onChange={(val) => actions.setTemplateBgm(_pid, { volume: val })} />
               <div className="grid grid-cols-2 gap-2">
                 <Field label="서서히 커지기 (초)"><input type="number" min="0" step="0.5" className={inputCls} style={inputStyle} value={bgmFadeIn} onChange={(e) => actions.setTemplateBgm(_pid, { fadeIn: +e.target.value })} /></Field>
