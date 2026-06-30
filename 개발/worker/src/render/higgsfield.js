@@ -15,12 +15,12 @@ const cfg = loadConfig();
 const BASE = "https://platform.higgsfield.ai";
 // 인증키 우선순위: main(오늘 추가) … → sub(기존). 앞 키가 크레딧소진/인증오류면 다음 키로 폴백.
 const CREDS = cfg.higgsfield.keys;
-// 모든 결과물 16:9 고정 — 이미지(seedream)·영상(kling) 출력 비율을 가로 16:9로 강제(편집기·최종 렌더가 1920×1080).
+// 타이틀 이미지 16:9 고정 — Seedream 출력 비율을 가로 16:9로 강제(편집기·최종 렌더가 1920×1080).
 //   env로 조정. 모델이 해당 옵션 키를 거부(400/422)하면 옵션을 빼고 1회 폴백 → 비율 강제는 best-effort, 생성 자체는 막지 않음.
 //   ※ Seedream은 aspect_ratio+resolution(width_and_height는 Soul 전용 — 실측: width_and_height는 무시돼 4:3로 나옴).
+//   ※ DoP 영상은 aspect_ratio 옵션 없음(입력사진 비율 기반) — 비율 정규화는 최종 compose(1920×1080)에서 처리.
 const IMG_ASPECT = process.env.HIGGSFIELD_IMG_ASPECT || "16:9"; // seedream aspect_ratio
 const IMG_RES = process.env.HIGGSFIELD_IMG_RES || "2K";         // seedream resolution
-const VID_ASPECT = process.env.HIGGSFIELD_VID_ASPECT || "16:9"; // kling aspect_ratio
 const authHeader = (c) => ({
   Authorization: `Key ${c.key}:${c.secret}`,
   "Content-Type": "application/json",
@@ -120,14 +120,17 @@ export async function generateTitleImage({ prompt, imageRefUrl, imageRefUrls }) 
   return poll(id, cred);
 }
 
-// AI영상(Kling i2v). imageUrl: 독사진 1장 서명URL → 영상. 반환: 영상 URL.
-//   /v1/image2video/kling { params:{ prompt, input_image:{type:"image_url",image_url} } } (실측 검증, input_image 단수).
-export async function generateMemoryVideo({ prompt, imageUrl, imageUrls }) {
+// AI영상(DoP i2v). imageUrl: 독사진 1장 서명URL → 영상. 반환: 영상 URL.
+//   /v1/image2video/dop { params:{ model:"dop-turbo", prompt, input_images:[{type:"image_url",image_url}] } } (실측 검증·운영 사용).
+//   ※ Kling(/v1/image2video/kling, model kling-v2-1)은 이 계정들에서 잡이 즉시 'failed'로 떨어져 사용 불가(계정 모델접근/플랜 이슈,
+//     API 스키마는 허용하나 실생성 거부). 영상은 정상 작동하는 DoP로 생성. (Kling 복귀하려면 Higgsfield 계정에 Kling 권한 필요)
+export async function generateMemoryVideo({ prompt, imageUrl, imageUrls, model = "dop-turbo" }) {
   const url = imageUrl || (imageUrls && imageUrls[0]);
-  if (!url) throw new Error("Kling: 입력 사진(독사진) 필요");
-  const params = { prompt, input_image: { type: "image_url", image_url: url } };
-  // Kling 영상생성은 수 분 소요 — 폴링 타임아웃 길게(기본 12분, 리퍼 15분보다 짧게). env로 조정.
+  if (!url) throw new Error("DoP: 입력 사진(독사진) 필요");
+  // DoP는 input_images 최대 1장(2장 보내면 422) — 첫 독사진으로 생성. 서버가 motions·seed 자동 부여.
+  const params = { model, prompt, input_images: [{ type: "image_url", image_url: url }] };
+  // DoP 영상생성은 수 분 소요 — 폴링 타임아웃 길게(기본 12분, 리퍼 15분보다 짧게). env로 조정.
   const timeoutMs = Number(process.env.HIGGSFIELD_POLL_MS) || 720000;
-  const { id, cred } = await submitWithOpts("/v1/image2video/kling", params, { aspect_ratio: VID_ASPECT }); // 16:9 강제
+  const { id, cred } = await submit("/v1/image2video/dop", params);
   return poll(id, cred, { timeoutMs });
 }

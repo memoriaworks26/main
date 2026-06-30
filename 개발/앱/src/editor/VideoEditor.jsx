@@ -127,7 +127,7 @@ export default function VideoEditor({ reservation, onClose }) {
       };
       else if (b.type === "ai") { const i = (b.aiIndex || 1) - 1; const r = aiRes.find((x) => (x.sortOrder ?? 0) === i); m[b.id] = {
         source: aiSrc[i] && { kind: "image", url: aiSrc[i].url, label: "AI영상 소스 사진" },
-        result: r && { kind: "videos", urls: [r.url], label: "Kling AI영상" },
+        result: r && { kind: "videos", urls: [r.url], label: "AI 영상" },
       }; }
       else if (b.type === "slide") m[b.id] = {
         source: slideSrc.length && { kind: "images", urls: slideSrc, label: `보호자 사진 ${slideSrc.length}장` },

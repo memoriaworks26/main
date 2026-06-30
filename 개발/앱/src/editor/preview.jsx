@@ -203,9 +203,9 @@ export function Preview({ sel, blocks, gens, name, sourceVideoUrl, blockMedia = 
           : isClip
           ? (resMedia ? "콘텐츠 허브에 연결된 클립입니다 — 최종본에 그대로 들어갈 실제 클립입니다(편집 없음)." : "이 클립에 콘텐츠 허브 자산이 연결되지 않았습니다 — 템플릿에서 클립 자산을 지정하세요.")
           : resMedia
-          ? "왼쪽 보호자 원본 → 오른쪽 AI 변환 결과(타이틀 Seedream·AI영상 Kling). 「AI로 만들기」로 재생성합니다."
+          ? "왼쪽 보호자 원본 → 오른쪽 AI 변환 결과. 「AI로 만들기」로 재생성합니다."
           : srcMedia
-          ? "왼쪽은 보호자 원본. 오른쪽 작업본은 AI 생성 후 결과물로 바뀝니다(타이틀 Seedream·AI영상 Kling)."
+          ? "왼쪽은 보호자 원본. 오른쪽 작업본은 AI 생성 후 결과물로 바뀝니다."
           : "왼쪽에서 블록을 고르면 보호자 원본이 표시됩니다."}
       </div>
     </div>
