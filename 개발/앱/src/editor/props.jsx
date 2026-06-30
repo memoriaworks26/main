@@ -427,7 +427,7 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
           <>
             <AssetCard label="보호자 독사진" hint="원본 소스 · 추가/선택" asset={srcAsset} kind="image" onAdd={addV("ai_video", srcSlot, "image")}
               history={hist(aiSrcVers)} onSelect={selV("ai_video", srcSlot)} onDeleteVersion={delV} />
-            <AssetCard label="AI 영상 (Kling)" hint="독사진 → 영상(약 5초)" asset={resA} kind="video" generating={isGen("ai:" + i)} onGenerate={gen} genLabel={resA ? "재생성" : "AI 생성"} onAdd={addV("ai_video_result", i, "video")} addAccept="video/*"
+            <AssetCard label={"AI 영상 " + String.fromCharCode(65 + i) + " (Kling)"} hint="독사진 → 영상(약 5초)" asset={resA} kind="video" generating={isGen("ai:" + i)} onGenerate={gen} genLabel={resA ? "재생성" : "AI 생성"} onAdd={addV("ai_video_result", i, "video")} addAccept="video/*"
               promptSlot={<PromptPicker target="AI영상" onManage={() => setPromptModal(true)} />}
               history={hist(aiResVers)} onSelect={selV("ai_video_result", i)} onDeleteVersion={delV} />
             <div className="mt-1 px-3 py-2.5 text-[11.5px] leading-relaxed" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>

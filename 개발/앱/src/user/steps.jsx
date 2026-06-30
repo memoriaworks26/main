@@ -415,6 +415,8 @@ export function StepBody({ step, st }) {
                 </button>
               );
             const on = st.titleSel === i;
+            // 비타이틀(=AI영상) 순번: 앞 사진 = A, 뒤 사진 = B. (타이틀 제외하고 앞에서부터 0=A,1=B)
+            const aiRank = [0, 1, 2].filter((j) => j !== st.titleSel && j < i).length;
             return (
               <div key={photo.id} className="relative overflow-hidden" style={{ background: SURFACE, border: "1.5px solid " + (on ? GOLD : LINE), borderRadius: RADIUS }}>
                 <button onClick={() => st.setTitleSel(i)} className="relative block w-full outline-none" style={{ aspectRatio: "1" }} aria-label={"사진 " + (i + 1) + " 타이틀로 선택"}>
@@ -431,7 +433,7 @@ export function StepBody({ step, st }) {
                 </button>
                 <button onClick={() => st.removeAiPhoto(photo.id)} className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full outline-none transition hover:opacity-80" style={{ background: "rgba(0,0,0,.5)", color: "#fff" }} aria-label="삭제"><X className="h-3 w-3" /></button>
                 <div className="px-1 py-1.5 text-center">
-                  <div className="text-[10px] font-bold" style={{ color: on ? GOLD_D : MUTE }}>{on ? "이미지" : "영상"}</div>
+                  <div className="text-[10px] font-bold" style={{ color: on ? GOLD_D : MUTE }}>{on ? "타이틀" : "영상 " + String.fromCharCode(65 + aiRank)}</div>
                 </div>
               </div>
             );
@@ -443,7 +445,7 @@ export function StepBody({ step, st }) {
           </p>
         )}
         <p className="mt-2 text-[10.5px] leading-relaxed" style={{ color: FAINT }}>
-          타이틀 1장 → AI 초상화 + 톤 변경(영정 타이틀) · 나머지 2장 → AI 영상(추억 슬라이드 앞·추억 영상 뒤).
+          타이틀 1장 → AI 초상화(영정 타이틀) · 나머지 2장 → AI 영상: <b style={{ color: MUTE }}>앞 사진 = A</b>(추억 슬라이드 앞) · <b style={{ color: MUTE }}>뒤 사진 = B</b>(추억 영상 뒤).
         </p>
         <p className="mt-1.5 text-[10.5px] leading-relaxed" style={{ color: FAINT }}>
           ※ 사진만 올릴 수 있어요 (영상은 업로드 불가).
@@ -545,7 +547,7 @@ export function StepBody({ step, st }) {
           <div className="flex justify-between"><span>추억 슬라이드 사진</span><span style={{ color: INK }}>{st.slidePhotos.length}장</span></div>
           <div className="flex justify-between"><span>추억 영상</span><span style={{ color: INK }}>{st.videos.length}개</span></div>
           {!st.skipAi && <div className="flex justify-between"><span>타이틀 사진</span><span style={{ color: INK }}>{st.titleSel + 1}번 선택</span></div>}
-          {!st.skipAi && <div className="flex justify-between"><span>AI 영상 변환</span><span style={{ color: INK }}>나머지 2장 (앞·뒤)</span></div>}
+          {!st.skipAi && <div className="flex justify-between"><span>AI 영상 변환</span><span style={{ color: INK }}>나머지 2장 (앞=A · 뒤=B)</span></div>}
           {st.skipAi && <div className="flex justify-between"><span>AI 변환</span><span style={{ color: INK }}>사용 안 함</span></div>}
           <div className="flex justify-between"><span>장면 전환</span><span style={{ color: INK }}>{Object.keys(st.transMap).length > 0 ? "개별 설정" : TRANSITIONS[st.trans]?.ko}</span></div>
           <div className="flex justify-between"><span>배경 음악</span><span style={{ color: INK }}>{st.bgmList[st.bgm]?.name || "선택 안 함"}</span></div>
