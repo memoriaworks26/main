@@ -19,9 +19,10 @@ const CONFIRM_C = "#6d5aa6"; // 컨펌 대기(렌더·검수) 강조색 — them
 function renderInfo(item) {
   if (!item || !item.renderAt) return { pct: 100, remain: 0, done: true };
   const dur = item.renderDur || 150;
-  const elapsed = (Date.now() - item.renderAt) / 1000;
-  const pct = Math.min(100, (elapsed / dur) * 100);
-  return { pct, remain: Math.max(0, Math.ceil(dur - elapsed)), done: pct >= 100 };
+  // renderAt이 미래(워커·브라우저 시각차)거나 지나치게 오래돼도 진행률·남은시간이 튀지 않게 elapsed를 [0,dur]로 클램프.
+  const elapsed = Math.min(dur, Math.max(0, (Date.now() - item.renderAt) / 1000));
+  const pct = (elapsed / dur) * 100;
+  return { pct, remain: Math.ceil(dur - elapsed), done: pct >= 100 };
 }
 const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 
@@ -217,6 +218,8 @@ export function Production({ onOpenEditor, account }) {
           const cur = st(r);
           const who = r.assignee;
           const mine = who && who === me; // 담당자 표시용(작업자 칩). 편집기 진입은 누구나 가능
+          const sub = submissionFor(s, r.id);
+          const subFailed = sub?.status === "failed"; // 보호자 제출/렌더가 실패한 건 — 컨펌 대기여도 렌더바 대신 재제작 노출
           return (
             <div key={r.id} className="flex items-center gap-3 px-3 py-2.5"
               style={{ borderTop: i ? "1px solid " + LINE : "none" }}>
@@ -230,7 +233,6 @@ export function Production({ onOpenEditor, account }) {
                 <div className="flex items-center gap-2">
                   <span style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 700, color: INK }}>{r.deceased}</span>
                   {(() => {
-                    const sub = submissionFor(s, r.id);
                     const done = sub?.status === "done";
                     const submitted = sub && sub.status !== "draft";
                     const loading = sub && SUB_LOADING.includes(sub.status);
@@ -255,7 +257,11 @@ export function Production({ onOpenEditor, account }) {
               <div className="ml-auto flex shrink-0 items-center gap-2">
                 <Tag s={cur} />
                 {cur === "confirm" ? (
-                  <ConfirmCell item={r} onReview={() => setReview(r)} />
+                  subFailed ? (
+                    <Btn size="sm" variant="ghost" onClick={() => doRemake(r)}><RefreshCw className="h-3.5 w-3.5" /> 재제작</Btn>
+                  ) : (
+                    <ConfirmCell item={r} onReview={() => setReview(r)} />
+                  )
                 ) : (
                   <>
                     {cur === "published" && submissionFor(s, r.id)?.videoUrl && (
