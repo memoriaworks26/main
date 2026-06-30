@@ -85,8 +85,11 @@ async function buildCtx(job, assets) {
   // 타깃별 활성(기본) 프롬프트 — 생성에 사용.
   const titleStyle1 = await activePrompt("이미지1");
   const titleStyle2 = await activePrompt("이미지2");
-  const aiStyle = await activePrompt("AI영상");
-  return { job, token, name, titleA, aiPhotos, slidePhotos, slideXfades, sign, ins, deselect, uniq, curTitleImg, pRef, titleStyle1, titleStyle2, aiStyle };
+  // AI영상은 A(앞)·B(뒤) 각각 별도 프롬프트. 구버전 단일 'AI영상'은 폴백으로 둘 다에 적용.
+  const aiStyleA = await activePrompt("AI영상 A");
+  const aiStyleB = await activePrompt("AI영상 B");
+  const aiStyleLegacy = await activePrompt("AI영상");
+  return { job, token, name, titleA, aiPhotos, slidePhotos, slideXfades, sign, ins, deselect, uniq, curTitleImg, pRef, titleStyle1, titleStyle2, aiStyleA, aiStyleB, aiStyleLegacy };
 }
 
 // 타이틀 이미지1(Seedream): 독사진 + 영정배경 + (선택)프롬프트 참고이미지 + 텍스트. 새 버전 활성.
@@ -116,26 +119,34 @@ async function genTitleImg1(ctx) {
   await ins({ submission_id: job.id, kind: "photo", role: "title_result", name: "이미지2", storage_path: p, sort_order: 1, selected: true });
   log.info("  타이틀 이미지2 생성(Seedream, 화풍변경) +버전"); return 1;
 }
-// 타이틀 영상화(ffmpeg): 영정 이미지 1장 → 완성 클립(18초, 자막 페이드인, 크레딧 없음).
-//   ※ 타이틀 단순화(2026-06-30): 영정 1장만 사용. (이미지2 화풍변경 단계 폐지)
+// 타이틀 영상화(ffmpeg): 영정(이미지1) → 화풍변경(이미지2) 크로스페이드 완성 클립(20초, 크레딧 없음).
+//   화풍변경(이미지2)이 없으면 영정 1장(18초)으로 폴백 — 화풍변경 생성 실패에도 타이틀은 나옴.
 async function genTitleVideo(ctx) {
   const { job, token, name, ins, deselect, uniq, curTitleImg } = ctx;
   const a0 = await curTitleImg(0);
   if (!a0) throw new Error("이미지1(영정)을 먼저 생성하세요");
+  const a1 = await curTitleImg(1); // 화풍변경(있으면 영정→화풍 오버랩, 없으면 영정 1장)
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "mw-title-"));
   try {
     await st.downloadTo(await st.signedUrl(cfg.uploadBucket, a0, 3600), path.join(dir, "t0.png"));
+    let t1 = null;
+    if (a1) { await st.downloadTo(await st.signedUrl(cfg.uploadBucket, a1, 3600), path.join(dir, "t1.png")); t1 = path.join(dir, "t1.png"); }
     const tv = path.join(dir, "title.mp4");
-    await makeTitleVideo(path.join(dir, "t0.png"), null, `사랑하는 ${name}`, FONT, tv);
+    await makeTitleVideo(path.join(dir, "t0.png"), t1, `사랑하는 ${name}`, FONT, tv);
     const vp = `${token}/results/title_${uniq()}.mp4`;                    // 버전 누적(고유 경로)
     await deselect("title_video"); await st.uploadTo(cfg.uploadBucket, vp, await fs.readFile(tv), "video/mp4");
     await ins({ submission_id: job.id, kind: "video", role: "title_video", name: "타이틀 영상", storage_path: vp, sort_order: 0, selected: true });
-    log.info("  타이틀 영상화(ffmpeg, 영정 1장) +버전");
+    log.info(`  타이틀 영상화(ffmpeg, ${t1 ? "영정→화풍변경 2장" : "영정 1장"}) +버전`);
   } finally { await fs.rm(dir, { recursive: true, force: true }); }
   return 0;
 }
-// 타이틀 일괄 — 영정 이미지1 → 영상화. (이미지2 화풍변경은 폐지, 필요 시 편집기에서 title:1로 수동 생성 가능)
-async function genTitleAll(ctx) { const c = await genTitleImg0(ctx); await genTitleVideo(ctx); return c; }
+// 타이틀 일괄 — 영정(이미지1) → 화풍변경(이미지2) → 영상화. 화풍변경 실패해도 영정만으로 영상화 진행.
+async function genTitleAll(ctx) {
+  let c = await genTitleImg0(ctx);
+  try { c += await genTitleImg1(ctx); } catch (e) { log.warn("  화풍변경(이미지2) 생성 실패 — 영정 1장으로 타이틀 진행: " + (e.message || e)); }
+  await genTitleVideo(ctx);
+  return c;
+}
 
 // 추억 슬라이드 영상(ffmpeg, 크레딧 없음) — 보호자 사진 N장 + 사이 전환을 한 클립으로. 「사진으로 만들기」/최종합성 공용.
 async function genSlides(ctx) {
@@ -160,10 +171,12 @@ async function genSlides(ctx) {
 }
 // AI영상 i번(Kling) — 해당 독사진 1장 → 영상. 새 버전 활성, 기존본은 히스토리로 보관.
 async function genAi(ctx, i) {
-  const { job, token, aiPhotos, sign, ins, deselect, uniq, aiStyle } = ctx;
+  const { job, token, aiPhotos, sign, ins, deselect, uniq, aiStyleA, aiStyleB, aiStyleLegacy } = ctx;
   if (!aiPhotos[i]) return 0;
   const ref = await sign(aiPhotos[i]);
-  const vurl = await generateMemoryVideo({ prompt: aiStyle?.body || aiPromptDefault, imageUrl: ref });
+  // i=0 → 영상 A(앞), i=1 → 영상 B(뒤). 각 전용 프롬프트(없으면 구버전 단일→기본값 폴백).
+  const style = (i === 0 ? aiStyleA : aiStyleB) || aiStyleLegacy;
+  const vurl = await generateMemoryVideo({ prompt: style?.body || aiPromptDefault, imageUrl: ref });
   const vp = `${token}/results/ai_${i}_${uniq()}.mp4`;
   await deselect("ai_video_result", i);
   await st.uploadFromUrl(cfg.uploadBucket, vp, vurl, "video/mp4");

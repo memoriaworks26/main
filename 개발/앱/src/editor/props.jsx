@@ -10,7 +10,7 @@ import * as D from "../data.js";
 import { useStore, actions } from "../store.js";
 import { BLOCK_ICON, KIND_LABEL, blockTrans, exampleLetter, SLIDE_PHOTOS, SLIDE_PER, TITLE_SYSTEM_TEXT } from "./blocks.js";
 
-const PROMPT_TARGETS = ["이미지1", "이미지2", "AI영상"]; // API 호출별 프롬프트(타이틀 통합 X)
+const PROMPT_TARGETS = ["이미지1", "이미지2", "AI영상 A", "AI영상 B"]; // API 호출별 프롬프트. AI영상은 A(앞)·B(뒤) 분리
 
 // ── 오른쪽: 편집 패널 ──────────────────────────────────────────
 function L({ children }) { return <div className="mb-1.5 text-[12.5px] font-semibold" style={{ color: INK }}>{children}</div>; }
@@ -251,6 +251,7 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
   const srcAsset = k === "title" ? _titlePhoto : k === "ai" ? _aiSrcSel[(item.aiIndex || 1) - 1] : null; // 블록 소스 사진(활성)
   const _titleVidVers = slotVers("title_video", 0), _titleVideo = selOf(_titleVidVers);
   const _img1Vers = slotVers("title_result", 0), _img1 = selOf(_img1Vers);
+  const _img2Vers = slotVers("title_result", 1), _img2 = selOf(_img2Vers);
   const _slideResult = _assets.find((a) => a.role === "slide_video" && a.url);
   const genResults = (k === "slide" && _slideResult) ? [{ kind: "video", url: _slideResult.url, label: "슬라이드 영상" }] : [];
   const name = reservation?.deceased || D.EDITOR_RESERVATION.deceased;
@@ -307,10 +308,13 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
             <AssetCard label="① 영정 이미지" hint="독사진 → 영정·배경" asset={_img1} kind="image" generating={isGen("title:0")} onGenerate={() => gen("title:0")} genLabel={_img1 ? "재생성" : "AI 생성"} onAdd={addV("title_result", 0, "image")}
               promptSlot={<PromptPicker target="이미지1" onManage={() => setPromptModal(true)} />}
               history={hist(_img1Vers)} onSelect={selV("title_result", 0)} onDeleteVersion={delV} />
-            <AssetCard label="② 영상화" hint="영정 이미지 → 완성 클립 18초" asset={_titleVideo} kind="video" generating={isGen("title:video")} onGenerate={() => gen("title:video")} genLabel={_titleVideo ? "다시 만들기" : "영상 만들기"} onAdd={addV("title_video", 0, "video")} addAccept="video/*"
+            <AssetCard label="② 화풍변경" hint="영정 → 화풍·배경 변경(오버랩용)" asset={_img2} kind="image" generating={isGen("title:1")} onGenerate={() => gen("title:1")} genLabel={_img2 ? "재생성" : "AI 생성"} onAdd={addV("title_result", 1, "image")}
+              promptSlot={<PromptPicker target="이미지2" onManage={() => setPromptModal(true)} />}
+              history={hist(_img2Vers)} onSelect={selV("title_result", 1)} onDeleteVersion={delV} />
+            <AssetCard label="③ 영상화" hint="영정+화풍변경 → 완성 클립 20초" asset={_titleVideo} kind="video" generating={isGen("title:video")} onGenerate={() => gen("title:video")} genLabel={_titleVideo ? "다시 만들기" : "영상 만들기"} onAdd={addV("title_video", 0, "video")} addAccept="video/*"
               history={hist(_titleVidVers)} onSelect={selV("title_video", 0)} onDeleteVersion={delV} />
             <div className="mb-2 px-3 py-2.5 text-[11px] leading-relaxed" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
-              ① 영정 이미지+자막이 서서히 나타나며 약 <b style={{ color: INK }}>18초</b> 유지(페이드인). 이미지를 바꾸면 <b style={{ color: INK }}>② 영상화</b>를 다시 눌러 반영하세요.
+              ① 영정+자막이 서서히 나타나고 <b style={{ color: INK }}>10초</b>에 ② 화풍변경이 오버랩 → 페이드아웃(총 20초). 이미지를 바꾸면 <b style={{ color: INK }}>③ 영상화</b>를 다시 눌러 반영하세요.
             </div>
           </>
           );
@@ -428,7 +432,7 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
             <AssetCard label="보호자 독사진" hint="원본 소스 · 추가/선택" asset={srcAsset} kind="image" onAdd={addV("ai_video", srcSlot, "image")}
               history={hist(aiSrcVers)} onSelect={selV("ai_video", srcSlot)} onDeleteVersion={delV} />
             <AssetCard label={"AI 영상 " + String.fromCharCode(65 + i) + " (Kling)"} hint="독사진 → 영상(약 5초)" asset={resA} kind="video" generating={isGen("ai:" + i)} onGenerate={gen} genLabel={resA ? "재생성" : "AI 생성"} onAdd={addV("ai_video_result", i, "video")} addAccept="video/*"
-              promptSlot={<PromptPicker target="AI영상" onManage={() => setPromptModal(true)} />}
+              promptSlot={<PromptPicker target={"AI영상 " + String.fromCharCode(65 + i)} onManage={() => setPromptModal(true)} />}
               history={hist(aiResVers)} onSelect={selV("ai_video_result", i)} onDeleteVersion={delV} />
             <div className="mt-1 px-3 py-2.5 text-[11.5px] leading-relaxed" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: MUTE }}>
               추억 슬라이드 앞(A) · 추억 영상 뒤(B)로 유저 소스를 감쌉니다.
