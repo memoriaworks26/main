@@ -9,6 +9,7 @@ import { confirm } from "../confirm.jsx";
 import * as D from "../data.js";
 import { useStore, actions, submissionFor } from "../store.js";
 import { BACKEND_LIVE } from "../lib/supabase.js";
+import * as storage from "../lib/storage.js";
 import { DEV_PREVIEW } from "../lib/auth.js";
 import { buildBlocks, buildRenderPlan } from "./blocks.js";
 import { BlockList, Timeline } from "./timeline.jsx";
@@ -85,6 +86,24 @@ export default function VideoEditor({ reservation, onClose }) {
     setHist({ past: [], present: restored, future: [] });
     setSavedDoc(restored);
   }, [media?.editDoc]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 클립(콘텐츠 허브 자산) 미리보기 — 클립 블록의 assetId → storage_path 서명URL.
+  //   보호자 미디어와 무관(템플릿 고정 자산)이라 별도 맵으로 관리 → 목업 대신 실제 영상/이미지 재생.
+  const [clipUrls, setClipUrls] = useState({}); // blockId → { kind:"videos"|"image", url, label }
+  useEffect(() => {
+    let alive = true;
+    const clips = blocks.filter((b) => b.type === "clip" && b.assetId);
+    if (!clips.length) { setClipUrls({}); return; }
+    Promise.all(clips.map(async (b) => {
+      const a = store.content.find((c) => c.id === b.assetId);
+      if (!a?.storagePath) return null;                       // 미연결·미업로드 자산은 폴백(목업) 유지
+      try {
+        const url = await storage.signedUrl(storage.BUCKETS.content, a.storagePath);
+        return [b.id, { kind: a.kind === "photo" ? "image" : "videos", url, label: "콘텐츠 허브 클립" + (a.name ? " · " + a.name : "") }];
+      } catch { return null; }
+    })).then((rows) => { if (alive) setClipUrls(Object.fromEntries(rows.filter(Boolean))); });
+    return () => { alive = false; };
+  }, [blocks, store.content]);
+
   // 블록 id → { source(보호자 원본), result(AI 생성 결과) }. 미리보기 좌=원본 / 우=작업본.
   const blockMedia = useMemo(() => {
     const m = {};
@@ -123,6 +142,20 @@ export default function VideoEditor({ reservation, onClose }) {
     });
     return m;
   }, [media, editedBlocks]);
+
+  // 클립 블록 미디어(보호자 미디어와 독립) → 좌·우 동일하게 실제 클립 표시. blockMedia에 머지(클립 키는 겹치지 않음).
+  const clipMedia = useMemo(() => {
+    const m = {};
+    editedBlocks.forEach((b) => {
+      if (b.type !== "clip") return;
+      const cu = clipUrls[b.id];
+      if (!cu) return;
+      const mv = cu.kind === "image" ? { kind: "image", url: cu.url, label: cu.label } : { kind: "videos", urls: [cu.url], label: cu.label };
+      m[b.id] = { source: mv, result: mv };
+    });
+    return m;
+  }, [editedBlocks, clipUrls]);
+  const blockMediaAll = useMemo(() => ({ ...clipMedia, ...blockMedia }), [clipMedia, blockMedia]);
 
   // ── 블록 순서변경·미노출 ───────────────────────────────────────
   // 편집·컨펌(1차)·2차 가공 편집기 모두 블록 재구성 허용(실제 예약/잡을 연 경우).
@@ -277,11 +310,11 @@ export default function VideoEditor({ reservation, onClose }) {
           <BlockList blocks={panelBlocks} sel={sel} onSel={setSel} arrange={canArrange} hidden={hidden} onMove={moveBlock} onToggleHide={toggleHide} />
         </aside>
         <div className="flex flex-1 flex-col overflow-y-auto px-6 py-5">
-          <Preview sel={sel} blocks={panelBlocks} gens={gens} name={name} sourceVideoUrl={sourceVideoUrl} blockMedia={blockMedia} subtitles={editedSubs} onSubEdit={setEdit} onSelSub={(id) => setSel({ scope: "subtitle", kind: "subtitle", id })} />
+          <Preview sel={sel} blocks={panelBlocks} gens={gens} name={name} sourceVideoUrl={sourceVideoUrl} blockMedia={blockMediaAll} subtitles={editedSubs} onSubEdit={setEdit} onSelSub={(id) => setSel({ scope: "subtitle", kind: "subtitle", id })} />
           <Timeline blocks={timelineBlocks} edits={edits} bgmName={bgmName} subtitles={editedSubs} onSubChange={setEdit} onAddSub={addSub} onPickBgm={selectSlide} sel={sel} onSel={setSel} />
         </div>
         <aside className="w-80 shrink-0 overflow-y-auto" style={{ background: SURFACE, borderLeft: "1px solid " + LINE }}>
-          <PropPanel key={sel.scope + sel.id} blocks={panelBlocks} subtitles={editedSubs} edits={edits} onEdit={setEdit} onRemoveSub={removeSub} reservation={reservation} partnerId={partnerId} bgmName={bgmName} media={media} blockMedia={blockMedia} onGenerate={generate} sel={sel} />
+          <PropPanel key={sel.scope + sel.id} blocks={panelBlocks} subtitles={editedSubs} edits={edits} onEdit={setEdit} onRemoveSub={removeSub} reservation={reservation} partnerId={partnerId} bgmName={bgmName} media={media} blockMedia={blockMediaAll} onGenerate={generate} sel={sel} />
         </aside>
       </div>
 
