@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { SERIF, SURFACE, LINE, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS, SUB_LABEL } from "../theme.js";
 import { Tag, Btn, Card, Table, PageHeader, CopyBtn, DateField, useTableSort } from "../ui.jsx";
-import { useStore, actions, videoFor } from "../store.js";
+import { useStore, actions, videoFor, monthRangeKST } from "../store.js";
 import { confirm } from "../confirm.jsx";
 import { CUSTOMER_COLS, customerSortValue, toCustomerRow, renderCustomerCell, MemorialVideoCard } from "../admin/customers.jsx";
 import { matchQuery } from "../lib/util.js";
@@ -18,8 +18,8 @@ export function PList({ onDetail, onNew }) {
   const { reservations } = useStore(); // 목 DB — 관리자 컨펌·발행이 자사 목록에 전파
   const [q, setQ] = useState("");
   const [sf, setSf] = useState("all"); // all | review | rendering | published
-  const [from, setFrom] = useState("2026-06-01");
-  const [to, setTo] = useState("2026-06-30");
+  const [from, setFrom] = useState(() => monthRangeKST().from); // 이번달 1일(KST)
+  const [to, setTo] = useState(() => monthRangeKST().to);       // 이번달 말일(KST)
   const reservState = (st) => st === "published" ? "published" : (st === "review" ? "review" : "rendering");
 
   const base = reservations.filter((r) => r.partnerId === PARTNER.id);
@@ -33,7 +33,7 @@ export function PList({ onDetail, onNew }) {
   const cReview = ranged.filter((r) => reservState(r.status) === "review").length;
   const cRendering = ranged.filter((r) => reservState(r.status) === "rendering").length;
   const cPublished = ranged.filter((r) => reservState(r.status) === "published").length;
-  const thisMonth = () => { setFrom("2026-06-01"); setTo("2026-06-30"); };
+  const thisMonth = () => { const m = monthRangeKST(); setFrom(m.from); setTo(m.to); };
 
   const dateInput = (v, set) => (
     <div style={{ width: 150 }}><DateField value={v} onChange={set} /></div>

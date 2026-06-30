@@ -8,7 +8,7 @@ import { Tag, Btn, MetricRow, Table, PageHeader, Modal, DateField, useTableSort 
 import { toast } from "../toast.jsx";
 import { confirm } from "../confirm.jsx";
 import { TradeStatement } from "../docs.jsx";
-import { useStore, actions, siKey as itemKey, bizPartners } from "../store.js";
+import { useStore, actions, siKey as itemKey, bizPartners, monthRangeKST, todayKST } from "../store.js";
 import * as D from "../data.js";
 import { SaveBar } from "./shared.jsx";
 import { won, parseNum as num } from "../lib/format.js";
@@ -18,7 +18,7 @@ const fmtYmd = (s) => s.replaceAll("-", ".");
 const DEPOSIT_METHODS = ["계좌이체", "카드", "현금", "기타"];
 // 입금 등록 모달 — 파트너사 입금 1건 추가 (미수금 즉시 반영)
 function DepositModal({ open, onClose, partner, unpaid, onAdd }) {
-  const blank = { date: "2026-06-18", amount: "", method: "계좌이체", memo: "" };
+  const blank = { date: todayKST(), amount: "", method: "계좌이체", memo: "" };
   const [f, setF] = useState(blank);
   useEffect(() => { if (open) setF(blank); /* eslint-disable-next-line */ }, [open]);
   const set = (k) => (e) => setF((s) => ({ ...s, [k]: e.target.value }));
@@ -73,7 +73,7 @@ function DepositModal({ open, onClose, partner, unpaid, onAdd }) {
 }
 
 function AddSalesModal({ open, onClose, onAdd }) {
-  const blank = { nm: "", ymd: "2026-06-18", amt: "" };
+  const blank = { nm: "", ymd: todayKST(), amt: "" };
   const [f, setF] = useState(blank);
   useEffect(() => { if (open) setF(blank); /* eslint-disable-next-line */ }, [open]);
   const canSubmit = f.nm.trim() && num(f.amt) > 0;
@@ -133,8 +133,8 @@ function PartnerSettleDetail({ partnerId, partnerName, onBack, onIssue, onViewSt
   const depositTotal = deposits.reduce((s, d) => s + d.amount, 0);
   const billed = items.reduce((s, i) => s + i.amount, 0);
   const [sub, setSub] = useState("main");
-  const [from, setFrom] = useState("2026-06-01");
-  const [to, setTo] = useState("2026-06-30");
+  const [from, setFrom] = useState(() => monthRangeKST().from); // 이번달 1일(KST)
+  const [to, setTo] = useState(() => monthRangeKST().to);       // 이번달 말일(KST)
   const [sel, setSel] = useState([]);
 
   const rows = items.filter((i) => i.ymd >= from && i.ymd <= to);

@@ -115,6 +115,10 @@ export const bizPartnerIds = (s) => new Set(bizPartners(s).map((p) => p.id));
 export const bizReservations = (s) => { const ids = bizPartnerIds(s); return s.reservations.filter((r) => ids.has(r.partnerId)); };
 // 연월 "YYYY-MM"(KST). off로 전월(-1) 등 상대월 계산. — "이번달 예약" 집계 단일 기준.
 export const ymKST = (off = 0) => { const d = new Date(Date.now() + 9 * 3600 * 1000); d.setUTCMonth(d.getUTCMonth() + off); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`; };
+// 오늘 "YYYY-MM-DD"(KST). — 폼 기본 날짜 등 '오늘' 단일 기준.
+export const todayKST = () => { const d = new Date(Date.now() + 9 * 3600 * 1000); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`; };
+// 이번달(off로 상대월) 시작·말일 { from, to } "YYYY-MM-DD"(KST). — 예약/정산 기간필터 기본값 단일 기준.
+export const monthRangeKST = (off = 0) => { const d = new Date(Date.now() + 9 * 3600 * 1000); const y = d.getUTCFullYear(), m = d.getUTCMonth() + off; const first = new Date(Date.UTC(y, m, 1)), lastN = new Date(Date.UTC(y, m + 1, 0)).getUTCDate(); const mm = String(first.getUTCMonth() + 1).padStart(2, "0"); return { from: `${first.getUTCFullYear()}-${mm}-01`, to: `${first.getUTCFullYear()}-${mm}-${String(lastN).padStart(2, "0")}` }; };
 // 특정 월(YYYY-MM)의 예약 수 — partnerId 주면 그 파트너만. reservation.date(reserve_date) 기준.
 export const countReservInMonth = (reservations, month, partnerId) =>
   reservations.filter((r) => (!partnerId || r.partnerId === partnerId) && String(r.date || "").startsWith(month)).length;
@@ -240,6 +244,20 @@ export const actions = {
     subs.addSlidePhoto(submissionId, token, file)
       .then(() => { actions.loadReservationMedia(reservationId); toast("사진을 추가했습니다"); })
       .catch((e) => toast("추가 실패: " + e.message));
+  },
+  // 추억 슬라이드 사진 순서 변경 — sort_order 재부여(워커 합성 순서). 즉시 DB 반영 후 미디어 갱신.
+  moveSlidePhoto: (reservationId, submissionId, assetId, dir) => {
+    if (!LIVE) return;
+    subs.moveSlidePhoto(submissionId, assetId, dir)
+      .then(() => actions.loadReservationMedia(reservationId))
+      .catch((e) => toast("순서 변경 실패: " + e.message));
+  },
+  // 이 영상 배경 음악 지정 — submissions.bgm_id(합성이 템플릿 기본보다 먼저 사용). null이면 템플릿 기본으로 되돌림.
+  setSubmissionBgm: (reservationId, submissionId, bgmId) => {
+    if (!LIVE || !submissionId) return;
+    subs.setSubmissionBgm(submissionId, bgmId || null)
+      .then(() => { actions.loadReservationMedia(reservationId); toast(bgmId ? "이 영상 배경 음악을 변경했습니다 — 다음 최종 렌더부터 반영" : "템플릿 기본 음악으로 되돌렸습니다"); })
+      .catch((e) => toast("배경 음악 변경 실패: " + e.message));
   },
   // 단일 블록 AI 재생성 — 워커가 해당 블록만 재생성(타이틀/AI영상). 요청 직후 미디어 갱신(상태→생성중 즉시 반영).
   regenBlock: (reservationId, target) => {
