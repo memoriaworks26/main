@@ -14,7 +14,7 @@ const STEPS = USER_STEPS;
 
 export default function UserMobile({ previewBizId, step: stepProp, onStep, previewOverride }) {
   const stepCtl = stepProp != null && onStep ? { step: stepProp, setStep: onStep } : undefined;
-  const { st, T, step, setStep, last, previewStep, blocked, submitting, liveMode, link, company, partners, doSubmit, policyOpen, setPolicyOpen } = useUserWizard(previewBizId, stepCtl, previewOverride);
+  const { st, T, step, setStep, last, previewStep, blocked, submitting, liveMode, link, company, partnerCs, doSubmit, policyOpen, setPolicyOpen } = useUserWizard(previewBizId, stepCtl, previewOverride);
 
   // 라이브에서 토큰이 유효하지 않거나 만료된 경우 — 안내 화면.
   if (link.ok === false || link.status === "expired") {
@@ -37,9 +37,7 @@ export default function UserMobile({ previewBizId, step: stepProp, onStep, previ
     );
   }
 
-  // 장례식장(파트너) 고객센터 — 링크의 빈소명으로 스토어에서 매칭 (설정에서 편집한 값 반영)
-  const partnerCs = partners.find((p) => p.name === link.partnerName) || null;
-
+  // 장례식장(파트너) 고객센터 — 라이브는 토큰(partner_id) 해석값, 데모는 빈소명 폴백. wizard.js에서 해소(동명 충돌 없음).
   return (
     <div className="flex items-start justify-center px-6 py-10" style={{ background: BG, minHeight: "calc(100vh - 44px)" }}>
       <div className="w-full" style={{ maxWidth: 390 }}>

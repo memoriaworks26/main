@@ -9,7 +9,7 @@ import { RoomCard } from "../roomcard.jsx";
 import { useStore, actions } from "../store.js";
 import { confirm } from "../confirm.jsx";
 import { CUSTOMER_COLS, customerSortValue, toCustomerRow, renderCustomerCell } from "../admin/customers.jsx";
-import { usePartner, usePartnerTerm, pad2, minToStr, useCaseRooms, parseSlot, TIMELINE_START, TIMELINE_END, BLOCK_COLOR, hasRoomConflict, endDateFor, isOvernight, slotLabel, SlotText } from "./shared.jsx";
+import { usePartner, usePartnerTerm, pad2, minToStr, useCaseRooms, parseSlot, TIMELINE_START, TIMELINE_END, BLOCK_COLOR, hasRoomConflict, endDateFor, isOvernight, slotLabel, SlotText, todayKST } from "./shared.jsx";
 import { TimeStepper } from "./intake.jsx";
 
 function SlotEditCell({ r, rows }) {
@@ -347,10 +347,9 @@ export function PDashboard({ onNew, onDetail }) {
   const myDevices = devices.filter((d) => d.partnerId === PARTNER.id);
   const deviceOf = (r) => myDevices.find((d) => d.room === r.name);
 
-  // 오늘 예약 — 자사 예약 중 오늘자만. 퇴실 처리는 이 화면에서만 가능(예약 목록에서는 불가).
-  // (목업: 고정 today 상수가 없어 자사 예약의 최신 날짜를 '오늘'로 사용)
+  // 오늘 예약 — 자사 예약 중 '실제 오늘(KST)'자만. 퇴실 처리는 이 화면에서만 가능(예약 목록에서는 불가).
   const mine = reservations.filter((r) => r.partnerId === PARTNER.id);
-  const today = mine.reduce((m, r) => (r.date > m ? r.date : m), "");
+  const today = todayKST();
   const todayRows = mine.filter((r) => r.date === today);
   const inProgressCount = todayRows.filter((r) => r.status === "rendering" || r.status === "confirm").length;
   // 현재 시각(분) — 호실 카드 점유 판정용. 30초마다 갱신해 시간 경과·퇴실이 실시간 반영되도록.

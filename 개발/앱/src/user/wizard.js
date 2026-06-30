@@ -133,6 +133,11 @@ export function useUserWizard(previewBizId, stepCtl, previewOverride) {
     privacyPolicy: cfg.privacy_policy ?? store.company.privacyPolicy,
     privacyOfficer: cfg.privacy_officer ?? store.company.privacyOfficer,
   } : store.company;
+  // 장례식장(파트너) 고객센터 — 라이브는 토큰 해석(cfg, partner_id 기준)으로 정확히. 동명 파트너사 충돌 없음.
+  //   데모/미리보기(cfg 없음)는 시드 store.partners를 빈소명으로 폴백(시드데이터라 충돌 무관).
+  const partnerCs = cfg
+    ? (cfg.partner_cs_phone ? { csPhone: cfg.partner_cs_phone, csHours: cfg.partner_cs_hours } : null)
+    : (() => { const p = partners.find((x) => x.name === link.partnerName); return p ? { csPhone: p.csPhone, csHours: p.csHours } : null; })();
 
   // 사진(슬라이드)·영상(추억 영상) 공통 삭제/추가/순서변경 — kind별 state(setList)에 적용.
   const makeRemove = (setList, label) => async (id) => {
@@ -252,5 +257,5 @@ export function useUserWizard(previewBizId, stepCtl, previewOverride) {
   const noSource = photos.length + videos.length === 0; // 추억 소스(사진·영상) 미업로드 — 1개 이상 올려야 다음 진행
   const blocked = (step === 0 && !agreed) || (step === 1 && (!petName.trim() || (!skipAi && (aiPhotos.length < 3 || aiUploadingNow)))) || (step === 2 && (noSource || overLimit || photoOver || videoOver || uploadingNow || videoMeasuring)) || (step === previewStep && (submitting || uploadingNow));
 
-  return { st, T, step, setStep, last, previewStep, blocked, submitting, liveMode, link, company, partners, doSubmit, policyOpen, setPolicyOpen };
+  return { st, T, step, setStep, last, previewStep, blocked, submitting, liveMode, link, company, partnerCs, partners, doSubmit, policyOpen, setPolicyOpen };
 }

@@ -20,6 +20,8 @@ export const HOURS = Array.from({ length: 24 }, (_, i) => i); // 00 ~ 23시
 export const MINS = [0, 10, 20, 30, 40, 50];
 export { pad2 };
 export const minToStr = (m) => pad2(Math.floor(m / 60)) + ":" + pad2(m % 60); // 분 → "HH:MM" (intake·dashboard 공용)
+// KST 기준 오늘(YYYY-MM-DD) — DB reserve_date(date형)·필터(r.date===오늘)와 동일 포맷. (intake·dashboard 공용)
+export const todayKST = () => { const k = new Date(Date.now() + 9 * 3600 * 1000); return k.getUTCFullYear() + "-" + pad2(k.getUTCMonth() + 1) + "-" + pad2(k.getUTCDate()); };
 
 // 현재(파트너 세션) 호실 이름 목록 — store.rooms 기반(라이브=그 파트너 호실, 목업=D.ROOMS).
 export function useCaseRooms() {
