@@ -112,14 +112,15 @@ export default function AuthGate({ mode }) {
         .catch(fail);
     } else { // partner — RLS가 자기 파트너 데이터로 자동 스코핑
       actions.setCurrentPartner(profile.partner.id);
-      Promise.all([fetchReservations(), fetchDevices(), fetchRooms(), fetchSources(), fetchNotice(), fetchSubmissions()])
-        .then(([reservations, devices, rooms, sources, notice, submissions]) => {
+      Promise.all([fetchReservations(), fetchDevices(), fetchRooms(), fetchSources(), fetchNotice(), fetchSubmissions(), fetchVideos()])
+        .then(([reservations, devices, rooms, sources, notice, submissions, videos]) => {
           if (!alive) return;
           actions.hydrateReservations(reservations);
           actions.hydrateDevices(devices);
           actions.hydrateRooms(rooms);
           actions.hydrateSignage({ sources, notice });
           actions.hydrateSubmissions(submissions);
+          actions.hydrateVideos(videos);   // 통합 대시보드 호실 카드가 발행본을 실제 표출 미리보기로 재생
           done();
         })
         .catch(fail);

@@ -7,6 +7,7 @@ import { SERIF, SURFACE, LINE, LINE2, GOLD, GOLD_D, INK, MUTE, FAINT, RADIUS } f
 import { Btn, MetricRow, Table, PageHeader, useTableSort } from "../ui.jsx";
 import { RoomCard } from "../roomcard.jsx";
 import { useStore, actions } from "../store.js";
+import { signageState, resolveSignageRef } from "../lib/signageContent.js";
 import { confirm } from "../confirm.jsx";
 import { CUSTOMER_COLS, customerSortValue, toCustomerRow, renderCustomerCell } from "../admin/customers.jsx";
 import { usePartner, usePartnerTerm, pad2, minToStr, useCaseRooms, parseSlot, TIMELINE_START, TIMELINE_END, BLOCK_COLOR, hasRoomConflict, endDateFor, isOvernight, slotLabel, SlotText, todayKST, prevDay } from "./shared.jsx";
@@ -364,7 +365,7 @@ function TodayTimeline({ rows, cont = [], conflictRows = rows, onDetail }) {
 export function PDashboard({ onNew, onDetail }) {
   const PARTNER = usePartner();
   const tp = usePartnerTerm(); // 사업부별 파트너 용어(빈소/호실 등)
-  const { rooms, reservations, devices } = useStore(); // 목 DB — 호실 명칭·위치 편집 + 예약 + 사이니지 전파
+  const { rooms, reservations, devices, videos, signageSources } = useStore(); // 목 DB — 호실 명칭·위치 편집 + 예약 + 사이니지(디바이스·발행본·소스) 전파
   // 호실 ↔ 사이니지 디바이스 매핑(자사) — 실시간 표출 상태 표시용
   const myDevices = devices.filter((d) => d.partnerId === PARTNER.id);
   // 디바이스↔호실 매칭 — roomId(uuid) 우선, 레거시(roomId 없음)만 호실명 폴백. live.jsx와 동일 패턴.
@@ -380,6 +381,14 @@ export function PDashboard({ onNew, onDetail }) {
   useEffect(() => {
     const t = setInterval(() => { const d = new Date(); setNowMin(d.getHours() * 60 + d.getMinutes()); }, 30000);
     return () => clearInterval(t);
+  }, []);
+  // 사이니지 표출 미리보기를 실시간으로 — 디바이스 하트비트/모드는 5초, 발행본은 20초마다 조용히 재조회.
+  //   (라이브 컨트롤과 동일한 5초 폴. 발행 시 자동 표출 전환도 재로드 없이 카드에 반영)
+  useEffect(() => {
+    actions.refreshDevices(true); actions.refreshVideos();
+    const td = setInterval(() => actions.refreshDevices(true), 5000);
+    const tv = setInterval(() => actions.refreshVideos(), 20000);
+    return () => { clearInterval(td); clearInterval(tv); };
   }, []);
   // 호실 점유 = 현재 시각이 예약 시간대 안. 오늘 예약 + '어제 시작해 자정 넘겨 오늘 새벽까지 이어지는' 예약을 함께 본다.
   //   · 어제 자정넘김 → 오늘 00:00~종료(end)까지 점유
@@ -462,7 +471,11 @@ export function PDashboard({ onNew, onDetail }) {
               ? { ...r, deceased: rv.deceased, chief: rv.chief, status: rv.status,
                   age: rv.deceased === r.deceased ? r.age : undefined, species: rv.deceased === r.deceased ? r.species : undefined }
               : { ...r, deceased: null };
-            return <RoomCard key={r.id} room={roomView} device={deviceOf(r)} reserv={rv} onOpenReserv={onDetail} readOnly onSave={(id, patch) => actions.setRoom(id, patch)} onCheckout={checkoutRoom} onNew={() => onNew(newReservForRoom(r.name))} />;
+            // 실시간 표출 미리보기 — /s/ 호실 화면과 동일 규칙(device-sync 미러링)으로 지금 나오는 콘텐츠를 카드에 재생.
+            const device = deviceOf(r);
+            const st = signageState(device);
+            const ref = st.onlineNow ? resolveSignageRef({ device, room: r, reservations: mine, videos, sources: signageSources, today }) : null;
+            return <RoomCard key={r.id} room={roomView} device={device} signage={{ ...st, ref }} reserv={rv} onOpenReserv={onDetail} readOnly onSave={(id, patch) => actions.setRoom(id, patch)} onCheckout={checkoutRoom} onNew={() => onNew(newReservForRoom(r.name))} />;
           })}
         </div>
 

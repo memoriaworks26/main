@@ -522,6 +522,8 @@ export const actions = {
     if (LIVE) { signage.fetchDevices().then((devices) => set({ devices })).catch((e) => { if (!silent) toast("새로고침 실패: " + e.message); }); return; }
     if (!silent) toast("상태를 새로고침했습니다");
   },
+  // 발행 영상만 조용히 재조회 — 통합 대시보드 카드가 '발행 시 자동 표출'을 재로드 없이 반영하도록.
+  refreshVideos: () => { if (LIVE) vids.fetchVideos().then((videos) => set({ videos })).catch(() => {}); },
   // 일회성 명령 전송(restart/reboot/refresh/redownload) — pending_cmd로 적재, 파이가 다음 폴에 실행.
   sendDeviceCommand: (id, cmd) => {
     const L = { restart: "플레이어 재시작", reboot: "장비 재부팅", refresh: "강제 새로고침", redownload: "영상 재다운로드" };

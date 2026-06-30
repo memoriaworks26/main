@@ -20,6 +20,8 @@ const mapVideo = (r) => ({
   srcMB: r.source_mb != null ? Number(r.source_mb) : 0,
   finalPath: r.final_path, sourcePath: r.source_path,  // 다운로드 서명URL 대상
   status: r.status,
+  expiresAt: r.expires_at ?? null,                       // 발행본 만료(예약 종료일) — 만료 후엔 표출 안 함
+  storageProvider: r.storage_provider ?? "supabase",     // v1: supabase 저장분만 서명(r2 전환분 제외)
 });
 
 export async function fetchVideos() {
