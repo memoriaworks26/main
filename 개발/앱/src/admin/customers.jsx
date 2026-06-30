@@ -112,6 +112,14 @@ function CustomerDetail({ rid, onBack }) {
   } : null;
   // 최종 렌더본 파일명(발행 완료 건만 다운로드 — MemorialVideoCard에서 처리)
   const file = `${r.deceased}_추모영상.mp4`;
+  // [접수 정보] 예약접수에서 캡처한 보호자·반려동물 실데이터 — 파트너 예약상세와 동일 카드(고객관리 진입 시에도 노출).
+  const guardianInfo = [
+    { label: "반려동물 이름", value: r.deceased || "—" },
+    { label: "품종", value: r.breed || "—" },
+    { label: "나이", value: r.age || "—" },
+    { label: "보호자 성함", value: r.chief || "—" },
+    { label: "연락처", value: r.phone || "—" },
+  ];
   return (
     <div>
       <PageHeader title={r.deceased} sub={r.partner + " · " + r.room + " · 보호자 " + r.chief} back={{ onClick: onBack, label: "뒤로" }}
@@ -152,6 +160,20 @@ function CustomerDetail({ rid, onBack }) {
               </div>
             </div>
           ) : <div className="text-[12.5px]" style={{ color: FAINT }}>아직 발행된 링크가 없습니다.</div>}
+        </Card>
+      </div>
+
+      <div className="mt-4">
+        <Card title="📝 접수 정보 (보호자 · 반려동물)">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-[13px]" style={{ color: INK }}>
+            {guardianInfo.map((item, i) => (
+              <div key={i} className="flex gap-2" style={{ gridColumn: item.value && item.value.length > 18 ? "span 2" : undefined }}>
+                <span className="shrink-0" style={{ color: MUTE }}>{item.label}</span>
+                <span>{item.value}</span>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-[11px]" style={{ color: FAINT }}>※ 예약 접수 시 입력된 정보입니다. 보호자가 제작 URL에서 추가 입력한 편지·사진은 편집기에서 확인됩니다.</p>
         </Card>
       </div>
       <p className="mt-3 text-[11px]" style={{ color: FAINT }}>※ 개인정보 수탁 — 보유기간·삭제 요청 워크플로(PIPA)는 메모리아웍스 확인 항목.</p>
