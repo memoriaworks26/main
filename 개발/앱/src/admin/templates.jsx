@@ -1,7 +1,7 @@
-// [추모영상 제작] 영상 템플릿 — 파트너별 BGM/요소 구성 편집.
+// [추모영상 제작] 영상 템플릿 — 파트너별 요소 구성·순서 편집. (BGM은 보호자가 제작 링크에서 선택 → 템플릿엔 두지 않음)
 import React, { useState } from "react";
 import {
-  AlertTriangle, ChevronDown, ChevronRight, ChevronUp, Clapperboard, Film, GripVertical, Image, LayoutTemplate, Mail, Music, Music2, Plus, Search, Sparkles, Trash2, Type, Upload,
+  AlertTriangle, ChevronDown, ChevronRight, ChevronUp, Clapperboard, Film, GripVertical, Image, LayoutTemplate, Mail, Plus, Search, Sparkles, Trash2, Type, Upload,
 } from "lucide-react";
 import { SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, STATUS, RADIUS } from "../theme.js";
 import { Btn, PageHeader } from "../ui.jsx";
@@ -118,7 +118,7 @@ function InstantAddClip({ partner, onAdded }) {
 
 export function Templates() {
   const s = useStore();
-  const { templates: storeTpls, content, bgm: bgmLib } = s;
+  const { templates: storeTpls, content } = s;
   const allPartners = bizPartners(s); // 현재 사업부 파트너만
   const [tpls, setTpls] = useState(storeTpls); // 저장 전 초안 (전체 템플릿 맵)
   const dirty = JSON.stringify(tpls) !== JSON.stringify(storeTpls);
@@ -138,7 +138,7 @@ export function Templates() {
 
   return (
     <div>
-      <PageHeader title="영상 템플릿" sub="파트너사별 요소 구성·순서 편집 · 기본 요소(타이틀·추억 슬라이드·추억 영상·편지)는 각 1개, AI 영상(앞·뒤)·클립은 여러 개 · BGM·클립 콘텐츠 선택"
+      <PageHeader title="영상 템플릿" sub="파트너사별 요소 구성·순서 편집 · 기본 요소(타이틀·추억 슬라이드·추억 영상·편지)는 각 1개, AI 영상(앞·뒤)·클립은 여러 개 · 클립 콘텐츠 선택 (BGM은 보호자가 제작 링크에서 선택)"
         right={
           <div className="flex items-center gap-2">
             <div className="flex items-center px-3" style={{ height: 36, width: 220, background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS }}>
@@ -155,14 +155,11 @@ export function Templates() {
           const blocks = tpl.blocks || [];
           const total = blocks.reduce((s, b) => s + (D.elementDef(b.type)?.dur || 0), 0);
           const clipCount = blocks.filter((b) => b.type === "clip").length;
-          const bgm = bgmLib.find((b) => b.id === tpl.bgm);
           // 콘텐츠 허브: 해당 파트너 영상(clip) + 이미지(photo) + 공용(shared) 자산(모든 파트너 공통)
           const assetOpts = content
             .filter((c) => (c.kind === "clip" || c.kind === "photo") && (c.partnerId === p.id || c.shared))
             .map((c) => ({ value: c.id, label: (c.kind === "clip" ? "🎬 영상 · " : "🖼 이미지 · ") + c.name + (c.shared ? " (공용)" : "") }));
           const noHub = assetOpts.length === 0;
-          // BGM 옵션 — 실 공용 라이브러리(콘텐츠 허브 음악 탭과 동일 소스). 워커는 templates.bgm_id로 조회하므로 실 id 필수.
-          const bgmOpts = bgmLib.map((b) => ({ value: b.id, label: b.name + (b.meta ? "  ·  " + b.meta : "") }));
           // 추가 가능한 요소: 기본 요소는 미사용 시에만, 클립은 항상
           const usedBase = new Set(blocks.filter((b) => b.type !== "clip").map((b) => b.type));
           const addable = D.TEMPLATE_ELEMENTS.filter((e) => e.repeatable || !usedBase.has(e.type));
@@ -194,7 +191,6 @@ export function Templates() {
                   <ChevronRight className="h-4 w-4 shrink-0 transition-transform" style={{ color: FAINT, transform: isOpen ? "rotate(90deg)" : "none" }} />
                   <span className="truncate text-[13px] font-bold" style={{ color: INK }}>{p.name}</span>
                   {p.isDefault && <span className="shrink-0 px-1.5 py-0.5 text-[10.5px] font-bold" style={{ borderRadius: RADIUS, background: GOLD_SOFT, color: GOLD_D }}>신규 파트너 기본값</span>}
-                  {!p.isDefault && !bgm && <span className="flex shrink-0 items-center gap-1 text-[11px]" style={{ color: STATUS.review.c }}><AlertTriangle className="h-3 w-3" /> BGM 미지정</span>}
                 </span>
                 <span className="shrink-0 text-[11.5px] tabular-nums" style={{ color: FAINT }}>약 {mmss(total)} · {blocks.length}요소{p.isDefault ? "" : ` · 클립 ${clipCount}개`}</span>
               </button>
@@ -203,20 +199,11 @@ export function Templates() {
               <div className="border-t p-4" style={{ borderColor: LINE }}>
               {p.isDefault && (
                 <p className="mb-4 rounded px-3 py-2 text-[11.5px]" style={{ background: "#faf6ec", color: GOLD_D, border: "1px solid " + GOLD_SOFT, borderRadius: RADIUS }}>
-                  신규 파트너사를 등록하면 이 구성·순서·BGM이 그대로 복제되어 시작됩니다. 클립은 파트너별 콘텐츠 허브 자산에 연결되므로 기본 템플릿에는 두지 않는 것을 권장합니다.
+                  신규 파트너사를 등록하면 이 구성·순서가 그대로 복제되어 시작됩니다. 클립은 파트너별 콘텐츠 허브 자산에 연결되므로 기본 템플릿에는 두지 않는 것을 권장합니다.
                 </p>
               )}
-              {/* BGM — 1곡 선택 */}
-              <SectionLabel icon={Music2}>배경 음악 (BGM)</SectionLabel>
-              <div className="flex items-center gap-3">
-                <SearchSelect value={tpl.bgm || ""} onChange={(id) => setTpls((m) => ({ ...m, [p.id]: { ...(m[p.id] || { bgm: null, blocks: [] }), bgm: id } }))} width={340} placeholder="BGM 라이브러리에서 선택" options={bgmOpts} />
-                {bgm
-                  ? <span className="flex items-center gap-1.5 text-[12px]" style={{ color: GOLD_D }}><Music className="h-3.5 w-3.5" /> {bgm.meta}</span>
-                  : <span className="flex items-center gap-1 text-[12px]" style={{ color: STATUS.review.c }}><AlertTriangle className="h-3.5 w-3.5" /> 미지정</span>}
-              </div>
-
-              {/* 요소 구성 · 순서 — 기본 요소(각 1개) + 클립(n개), ▲▼로 순서변경 */}
-              <div className="mt-5 border-t pt-4" style={{ borderColor: LINE }}>
+              {/* 요소 구성 · 순서 — 기본 요소(각 1개) + 클립(n개), ▲▼로 순서변경. BGM은 보호자가 제작 링크에서 선택하므로 템플릿에 두지 않음. */}
+              <div>
                 <SectionLabel icon={LayoutTemplate} right={`${blocks.length}요소`}>요소 구성 · 순서</SectionLabel>
                 <div className="space-y-1.5">
                   {blocks.length === 0 && (
