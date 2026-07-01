@@ -79,11 +79,19 @@ function SubtitleLayer({ boxRef, subs, time, selSubId, onSubEdit, onSelSub }) {
 }
 
 // 블록별 실제 보호자 미디어 — 사진(타이틀/AI소스)·슬라이드(자동순환)·영상(재생)·편지(텍스트).
-function MediaView({ media, onTime }) {
+function MediaView({ media, onTime, bgmUrl = null, bgmVol = 70 }) {
   const [idx, setIdx] = useState(0);
   const [playing, setPlaying] = useState(false); // 사진 슬라이드 자동재생 X — 재생 버튼으로 순환 시작/정지
   const [err, setErr] = useState(false);
-  useEffect(() => { setErr(false); setIdx(0); setPlaying(false); }, [media]); // 미디어 바뀌면 초기화(정지·첫 장)
+  // 슬라이드 미리보기 BGM — 최종 렌더처럼 슬라이드 재생에 배경음악을 깖(bgmUrl은 슬라이드 블록에서만 전달됨).
+  const audioRef = useRef(null);
+  useEffect(() => { setErr(false); setIdx(0); setPlaying(false); audioRef.current?.pause(); }, [media]); // 미디어 바뀌면 초기화(정지·첫 장·소리 중지)
+  useEffect(() => { if (audioRef.current) audioRef.current.volume = Math.max(0, Math.min(100, bgmVol)) / 100; }, [bgmUrl, bgmVol]);
+  // 사진 슬라이드쇼(images) 재생 상태 → BGM 재생/정지. (영상 슬라이드는 <video> onPlay/onPause로 연동)
+  useEffect(() => {
+    const au = audioRef.current; if (!au) return;
+    if (playing) { au.currentTime = 0; au.play().catch(() => {}); } else au.pause();
+  }, [playing]);
   useEffect(() => {
     if (media?.kind !== "images" || media.urls.length < 2 || !playing) return;
     const t = setInterval(() => setIdx((i) => (i + 1) % media.urls.length), 2200);
@@ -94,26 +102,33 @@ function MediaView({ media, onTime }) {
   if (err) return <div className="absolute inset-0 flex items-center justify-center" style={{ background: "#000" }}><span className="text-[12px]" style={{ color: "#aab2bf" }}>미디어를 불러올 수 없습니다 — 새로고침해 주세요</span></div>;
   if (media.kind === "image")
     return <img src={media.url} alt="" onError={() => setErr(true)} className="absolute inset-0 h-full w-full object-contain" style={{ background: "#000" }} />;
-  if (media.kind === "images")
+  if (media.kind === "images") {
+    const multi = media.urls.length > 1;                 // 여러 장이면 재생 시 사진 순환
+    const showPlay = multi || !!bgmUrl;                  // 한 장이어도 BGM이 있으면 재생 컨트롤 노출(소리만 재생/정지)
     return (
       <>
         <img src={media.urls[idx % media.urls.length]} alt="" onError={() => setErr(true)} className="absolute inset-0 h-full w-full object-contain" style={{ background: "#000" }} />
-        {media.urls.length > 1 && (
-          <>
-            <button onClick={() => setPlaying((p) => !p)} aria-label={playing ? "정지" : "재생"}
-              className="absolute bottom-2 left-2 z-10 flex h-7 w-7 items-center justify-center rounded-full outline-none" style={{ background: "rgba(0,0,0,.55)" }}>
-              {playing ? <Pause className="h-3.5 w-3.5 text-white" fill="#fff" /> : <Play className="h-3.5 w-3.5 text-white" fill="#fff" />}
-            </button>
-            <span className="absolute bottom-2 right-2 z-10 px-1.5 py-[1px] text-[10px] tabular-nums text-white" style={{ background: "rgba(0,0,0,.5)", borderRadius: 3 }}>{(idx % media.urls.length) + 1}/{media.urls.length}</span>
-          </>
+        {showPlay && (
+          <button onClick={() => setPlaying((p) => !p)} aria-label={playing ? "정지" : "재생"}
+            className="absolute bottom-2 left-2 z-10 flex h-7 w-7 items-center justify-center rounded-full outline-none" style={{ background: "rgba(0,0,0,.55)" }}>
+            {playing ? <Pause className="h-3.5 w-3.5 text-white" fill="#fff" /> : <Play className="h-3.5 w-3.5 text-white" fill="#fff" />}
+          </button>
         )}
+        {multi && (
+          <span className="absolute bottom-2 right-2 z-10 px-1.5 py-[1px] text-[10px] tabular-nums text-white" style={{ background: "rgba(0,0,0,.5)", borderRadius: 3 }}>{(idx % media.urls.length) + 1}/{media.urls.length}</span>
+        )}
+        {bgmUrl && <audio ref={audioRef} src={bgmUrl} loop preload="none" />}
       </>
     );
+  }
   if (media.kind === "videos") {
     const cur = media.urls[idx % media.urls.length];
     return (
       <>
-        <video key={cur} src={cur} controls playsInline preload="metadata" onError={() => setErr(true)} className="absolute inset-0 h-full w-full" style={{ background: "#000" }} onTimeUpdate={onTime} />
+        <video key={cur} src={cur} controls playsInline preload="metadata" onError={() => setErr(true)} className="absolute inset-0 h-full w-full" style={{ background: "#000" }} onTimeUpdate={onTime}
+          onPlay={() => { const au = audioRef.current; if (au) { au.currentTime = 0; au.play().catch(() => {}); } }}
+          onPause={() => audioRef.current?.pause()} onEnded={() => audioRef.current?.pause()} />
+        {bgmUrl && <audio ref={audioRef} src={bgmUrl} loop preload="none" />}
         {media.urls.length > 1 && (
           <div className="absolute bottom-2 right-2 z-10 flex gap-1">
             {media.urls.map((_, i) => (
@@ -154,7 +169,7 @@ function MediaView({ media, onTime }) {
   return null;
 }
 
-function PreviewBox({ label, badge, badgeColor, big, name, src, videoSrc, media, subs, selSubId, onSubEdit, onSelSub }) {
+function PreviewBox({ label, badge, badgeColor, big, name, src, videoSrc, media, subs, selSubId, onSubEdit, onSelSub, bgmUrl = null, bgmVol = 70 }) {
   const boxRef = useRef(null);
   const [time, setTime] = useState(0);
   const overlay = subs && subs.length > 0;
@@ -167,7 +182,7 @@ function PreviewBox({ label, badge, badgeColor, big, name, src, videoSrc, media,
       </div>
       <div ref={boxRef} className="relative w-full" style={{ aspectRatio: "16/9", background: "#1c232c", borderRadius: 6, overflow: "hidden" }}>
         {hasReal ? (
-          <MediaView media={media} onTime={(e) => setTime(e.currentTarget.currentTime)} />
+          <MediaView media={media} onTime={(e) => setTime(e.currentTarget.currentTime)} bgmUrl={bgmUrl} bgmVol={bgmVol} />
         ) : videoSrc ? (
           <video src={videoSrc} controls playsInline preload="metadata" className="absolute inset-0 h-full w-full" style={{ background: "#000" }}
             onTimeUpdate={(e) => setTime(e.currentTarget.currentTime)} />
@@ -198,7 +213,7 @@ function PreviewBox({ label, badge, badgeColor, big, name, src, videoSrc, media,
   );
 }
 
-export function Preview({ sel, blocks, gens, name, sourceVideoUrl, blockMedia = {}, subtitles = [], onSubEdit, onSelSub }) {
+export function Preview({ sel, blocks, gens, name, sourceVideoUrl, blockMedia = {}, subtitles = [], onSubEdit, onSelSub, bgmUrl = null, bgmVol = 70 }) {
   const block = (sel.scope === "block" ? blocks.find((b) => b.id === sel.id) : null) || blocks[0] || null;
   const gen = block ? gens[block.id] : null;
   const origSrc = blockFrame(block, gen, name, true);
@@ -210,6 +225,8 @@ export function Preview({ sel, blocks, gens, name, sourceVideoUrl, blockMedia = 
   const resMedia = bm?.result || null;                      // AI 생성 결과(작업본)
   const isClip = block?.type === "clip";                    // 콘텐츠 허브 클립 — 보호자 원본/AI 결과가 아닌 템플릿 고정 자산
   const isVideoBlk = block?.type === "video";               // 추억 영상 — AI 변환 없이 보호자 원본 그대로(좌·우 동일, 음량만 편집)
+  const isSlide = block?.type === "slide";                  // 추억 슬라이드 — 최종 렌더처럼 BGM이 이 구간에만 깔림 → 미리보기에서도 재생
+  const slideBgm = isSlide ? bgmUrl : null;                 // 슬라이드 블록에서만 미리보기 BGM 재생(다른 블록엔 소리 안 깖)
   return (
     <div>
       <div className="mb-2 flex items-center gap-2">
@@ -226,10 +243,10 @@ export function Preview({ sel, blocks, gens, name, sourceVideoUrl, blockMedia = 
         <div className="grid grid-cols-2 gap-4">
           {/* 원본 = 보호자가 올린 실제 소스. 없으면 완성영상(있으면)·목업 폴백. (편집값인 자막은 여기 표시 안 함 — 비교용 원본) */}
           <PreviewBox label="유저가 만든 원본" badge={srcMedia ? "보호자 원본" : sourceVideoUrl ? "완성본 · 재생" : "원본 · 수정불가"} badgeColor={{ bg: "rgba(90,100,112,.15)", c: "#5a6470" }}
-            name={name} src={origSrc} videoSrc={sourceVideoUrl} media={srcMedia} />
+            name={name} src={origSrc} videoSrc={sourceVideoUrl} media={srcMedia} bgmUrl={slideBgm} bgmVol={bgmVol} />
           {/* 작업본 = AI 생성 결과(타이틀 Seedream·AI영상 DoP) 또는 추억 영상(원본 그대로·음량 편집). 자막 미리보기·드래그는 이쪽에 표시. */}
           <PreviewBox label="내가 편집 중" badge={isVideoBlk ? (resMedia ? "추억 영상 · 편집 중" : "영상 없음") : resMedia ? "작업본 · AI 결과" : "작업본 · 생성 전"} badgeColor={{ bg: GOLD_SOFT, c: GOLD_D }} big name={name} src={editedSrc} media={resMedia}
-            subs={subtitles} selSubId={selSubId} onSubEdit={onSubEdit} onSelSub={onSelSub} />
+            subs={subtitles} selSubId={selSubId} onSubEdit={onSubEdit} onSelSub={onSelSub} bgmUrl={slideBgm} bgmVol={bgmVol} />
         </div>
       )}
       <div className="mt-1.5 text-[11.5px]" style={{ color: FAINT }}>
@@ -239,6 +256,8 @@ export function Preview({ sel, blocks, gens, name, sourceVideoUrl, blockMedia = 
           ? (resMedia ? "보호자가 올린 추억 영상입니다 — 영상이 2개 이상이면 오른쪽 1·2 버튼으로 각각 재생됩니다. 소리 크기는 오른쪽 속성에서 영상별로 조절합니다." : "올라온 추억 영상이 없습니다.")
           : isClip
           ? (resMedia ? "콘텐츠 허브에 연결된 클립입니다 — 최종본에 그대로 들어갈 실제 클립입니다(편집 없음)." : "이 클립에 콘텐츠 허브 자산이 연결되지 않았습니다 — 템플릿에서 클립 자산을 지정하세요.")
+          : isSlide
+          ? (slideBgm ? "▶ 재생하면 최종 렌더처럼 배경음악이 함께 들립니다(음량은 오른쪽 「이 영상 배경 음악」·템플릿 설정 기준)." : "이 슬라이드엔 깔릴 배경음악이 없어 미리보기·최종 렌더 모두 무음입니다 — 오른쪽 「이 영상 배경 음악」에서 곡을 고르세요.")
           : resMedia
           ? "왼쪽 보호자 원본 → 오른쪽 AI 변환 결과. 「AI로 만들기」로 재생성합니다."
           : srcMedia
