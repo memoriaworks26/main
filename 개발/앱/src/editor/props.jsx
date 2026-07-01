@@ -318,12 +318,31 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        {/* 클립 소스 파일(콘텐츠 허브) — 타이틀·AI영상의 독사진은 각 섹션에서 카드로 매니징 */}
+        {/* 클립(콘텐츠 허브) — 영상/이미지를 골라 교체(편집본에 저장 → 렌더 반영) + 파일 올려 즉시 추가 */}
         {k === "clip" && (() => {
-          const fileName = srcAsset?.name || (item.file || item.source || "").split("/").pop() || "파일 없음";
+          const cur = _store.content.find((c) => c.id === item.assetId) || null;
+          // 이 파트너 콘텐츠 허브 클립(영상)·이미지 + 공용 자산 — 교체 후보(템플릿 편집기와 동일 스코프)
+          const opts = _store.content.filter((c) => (c.kind === "clip" || c.kind === "photo") && (c.partnerId === _pid || c.shared));
+          // 파일을 골라 허브에 추가하고 이 클립에 바로 지정(라이브면 실제 업로드·영속). 워커는 assetId로 조회하므로 허브 자산이어야 렌더된다.
+          const addClip = (f) => {
+            const isVideo = f.type.startsWith("video") || /\.(mp4|mov|webm|m4v)$/i.test(f.name);
+            const id = "ct-" + Date.now();
+            const mb = f.size / 1048576;
+            actions.addContent({ id, kind: isVideo ? "clip" : "photo", partner: reservation?.partner, partnerId: _pid || null, shared: !_pid, name: f.name, file: f, meta: isVideo ? "편집기 추가 · 영상" : "편집기 추가 · 이미지", size: mb >= 1 ? mb.toFixed(1) + "MB" : Math.max(1, Math.round(f.size / 1024)) + "KB" });
+            onEdit(item.id, { assetId: id });
+            toast(isVideo ? "영상을 올려 이 클립에 지정했습니다" : "이미지를 올려 이 클립에 지정했습니다");
+          };
           return (
-            <Field label="지금 들어간 파일">
-              <div className="px-3 py-2.5 text-[12.5px]" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: INK, wordBreak: "break-all" }}>{fileName}</div>
+            <Field label="클립 영상 교체">
+              <select className={inputCls} style={inputStyle} value={item.assetId || ""} onChange={(e) => onEdit(item.id, { assetId: e.target.value || null })}>
+                <option value="">자산 미지정 — 렌더에서 제외</option>
+                {opts.map((c) => <option key={c.id} value={c.id}>{(c.kind === "clip" ? "🎬 영상 · " : "🖼 이미지 · ") + c.name + (c.shared ? " (공용)" : "")}</option>)}
+              </select>
+              <div className="mt-1.5 flex items-center gap-2">
+                <FileButton accept="video/*,image/*" onFile={addClip} className="flex shrink-0 items-center gap-1 px-2.5 py-1.5 text-[12px] font-semibold outline-none" style={{ border: "1px solid " + LINE2, borderRadius: RADIUS, color: GOLD_D }}><Upload className="h-3.5 w-3.5" /> 파일 올려 교체</FileButton>
+                <span className="min-w-0 flex-1 truncate text-[11px]" style={{ color: cur ? FAINT : "#a23b3b" }}>{cur ? "현재 · " + cur.name : "자산 미지정"}</span>
+              </div>
+              {opts.length === 0 && <p className="mt-1.5 text-[11px] leading-relaxed" style={{ color: FAINT }}>이 파트너 콘텐츠 허브에 클립 자산이 없습니다 — 「파일 올려 교체」로 추가하세요.</p>}
             </Field>
           );
         })()}
@@ -466,6 +485,8 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
                         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold" style={{ background: "#e7e2d8", color: MUTE }}>{i + 1}</span>
                         <Film className="h-3.5 w-3.5 shrink-0" style={{ color: GOLD_D }} />
                         <span className="min-w-0 flex-1 truncate text-[12px] font-semibold" style={{ color: INK }}>{v.name || `영상 ${i + 1}`}</span>
+                        {/* 유저(보호자) 원본 개별 다운로드 — 실제 업로드 자산일 때만(목업 제외) */}
+                        {!_vidMock && v.url && <button type="button" onClick={() => dlAnchor(v.url, v.name)} title="이 영상 원본 다운로드" className="flex shrink-0 items-center gap-1 px-2 py-1 text-[11px] font-semibold outline-none" style={{ border: "1px solid " + LINE2, borderRadius: 5, color: MUTE }}><Download className="h-3.5 w-3.5" /> 다운로드</button>}
                       </div>
                       {v.url && <video src={v.url} controls playsInline preload="metadata" className="w-full" style={{ aspectRatio: "16/9", background: "#000", borderRadius: 4 }} />}
                       <div className="mt-1.5"><SoundField label={`${i + 1}번 영상 소리 크기`} value={vols[i]} onChange={(val) => setVol(i, val)} /></div>
