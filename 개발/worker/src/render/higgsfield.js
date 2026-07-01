@@ -1,8 +1,8 @@
 // ─────────────────────────────────────────────────────────────
-// Higgsfield 클라이언트 — 타이틀 이미지(Soul) + 추억영상(DoP). 한 키로 둘 다(OpenAI 불필요).
-//   계약(2026-06 실측 검증, platform.higgsfield.ai, Authorization: Key {API_KEY}:{SECRET}):
-//   · 추억영상: POST /v1/image2video/dop  { params:{ model:"dop-turbo"|"dop-lite", prompt,
-//                input_images:[{type:"image_url",image_url}] } }
+// Higgsfield 클라이언트 — 타이틀 이미지(Seedream) + AI영상(Kling). 한 키로 둘 다(OpenAI 불필요).
+//   계약(2026-06~07 실측 검증, platform.higgsfield.ai, Authorization: Key {API_KEY}:{SECRET}):
+//   · AI영상: POST /v1/image2video/kling { params:{ model:"kling-v2-1", prompt, cfg_scale(프롬프트강도↑),
+//                input_image:{type:"image_url",image_url} } }  ※ input_image는 단일 객체(배열이면 422). DoP는 폴백.
 //   · 타이틀이미지: POST /v1/text2image/soul { params:{ prompt,
 //                width_and_height: '2048x1152'(16:9 등 enum), quality:'1080p',
 //                image_reference?:{type:"image_url",image_url}, seed?, enhance_prompt? } }
@@ -10,6 +10,7 @@
 //   ※ 계정 크레딧 필요(없으면 403 "Not enough credits"). 결과 응답 정확 형태는 크레딧 충전 후 1건으로 확정.
 // ─────────────────────────────────────────────────────────────
 import { loadConfig } from "../config.js";
+import { log } from "../log.js";
 
 const cfg = loadConfig();
 const BASE = "https://platform.higgsfield.ai";
@@ -21,6 +22,14 @@ const CREDS = cfg.higgsfield.keys;
 //   ※ DoP 영상은 aspect_ratio 옵션 없음(입력사진 비율 기반) — 비율 정규화는 최종 compose(1920×1080)에서 처리.
 const IMG_ASPECT = process.env.HIGGSFIELD_IMG_ASPECT || "16:9"; // seedream aspect_ratio
 const IMG_RES = process.env.HIGGSFIELD_IMG_RES || "2K";         // seedream resolution
+// AI영상(Kling i2v) — 프롬프트 밀착 생성. cfg_scale↑ = 프롬프트 반영 강도↑(기본 0.5 → 0.8로 프롬프트 영향 크게). env로 조정.
+const KLING_MODEL = process.env.HIGGSFIELD_KLING_MODEL || "kling-v2-1";       // "kling-v2-1" | "kling-v2-1-master"
+const KLING_CFG = Number(process.env.HIGGSFIELD_KLING_CFG ?? 0.8);            // 0~1, 프롬프트 밀착도(높을수록 프롬프트대로)
+const KLING_DUR = Number(process.env.HIGGSFIELD_KLING_DUR || 5);             // 영상 길이(초) — 5|10
+const KLING_ENHANCE = process.env.HIGGSFIELD_KLING_ENHANCE !== "0";          // 프롬프트 보강(기본 on)
+const KLING_FALLBACK_DOP = process.env.HIGGSFIELD_KLING_FALLBACK_DOP !== "0"; // Kling 실패 시 DoP 폴백(기본 on)
+// 프롬프트 밀착을 해치는 기본 네거티브 — 저품질/왜곡 억제(관리자 프롬프트와 무관하게 항상). env로 대체 가능.
+const KLING_NEG = process.env.HIGGSFIELD_KLING_NEG || "low quality, blurry, distorted, deformed, extra limbs, text, watermark";
 const authHeader = (c) => ({
   Authorization: `Key ${c.key}:${c.secret}`,
   "Content-Type": "application/json",
@@ -120,17 +129,33 @@ export async function generateTitleImage({ prompt, imageRefUrl, imageRefUrls }) 
   return poll(id, cred);
 }
 
-// AI영상(DoP i2v). imageUrl: 독사진 1장 서명URL → 영상. 반환: 영상 URL.
-//   /v1/image2video/dop { params:{ model:"dop-turbo", prompt, input_images:[{type:"image_url",image_url}] } } (실측 검증·운영 사용).
-//   ※ Kling(/v1/image2video/kling, model kling-v2-1)은 이 계정들에서 잡이 즉시 'failed'로 떨어져 사용 불가(계정 모델접근/플랜 이슈,
-//     API 스키마는 허용하나 실생성 거부). 영상은 정상 작동하는 DoP로 생성. (Kling 복귀하려면 Higgsfield 계정에 Kling 권한 필요)
-export async function generateMemoryVideo({ prompt, imageUrl, imageUrls, model = "dop-turbo" }) {
+// AI영상(Kling i2v). imageUrl: 독사진 1장 서명URL → 영상. 반환: 영상 URL.
+//   /v1/image2video/kling { params:{ model:"kling-v2-1", prompt, input_image:{type,image_url},
+//     cfg_scale, enhance_prompt, duration, negative_prompt } } — 실측 검증(2026-07-01: queued→completed, results.raw.url).
+//   ※ 프롬프트 영향 크게: cfg_scale↑(기본 0.8)로 프롬프트 밀착. input_image는 단일 객체(DoP처럼 배열로 보내면 422).
+//   ※ Kling은 프롬프트를 강하게 반영(DoP는 입력사진 지배·프롬프트 약함) → 프롬프트가 다르면 결과도 달라짐.
+//   ※ Kling 생성 실패 시 DoP(dop-turbo)로 폴백 — 영상이 통째로 안 빠지게(부분실패 무증상 방지). 경고 로그 남김.
+export async function generateMemoryVideo({ prompt, imageUrl, imageUrls, negativePrompt }) {
   const url = imageUrl || (imageUrls && imageUrls[0]);
-  if (!url) throw new Error("DoP: 입력 사진(독사진) 필요");
-  // DoP는 input_images 최대 1장(2장 보내면 422) — 첫 독사진으로 생성. 서버가 motions·seed 자동 부여.
-  const params = { model, prompt, input_images: [{ type: "image_url", image_url: url }] };
-  // DoP 영상생성은 수 분 소요 — 폴링 타임아웃 길게(기본 12분, 리퍼 15분보다 짧게). env로 조정.
+  if (!url) throw new Error("Kling: 입력 사진(독사진) 필요");
+  // 영상생성은 수 분 소요 — 폴링 타임아웃 길게(기본 12분, 리퍼 15분보다 짧게). env로 조정.
   const timeoutMs = Number(process.env.HIGGSFIELD_POLL_MS) || 720000;
-  const { id, cred } = await submit("/v1/image2video/dop", params);
-  return poll(id, cred, { timeoutMs });
+  // 1순위 Kling — input_image 단일 객체 + cfg_scale로 프롬프트 밀착.
+  const klingParams = {
+    model: KLING_MODEL, prompt,
+    input_image: { type: "image_url", image_url: url },
+    cfg_scale: KLING_CFG, enhance_prompt: KLING_ENHANCE,
+    duration: KLING_DUR, negative_prompt: negativePrompt ?? KLING_NEG,
+  };
+  try {
+    const { id, cred } = await submit("/v1/image2video/kling", klingParams);
+    return await poll(id, cred, { timeoutMs });
+  } catch (e) {
+    if (!KLING_FALLBACK_DOP) throw e;
+    log.warn(`Kling 영상생성 실패 → DoP 폴백(프롬프트 반영 약함): ${e.message}`);
+    // DoP는 input_images 배열(최대 1장). 서버가 motions·seed 자동 부여 — 프롬프트 영향 약함(폴백 전용).
+    const dopParams = { model: "dop-turbo", prompt, input_images: [{ type: "image_url", image_url: url }] };
+    const { id, cred } = await submit("/v1/image2video/dop", dopParams);
+    return await poll(id, cred, { timeoutMs });
+  }
 }
