@@ -22,9 +22,9 @@ export async function fetchSubmissions() {
 export async function fetchReservationMedia(reservationId) {
   const d = need();
   const { data: sub, error: se } = await d.from("submissions")
-    .select("id, token, letter, met_date, part_date, status, video_url, regen_target, edit_doc, bgm_id").eq("reservation_id", reservationId).maybeSingle();
+    .select("id, token, letter, met_date, part_date, status, video_url, regen_target, edit_doc, bgm_id, transition_map, transition_default").eq("reservation_id", reservationId).maybeSingle();
   if (se) throw new Error("제출 조회 실패: " + se.message);
-  if (!sub) return { assets: [], submissionId: null, token: null, letter: null, metDate: null, partDate: null, status: null, videoUrl: null, regenTarget: null, editDoc: null, bgmId: null };
+  if (!sub) return { assets: [], submissionId: null, token: null, letter: null, metDate: null, partDate: null, status: null, videoUrl: null, regenTarget: null, editDoc: null, bgmId: null, transMap: [], transDefault: 0 };
   const { data: rows, error: ae } = await d.from("submission_assets")
     .select("id,kind,role,name,storage_path,sort_order,selected,created_at").eq("submission_id", sub.id).order("created_at");
   if (ae) throw new Error("자산 조회 실패: " + ae.message);
@@ -40,7 +40,9 @@ export async function fetchReservationMedia(reservationId) {
   const urls = {};
   paths.forEach((p) => { const c = _urlCache.get(p); if (c) urls[p] = c.url; });
   const assets = list.map((r) => ({ id: r.id, kind: r.kind, role: r.role, name: r.name, sortOrder: r.sort_order, selected: r.selected !== false, createdAt: r.created_at, url: urls[r.storage_path] || null }));
-  return { assets, submissionId: sub.id, token: sub.token, letter: sub.letter, metDate: sub.met_date, partDate: sub.part_date, status: sub.status, videoUrl: sub.video_url, regenTarget: sub.regen_target, editDoc: sub.edit_doc || null, bgmId: sub.bgm_id || null };
+  // transition_map = 보호자가 위저드에서 고른 사진순 전환(xfade명 배열, index i=i번째 사진으로 넘어올 때). 미제출·구버전은 빈 배열.
+  return { assets, submissionId: sub.id, token: sub.token, letter: sub.letter, metDate: sub.met_date, partDate: sub.part_date, status: sub.status, videoUrl: sub.video_url, regenTarget: sub.regen_target, editDoc: sub.edit_doc || null, bgmId: sub.bgm_id || null,
+    transMap: Array.isArray(sub.transition_map) ? sub.transition_map : [], transDefault: sub.transition_default ?? 0 };
 }
 
 // 이 영상의 배경 음악 지정 — submissions.bgm_id(합성이 템플릿 기본보다 먼저 사용). null이면 템플릿 기본으로.
@@ -135,6 +137,15 @@ export async function moveSlidePhoto(submissionId, assetId, dir) {
       if (error) throw new Error(error.message);
     }
   }
+}
+
+// 추억 슬라이드 사진 사이 전환 저장 — 보호자가 위저드에서 고른 것을 스태프가 조정.
+//   xfades = 사진순(sort_order) xfade명 배열(index i=i번째 사진으로 넘어올 때 전환, 첫 장은 워커가 무시).
+//   submissions.transition_map에 그대로 저장 → 워커(emitSlides·slide_video 생성)가 동일 배열을 사용.
+export async function setSlideTransitions(submissionId, xfades) {
+  const d = need();
+  const { error } = await d.from("submissions").update({ transition_map: xfades }).eq("id", submissionId);
+  if (error) throw new Error(error.message);
 }
 
 // 단일 블록 AI 재생성 요청 — regen_target 지정 + status=queued(워커가 해당 블록만 재생성).

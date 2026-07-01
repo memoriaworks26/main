@@ -273,6 +273,14 @@ export const actions = {
       .then(() => actions.loadReservationMedia(reservationId))
       .catch((e) => toast("순서 변경 실패: " + e.message));
   },
+  // 추억 슬라이드 사진 사이 전환 저장 — 보호자 위저드 선택(transition_map)을 스태프가 조정. 즉시 DB 반영 후 미디어 갱신.
+  //   xfades = 사진순 xfade명 배열(워커 emitSlides·slide_video 생성이 그대로 사용).
+  setSlideTransitions: (reservationId, submissionId, xfades) => {
+    if (!LIVE || !submissionId) return;
+    subs.setSlideTransitions(submissionId, xfades)
+      .then(() => { actions.loadReservationMedia(reservationId); toast("장면 전환을 변경했습니다 — 「사진으로 만들기」·다음 최종 렌더부터 반영"); })
+      .catch((e) => toast("전환 변경 실패: " + e.message));
+  },
   // 이 영상 배경 음악 지정 — submissions.bgm_id(합성이 템플릿 기본보다 먼저 사용). null이면 템플릿 기본으로 되돌림.
   setSubmissionBgm: (reservationId, submissionId, bgmId) => {
     if (!LIVE || !submissionId) return;

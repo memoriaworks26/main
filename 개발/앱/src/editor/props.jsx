@@ -292,21 +292,33 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
   const _pid = partnerId || reservation?.partnerId; // 파트너 스코프 통일(VideoEditor가 이름매칭으로 해결한 id 우선)
   const _tb = (_pid && _store.templates?.[_pid]) || {};
   const bgmVol = _tb.bgmVol ?? 70, bgmFadeIn = _tb.bgmFadeIn ?? 1, bgmFadeOut = _tb.bgmFadeOut ?? 2;
-  // 추억 슬라이드 — 실제 보호자 사진(없으면 목업 폴백) + 사진 사이 전환(기본 페이드).
+  // 추억 슬라이드 — 실제 보호자 사진(없으면 목업 폴백) + 보호자가 위저드에서 고른 사진 사이 전환.
   const _slideMock = !_slidePhotos.length;  // 실제 업로드 사진 없음/로딩 전 → 샘플(렌더엔 안 들어감)
   const _vidMock = !_memoryVideos.length;   // 실제 보호자 영상 없음/로딩 전 → 샘플
   // 실제 사진이면 자산객체(id 보유·순서변경·삭제 가능), 없으면 샘플 URL만.
   const slideItems = _slidePhotos.length ? _slidePhotos : SLIDE_PHOTOS.map((url) => ({ url }));
   const slideSrcs = slideItems.map((it) => it.url);
-  const slideTrans = item.slideTrans || slideSrcs.slice(1).map(() => "페이드");
-  const setSlideTrans = (i, v) => { const n = slideTrans.slice(); n[i] = v; onEdit(item.id, { slideTrans: n }); };
-  // 사진 순서변경·삭제 — 실제 예약(제출물+토큰)에서만. sort_order를 즉시 DB에 반영(내역/버전과 무관한 단일 슬롯).
+  // 사진 순서변경·삭제·전환 — 실제 예약(제출물+토큰)에서만. sort_order·transition_map을 즉시 DB에 반영(내역/버전과 무관한 단일 슬롯).
   const canEditSlide = !!(reservation?.id && media?.submissionId && media?.token);
   const moveSlide = (assetId, dir) => actions.moveSlidePhoto(reservation.id, media.submissionId, assetId, dir);
   const removeSlide = async (assetId) => {
     if (_slidePhotos.length <= 1) { toast("최소 한 장은 남겨 주세요"); return; }
     if (await confirm({ title: "사진 삭제", message: "이 사진을 추억 슬라이드에서 삭제합니다.", danger: true })) actions.deleteAsset(reservation.id, assetId);
   };
+  // 사진 사이 전환 — 유저링크와 동일한 전환 목록(D.USER_TRANSITIONS, xfade명 10종). 보호자가 위저드에서 고른 값
+  //   (submissions.transition_map = 사진순 xfade명 배열, index i=i번째 사진으로 넘어올 때)을 그대로 반영·수정한다.
+  //   편집기는 사진 '사이'에 선택기를 두므로 사이[i](사진 i→i+1) = transMap[i+1]. 워커가 무시하는 index 0(첫 장)은 선택기 없음.
+  const _transMap = Array.isArray(media?.transMap) ? media.transMap : [];
+  const slideTrans = slideSrcs.slice(1).map((_, i) => _transMap[i + 1] || "fade"); // 누락=fade(워커 폴백과 동일)
+  const setSlideTrans = (i, x) => {
+    if (!canEditSlide) { toast("실제 예약에서만 변경할 수 있습니다"); return; }
+    // 현재 사진 수만큼 transition_map을 정규화(누락=fade)한 뒤 바뀐 사이 전환만 교체 → 워커가 쓰는 배열에 그대로 저장.
+    const next = slideItems.map((_, k) => _transMap[k] || "fade");
+    next[i + 1] = x;
+    actions.setSlideTransitions(reservation.id, media.submissionId, next);
+  };
+  // 유저 소스 사진 원본 모두 받기 — 실제 업로드 사진만(목업 제외).
+  const dlAllSlides = async () => { for (const it of slideItems) { if (it.url) await dlAnchor(it.url, it.name); } };
   const Icon = BLOCK_ICON[k] || (k === "transition" ? ArrowRightLeft : k === "subtitle" ? Type : ImageIcon);
 
   return (
@@ -392,25 +404,27 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
                     <div className="flex items-center gap-2.5">
                       <img src={it.url} alt="" className="shrink-0" style={{ width: 64, aspectRatio: "16/9", objectFit: "cover", borderRadius: 4, border: "1px solid " + LINE2 }} />
                       <span className="text-[12px] font-semibold" style={{ color: INK }}>사진 {i + 1}</span>
-                      {canEditSlide && !_slideMock ? (
-                        <div className="ml-auto flex items-center gap-1">
-                          <span className="mr-0.5 text-[10.5px]" style={{ color: FAINT }}>{SLIDE_PER}초</span>
-                          <IcoBtn icon={ArrowUp} title="위로" disabled={i === 0} onClick={() => moveSlide(it.id, -1)} />
-                          <IcoBtn icon={ArrowDown} title="아래로" disabled={i === slideItems.length - 1} onClick={() => moveSlide(it.id, 1)} />
-                          <IcoBtn icon={Trash2} title="사진 삭제" danger onClick={() => removeSlide(it.id)} />
-                        </div>
-                      ) : (
-                        <span className="ml-auto text-[10.5px]" style={{ color: FAINT }}>{SLIDE_PER}초</span>
-                      )}
+                      <div className="ml-auto flex items-center gap-1">
+                        <span className="mr-0.5 text-[10.5px]" style={{ color: FAINT }}>{SLIDE_PER}초</span>
+                        {/* 유저(보호자) 원본 사진 개별 다운로드 — 실제 업로드 자산일 때만(목업 제외) */}
+                        {!_slideMock && it.url && <IcoBtn icon={Download} title="이 사진 원본 다운로드" onClick={() => dlAnchor(it.url, it.name)} />}
+                        {canEditSlide && !_slideMock && (
+                          <>
+                            <IcoBtn icon={ArrowUp} title="위로" disabled={i === 0} onClick={() => moveSlide(it.id, -1)} />
+                            <IcoBtn icon={ArrowDown} title="아래로" disabled={i === slideItems.length - 1} onClick={() => moveSlide(it.id, 1)} />
+                            <IcoBtn icon={Trash2} title="사진 삭제" danger onClick={() => removeSlide(it.id)} />
+                          </>
+                        )}
+                      </div>
                     </div>
-                    {/* 사진 사이 전환 */}
+                    {/* 사진 사이 전환 — 유저링크와 동일한 전환 10종(D.USER_TRANSITIONS). 값=xfade명 */}
                     {i < slideItems.length - 1 && (
                       <div className="flex items-center gap-1.5 py-1" style={{ paddingLeft: 26 }}>
                         <span className="h-3.5 w-px" style={{ background: LINE2 }} />
                         <ArrowRightLeft className="h-3 w-3 shrink-0" style={{ color: GOLD_D }} />
-                        <select value={slideTrans[i]} onChange={(e) => setSlideTrans(i, e.target.value)}
-                          className="text-[11.5px] outline-none" style={{ height: 26, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK, padding: "0 6px" }}>
-                          {D.TRANSITION_TYPES.map((t) => <option key={t}>{t}</option>)}
+                        <select value={slideTrans[i]} onChange={(e) => setSlideTrans(i, e.target.value)} disabled={!canEditSlide || _slideMock}
+                          className="text-[11.5px] outline-none disabled:opacity-60" style={{ height: 26, background: "#fff", border: "1px solid " + LINE2, borderRadius: RADIUS, color: INK, padding: "0 6px" }}>
+                          {D.USER_TRANSITIONS.map((t) => <option key={t.x} value={t.x}>{t.ko}</option>)}
                         </select>
                         <span className="h-3.5 w-px" style={{ background: LINE2 }} />
                       </div>
@@ -418,6 +432,12 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
                   </React.Fragment>
                 ))}
               </div>
+              {/* 유저 소스 사진 원본 모두 받기 — 실제 업로드 사진이 있을 때만 */}
+              {!_slideMock && slideItems.some((it) => it.url) && (
+                <button type="button" onClick={dlAllSlides} className="mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-[12.5px] font-semibold" style={{ border: "1px solid " + LINE2, borderRadius: RADIUS, color: MUTE }}>
+                  <Download className="h-3.5 w-3.5" /> 사진 원본 모두 받기 ({slideItems.filter((it) => it.url).length}장)
+                </button>
+              )}
               {reservation?.id && media?.token && media?.submissionId ? (
                 <FileButton accept="image/*" onFile={(f) => actions.addSlidePhoto(reservation.id, media.submissionId, media.token, f)}
                   className="mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-[12.5px] font-semibold" style={{ border: "1px dashed " + LINE2, borderRadius: RADIUS, color: GOLD_D }}>
