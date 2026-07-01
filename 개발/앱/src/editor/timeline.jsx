@@ -143,10 +143,15 @@ export function Timeline({ blocks, edits = {}, bgmName, subtitles = [], onSubCha
       <div className="mb-2 flex items-center justify-between">
         <div className="text-[13px] font-bold" style={{ color: INK }}>타임라인 <span className="font-normal" style={{ color: FAINT }}>· 블록·자막을 눌러 편집</span></div>
         {onAddSub && (
-          <button type="button" onClick={onAddSub} className="flex items-center gap-1 px-2.5 py-1 text-[12px] font-semibold outline-none"
-            style={{ color: GOLD_D, background: GOLD_SOFT, borderRadius: 6 }}>
-            <Plus className="h-3.5 w-3.5" strokeWidth={2.4} /> 자막 추가
-          </button>
+          <div className="flex items-center gap-1.5">
+            {[0, 1].map((tk) => (
+              <button key={tk} type="button" onClick={() => onAddSub(tk)} title={`자막 ${tk + 1}(${tk === 0 ? "첫째" : "둘째"} 줄)에 추가`}
+                className="flex items-center gap-1 px-2.5 py-1 text-[12px] font-semibold outline-none"
+                style={{ color: GOLD_D, background: GOLD_SOFT, borderRadius: 6 }}>
+                <Plus className="h-3.5 w-3.5" strokeWidth={2.4} /> 자막 {tk + 1}
+              </button>
+            ))}
+          </div>
         )}
       </div>
       <div className="overflow-x-auto pb-1">
@@ -192,11 +197,13 @@ export function Timeline({ blocks, edits = {}, bgmName, subtitles = [], onSubCha
             </div>
           </div>
 
-          {/* 자막 트랙 — 칸을 끌어 이동 / 양끝으로 길이 조절 / 눌러 글자·폰트·크기 편집 */}
-          <div className="mb-1.5 flex items-stretch gap-2">
-            <RowLabel name="자막" color="#9a6a1c" />
-            <SubtitleTrack subtitles={subtitles} tlMax={tlMax} selId={sel.scope === "subtitle" ? sel.id : null} onSel={onSel} onSubChange={onSubChange} />
-          </div>
+          {/* 자막 트랙(2줄) — 같은 시각에 최대 2개 동시 노출. 칸을 끌어 이동 / 양끝으로 길이 조절 / 눌러 편집. */}
+          {[0, 1].map((tk) => (
+            <div key={tk} className="mb-1.5 flex items-stretch gap-2">
+              <RowLabel name={`자막 ${tk + 1}`} color="#9a6a1c" />
+              <SubtitleTrack subtitles={subtitles.filter((s) => (s.track ?? 0) === tk)} tlMax={tlMax} selId={sel.scope === "subtitle" ? sel.id : null} onSel={onSel} onSubChange={onSubChange} />
+            </div>
+          ))}
 
           {/* 음악 트랙(시각) — 추억 슬라이드 블록 구간을 따라감. 편집은 슬라이드 BGM 영역에서 */}
           <div className="flex items-stretch gap-2">

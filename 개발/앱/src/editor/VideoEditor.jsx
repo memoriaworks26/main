@@ -203,12 +203,15 @@ export default function VideoEditor({ reservation, onClose }) {
     toast(blk.type === "slide" ? "슬라이드 영상을 만들고 있습니다 — 1~2분 후 자동 갱신됩니다" : "AI 재생성을 요청했습니다 — 1~2분 후 결과가 자동 갱신됩니다");
   };
   // 자막 추가/삭제 — 기본 없음에서 「자막 추가」로 넣고 미리보기/타임라인에서 배치. 텍스트·시간·위치는 edits로.
-  const addSub = () => {
+  //   track 0=자막1·1=자막2 — 같은 시각에 최대 2개를 각 줄에 겹치지 않게 배치(둘 다 활성이면 워커가 동시 표시).
+  const addSub = (track = 0) => {
+    const tk = Number(track) === 1 ? 1 : 0;          // 이벤트 객체가 넘어와도 0으로 방어
     const id = "sub-" + Date.now();
-    const s = { id, text: "자막을 입력하세요", start: 0, end: 3, pos: "하단", font: D.SUBTITLE_FONT_DEFAULT, size: 48, color: "#f3e9c8", effect: D.SUBTITLE_EFFECT_DEFAULT };
+    const pos = tk === 1 ? "상단" : "하단";           // 2개 동시 노출 시 겹치지 않게 트랙별 기본 위치
+    const s = { id, text: "자막을 입력하세요", start: 0, end: 3, track: tk, pos, font: D.SUBTITLE_FONT_DEFAULT, size: 48, color: "#f3e9c8", effect: D.SUBTITLE_EFFECT_DEFAULT };
     commit({ ...doc, subs: [...subsBase, s] });
     setSel({ scope: "subtitle", kind: "subtitle", id });
-    toast("자막을 추가했습니다 — 미리보기에서 위치를 잡으세요");
+    toast(`자막 ${tk + 1}을 추가했습니다 — 미리보기에서 위치를 잡으세요`);
   };
   const removeSub = (id) => {
     const nextEdits = { ...edits }; delete nextEdits[id];

@@ -525,6 +525,7 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
           return (
           <>
             <Field label="자막 글자"><textarea rows={3} value={item.text ?? ""} onChange={(e) => onEdit(item.id, { text: e.target.value })} className="w-full resize-none p-3 text-[13.5px] leading-relaxed outline-none" style={{ ...inputStyle, height: "auto", fontFamily: fontVal }} /></Field>
+            <Field label="자막 줄 · 동시 노출 트랙"><select className={inputCls} style={inputStyle} value={item.track ?? 0} onChange={(e) => onEdit(item.id, { track: +e.target.value })}><option value={0}>자막 1 (첫째 줄)</option><option value={1}>자막 2 (둘째 줄)</option></select></Field>
             <Field label="위치"><select className={inputCls} style={inputStyle} value={item.xPct != null ? "직접배치" : (item.pos || "하단")} onChange={(e) => onEdit(item.id, { pos: e.target.value, xPct: null, yPct: null })}>{item.xPct != null && <option value="직접배치">직접배치(드래그)</option>}{D.SUBTITLE_POS.map((p) => <option key={p}>{p}</option>)}</select></Field>
             <Field label="글자 방향">
               <label className="flex cursor-pointer items-center gap-2 px-3 text-[13px]" style={{ ...inputStyle, height: 38 }}>
