@@ -360,7 +360,8 @@ export function StepBody({ step, st }) {
       </div>
     );
   }
-  // 1 — AI 변환: 독사진 3장 전용 업로드 + 역할 지정 (슬라이드 소스와 별개로 먼저 올림)
+  // 1 — AI 변환: 독사진 1~3장 전용 업로드 + 역할 지정 (슬라이드 소스와 별개로 먼저 올림)
+  //   1장=타이틀만(AI 영상 없음) · 2장=타이틀+AI 영상 A · 3장=타이틀+AI 영상 A·B
   if (step === 1)
     return (
       <div>
@@ -399,8 +400,8 @@ export function StepBody({ step, st }) {
         </div>
 
         <div className="mb-1.5 flex items-center gap-1.5 text-[12.5px] font-bold" style={{ color: INK }}>
-          <Sparkles className="h-3.5 w-3.5" style={{ color: GOLD_D }} /> 독사진 3장 <span className="font-normal" style={{ color: FAINT }}>· 한 장을 타이틀로 선택</span>
-          <span className="ml-auto text-[11.5px] font-bold tabular-nums" style={{ color: st.aiPhotos.length === 3 ? "#3a7468" : GOLD_D }}>{st.aiPhotos.length}/3</span>
+          <Sparkles className="h-3.5 w-3.5" style={{ color: GOLD_D }} /> 독사진 1~3장 <span className="font-normal" style={{ color: FAINT }}>· 한 장을 타이틀로 선택</span>
+          <span className="ml-auto text-[11.5px] font-bold tabular-nums" style={{ color: st.aiPhotos.length >= 1 ? "#3a7468" : GOLD_D }}>{st.aiPhotos.length}/3</span>
         </div>
         <input ref={st.aiFileRef} type="file" accept="image/*" multiple className="hidden" onChange={st.onAiFiles} />
         <div className="grid grid-cols-3 gap-2">
@@ -439,13 +440,16 @@ export function StepBody({ step, st }) {
             );
           })}
         </div>
-        {st.aiPhotos.length < 3 && (
+        {st.aiPhotos.length < 1 && (
           <p className="mt-2 text-[11px] font-semibold leading-relaxed" style={{ color: GOLD_D }}>
-            ※ 독사진 3장을 모두 올려야 다음 단계로 넘어갈 수 있어요. (현재 {st.aiPhotos.length}/3)
+            ※ 독사진을 최소 1장 이상 올려야 다음 단계로 넘어갈 수 있어요. (1~3장)
           </p>
         )}
         <p className="mt-2 text-[10.5px] leading-relaxed" style={{ color: FAINT }}>
-          타이틀 1장 → AI 초상화(영정 타이틀) · 나머지 2장 → AI 영상: <b style={{ color: MUTE }}>앞 사진 = A</b>(추억 슬라이드 앞) · <b style={{ color: MUTE }}>뒤 사진 = B</b>(추억 영상 뒤).
+          <b style={{ color: MUTE }}>타이틀 1장</b> → AI 초상화(영정 타이틀). 더 올린 사진은 <b style={{ color: MUTE }}>AI 영상</b>이 됩니다 — <b style={{ color: MUTE }}>앞 = A</b>(추억 슬라이드 앞) · <b style={{ color: MUTE }}>뒤 = B</b>(추억 영상 뒤).
+        </p>
+        <p className="mt-1 text-[10.5px] leading-relaxed" style={{ color: FAINT }}>
+          1장만 올리면 <b style={{ color: MUTE }}>타이틀만</b> 만들어지고 AI 영상은 없어요. 2장이면 타이틀 + AI 영상 A, 3장이면 타이틀 + AI 영상 A·B.
         </p>
         <p className="mt-1.5 text-[10.5px] leading-relaxed" style={{ color: FAINT }}>
           ※ 사진만 올릴 수 있어요 (영상은 업로드 불가).

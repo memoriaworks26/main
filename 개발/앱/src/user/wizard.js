@@ -48,9 +48,9 @@ export function useUserWizard(previewBizId, stepCtl, previewOverride) {
   const aiFileRef = useRef(null);
   const PHOTO_MAX = 20;      // 추억 슬라이드 사진 최대 장수
   const VIDEO_MAX_SEC = 90;  // 추억 영상 총 길이 상한(1분30초)
-  // 독사진 3장(AI 변환 전용) — 슬라이드 소스와 별개로 먼저 업로드.
-  //   타이틀 1장 → GPT 이미지→이미지(영정 타이틀) · 나머지 2장 → Kling 이미지→영상(AI 추억 영상)
-  const [aiPhotos, setAiPhotos] = useState([]); // 항상 빈 상태로 시작 — 보호자가 직접 3장 업로드
+  // 독사진 1~3장(AI 변환 전용) — 슬라이드 소스와 별개로 먼저 업로드.
+  //   1장 → 타이틀만(영정, AI 영상 없음) · 2장 → 타이틀 + AI 영상 A · 3장 → 타이틀 + AI 영상 A·B
+  const [aiPhotos, setAiPhotos] = useState([]); // 항상 빈 상태로 시작 — 보호자가 1~3장 업로드
   const [skipAi, setSkipAi] = useState(false);  // 「AI 변환 안함」 — 체크 시 독사진 없이 진행(타이틀·AI영상 생성 생략)
   const addAiPhoto = () => aiFileRef.current && aiFileRef.current.click();
   const onAiFiles = (e) => {
@@ -67,10 +67,16 @@ export function useUserWizard(previewBizId, stepCtl, previewOverride) {
   };
   const removeAiPhoto = async (id) => {
     if (!(await confirm({ title: "사진 삭제", message: "이 사진을 삭제합니다.", danger: true }))) return;
-    setAiPhotos((p) => {
-      const gone = p.find((u) => u.id === id);
-      if (gone && gone.thumb && gone.thumb.startsWith("blob:")) URL.revokeObjectURL(gone.thumb);
-      return p.filter((u) => u.id !== id);
+    const idx = aiPhotos.findIndex((u) => u.id === id);
+    const gone = aiPhotos[idx];
+    if (gone && gone.thumb && gone.thumb.startsWith("blob:")) URL.revokeObjectURL(gone.thumb);
+    setAiPhotos((p) => p.filter((u) => u.id !== id));
+    // 타이틀 인덱스 보정 — 삭제로 인덱스가 밀리거나 범위를 벗어나면 유효한 사진으로 재지정(타이틀 누락 방지).
+    setTitleSel((s) => {
+      let t = idx < s ? s - 1 : s;               // 타이틀 앞 사진을 지우면 한 칸 당김
+      const nextLen = aiPhotos.length - 1;       // 삭제 후 장수
+      if (t > nextLen - 1) t = nextLen - 1;      // 범위 밖이면 마지막으로
+      return t < 0 ? 0 : t;
     });
   };
   const aiUploadingNow = aiPhotos.some((u) => u.uploading);
@@ -228,11 +234,13 @@ export function useUserWizard(previewBizId, stepCtl, previewOverride) {
     setSubmitting(true);
     // 카톡 인앱 등 제약 웹뷰에서 제출 중 예외가 나도 흰화면/멈춤 없이 안내 토스트로 복구.
     try {
-      // 독사진 3장 — 타이틀(Seedream i2i) 1장 + AI 영상(Kling i2v) 2장. AI 변환 안함이면 생략.
+      // 독사진 1~3장 — 타이틀(Seedream i2i) 1장 + AI 영상(Kling i2v) 0~2장(A·B). AI 변환 안함이면 생략.
+      //   1장=타이틀만 · 2장=타이틀+A · 3장=타이틀+A·B. titleSel은 범위 밖일 수 없게 보정(타이틀 누락 방지).
+      const tSel = Math.min(Math.max(titleSel, 0), Math.max(0, aiPhotos.length - 1));
       const aiAssets = skipAi ? [] : aiPhotos.map((u, i) => ({
         kind: "photo",
-        role: i === titleSel ? "title" : "ai_video",
-        engine: i === titleSel ? "seedream" : "kling",
+        role: i === tSel ? "title" : "ai_video",
+        engine: i === tSel ? "seedream" : "kling",
         name: u.name, storagePath: u.storagePath, sortOrder: i,
       }));
       // 추억 슬라이드 사진(앞) → 추억 영상(뒤) 순서. sortOrder는 사진 다음에 영상이 이어지도록 연속 부여.
@@ -245,7 +253,7 @@ export function useUserWizard(previewBizId, stepCtl, previewOverride) {
       //   transMap[u.id](사진별 선택) 없으면 기본(trans). transMap 자체가 임시 id 키라 워커가 직접 못 쓰므로 여기서 해소.
       const transMapResolved = photos.map((u) => (TRANSITIONS[transMap[u.id] ?? trans] || {}).x || "fade");
       const res = await submitLink(link.token || token, {
-        petName: petName.trim(), titleIndex: titleSel, transDefault: trans, transMap: transMapResolved, bgmId: bgmList[bgm]?.id, letter, metDate, partDate, assets, skipAi,
+        petName: petName.trim(), titleIndex: tSel, transDefault: trans, transMap: transMapResolved, bgmId: bgmList[bgm]?.id, letter, metDate, partDate, assets, skipAi,
         privacyAgreed: agreed, marketingAgreed,
       });
       if (!res.ok) { toast(res.error || "제출에 실패했습니다. 다시 시도해 주세요."); return; }
@@ -265,9 +273,9 @@ export function useUserWizard(previewBizId, stepCtl, previewOverride) {
 
   const last = STEPS.length - 1;
   const previewStep = last - 1;
-  // AI 변환: 반려동물명 입력 필수 + 독사진 3장(+완료). 단, 「AI 변환 안함」이면 사진 없이 진행.
+  // AI 변환: 반려동물명 입력 필수 + 독사진 1장 이상(최대 3장, 업로드 완료). 단, 「AI 변환 안함」이면 사진 없이 진행.
   const noSource = photos.length + videos.length === 0; // 추억 소스(사진·영상) 미업로드 — 1개 이상 올려야 다음 진행
-  const blocked = (step === 0 && !agreed) || (step === 1 && (!petName.trim() || (!skipAi && (aiPhotos.length < 3 || aiUploadingNow)))) || (step === 2 && (noSource || overLimit || photoOver || videoOver || uploadingNow || videoMeasuring)) || (step === previewStep && (submitting || uploadingNow));
+  const blocked = (step === 0 && !agreed) || (step === 1 && (!petName.trim() || (!skipAi && (aiPhotos.length < 1 || aiUploadingNow)))) || (step === 2 && (noSource || overLimit || photoOver || videoOver || uploadingNow || videoMeasuring)) || (step === previewStep && (submitting || uploadingNow));
 
   return { st, T, step, setStep, last, previewStep, blocked, submitting, liveMode, link, company, partnerCs, partners, doSubmit, policyOpen, setPolicyOpen };
 }
