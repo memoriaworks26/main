@@ -74,8 +74,8 @@ let state = {
   storageClasses: LIVE ? [] : D.STORAGE.classes.map((c) => ({ ...c })),  // [Phase4-8 배선]
   templates: LIVE ? {} : {  // [Phase4-4 배선] 라이브는 hydrate로 채움
     // 기본 템플릿(__default__) — 신규 파트너 복제 원본 + 파트너별 { bgm, blocks }
-    [D.DEFAULT_TEMPLATE_ID]: { bgm: D.DEFAULT_TEMPLATE.bgm, blocks: D.DEFAULT_TEMPLATE.blocks.map((b) => ({ ...b })) },
-    ...Object.fromEntries(Object.entries(D.TEMPLATE_ASSIGN).map(([k, v]) => [k, { bgm: v.bgm, blocks: v.blocks.map((b) => ({ ...b })) }])),
+    [D.DEFAULT_TEMPLATE_ID]: { bgm: D.DEFAULT_TEMPLATE.bgm, blocks: D.DEFAULT_TEMPLATE.blocks.map((b) => ({ ...b })), linkBgmIds: [] },
+    ...Object.fromEntries(Object.entries(D.TEMPLATE_ASSIGN).map(([k, v]) => [k, { bgm: v.bgm, blocks: v.blocks.map((b) => ({ ...b })), linkBgmIds: v.linkBgmIds || [] }])),
   },
   formConfigs: LIVE ? {} : Object.fromEntries(Object.entries(D.FORM_CONFIGS).map(([k, v]) => [k, Object.fromEntries(Object.entries(v).map(([fk, fv]) => [fk, { ...fv }]))])), // 파트너별 폼 선택항목 설정 [Phase4-7 배선]
   rooms: LIVE ? [] : D.ROOMS.map((r) => ({ ...r })),   // 호실 [Phase4-1b 배선] — 파트너 세션에서 hydrate
@@ -225,6 +225,19 @@ export const actions = {
       .then((b) => toast(`배경 음악 적용: ${b.name} — 다음 최종 렌더부터 반영`))
       .catch((e) => toast("음악 업로드 실패: " + e.message));
   },
+  // 템플릿 창에서 바로 음악 추가 — 공용 BGM 라이브러리(memoria.bgm)에 등록만(파트너 기본곡 미지정).
+  //   onDone(b|null): 등록된 곡(성공) 또는 null(실패)을 항상 콜백 — 호출측이 선택 목록에 넣고 로딩 해제.
+  addLibraryBgm: (file, meta, onDone) => {
+    if (!LIVE) {
+      const b = { id: "bgm-" + Date.now(), kind: "audio", name: file.name, meta: meta ?? null, shared: true };
+      set((s) => ({ bgm: [b, ...s.bgm] }));
+      onDone?.(b);
+      return;
+    }
+    bgmData.uploadBgm(null, file, meta)
+      .then((b) => { set((s) => ({ bgm: [b, ...s.bgm.filter((x) => x.id !== b.id)] })); toast(`음악 추가: ${b.name}`); onDone?.(b); })
+      .catch((e) => { toast("음악 업로드 실패: " + e.message); onDone?.(null); });
+  },
   // 편집기 전용 — 새 음악 업로드 → 공용 라이브러리 추가 + 이 영상에 즉시 적용(submissions.bgm_id). partnerId 있으면 파트너 기본곡도 갱신.
   uploadSlideBgm: (reservationId, submissionId, partnerId, file) => {
     if (!LIVE || !submissionId) return;
@@ -282,9 +295,10 @@ export const actions = {
       .catch((e) => toast("버전 선택 실패: " + e.message));
   },
   // 최종 합성 요청 — 워커가 블록 결과물로 최종 영상 합성(관리자 「최종 렌더」).
+  //   프로미스 반환 — 호출측(편집기)이 성공해야 예약을 컨펌 대기로 넘길 수 있게. 진행 중 렌더면 서버가 거부(reject).
   requestCompose: (reservationId) => {
-    if (!LIVE || !reservationId) return;
-    subs.requestCompose(reservationId).catch((e) => toast("합성 요청 실패: " + e.message));
+    if (!LIVE || !reservationId) return Promise.resolve();
+    return subs.requestCompose(reservationId);
   },
   // 편집기 편집본 저장 — submissions.edit_doc. 순서/숨김/전환/편지/자막/소리를 워커 compose가 다음 렌더부터 반영.
   //   반환 Promise(편집기 save()가 완료 토스트를 띄울 수 있게). 로컬 미디어 캐시도 즉시 갱신.
@@ -360,6 +374,24 @@ export const actions = {
       return;
     }
     set((s) => { const id = "biz-" + Date.now(); return { bizUnits: [...s.bizUnits, { id, name }], bizUnit: id }; }); // 추가 즉시 선택
+  },
+  // 사업부 이름 변경.
+  renameBizUnit: (id, name) => {
+    const n = (name || "").trim();
+    if (!n) return;
+    const apply = (s) => ({ bizUnits: s.bizUnits.map((b) => (b.id === id ? { ...b, name: n } : b)) });
+    if (LIVE) { orgs.updateBizUnit(id, n).then(() => set(apply)).catch((e) => toast("사업부 이름 변경 실패: " + e.message)); return; }
+    set(apply);
+  },
+  // 사업부 삭제 — 삭제 후 남은 사업부 중 하나로 선택 이동(모두 없으면 null).
+  deleteBizUnit: (id) => {
+    const apply = (s) => {
+      const rest = s.bizUnits.filter((b) => b.id !== id);
+      const bizUnit = s.bizUnit === id ? (rest[0]?.id ?? null) : s.bizUnit;
+      return { bizUnits: rest, bizUnit };
+    };
+    if (LIVE) { orgs.deleteBizUnit(id).then(() => set(apply)).catch((e) => toast("사업부 삭제 실패: " + e.message)); return; }
+    set(apply);
   },
   // 사업부 용어 설정 (파트너 콘솔·유저 링크 노출 텍스트 — bizId·termKey별 patch) [Phase4-7 배선]
   setTermConfig: (bizId, key, patch) => {
@@ -830,6 +862,24 @@ export const actions = {
     }
     set((s) => ({ bgm: s.bgm.filter((b) => b.id !== id) }));
   },
+  // BGM 대상(귀속) 변경 (콘텐츠 허브 음악 탭) — target="공통"이면 공용, 아니면 파트너 id. [0053]
+  setBgmPartner: (id, target) => {
+    const shared = target === "공통";
+    const partnerId = shared ? null : target;
+    if (!shared && !partnerId) return;
+    const partnerName = shared ? undefined : state.partners.find((p) => p.id === partnerId)?.name;
+    if (!shared && !partnerName) { toast("파트너를 찾을 수 없습니다."); return; }
+    const apply = (s) => ({ bgm: s.bgm.map((b) => b.id === id
+      ? (shared ? { ...b, shared: true, partnerId: undefined, partner: undefined }
+                : { ...b, shared: false, partnerId, partner: partnerName }) : b) });
+    if (LIVE) {
+      bgmData.setBgmPartner(id, partnerId)
+        .then(() => set(apply))
+        .catch((e) => toast("음악 대상 변경 실패: " + e.message));
+      return;
+    }
+    set(apply);
+  },
   // 공용 BGM 이름 변경 (콘텐츠 허브 음악 탭) — 음원·storage_path는 그대로.
   renameBgm: (id, name) => {
     const nm = (name || "").trim();
@@ -883,7 +933,7 @@ export const actions = {
         .then(async (p) => {
           // 기본 템플릿이 store에 없으면(미저장·미hydrate·worker RLS 등) 코드 기본값으로 폴백 — 빈 복제 방지.
           const def = state.templates[D.DEFAULT_TEMPLATE_ID] || { bgm: D.DEFAULT_TEMPLATE.bgm, blocks: D.DEFAULT_TEMPLATE.blocks };
-          const cloned = { bgm: def.bgm, blocks: def.blocks.map((b, i) => ({ ...b, id: "e-" + Date.now() + "-" + i })) };
+          const cloned = { bgm: def.bgm, blocks: def.blocks.map((b, i) => ({ ...b, id: "e-" + Date.now() + "-" + i })), linkBgmIds: def.linkBgmIds || [] };
           // 템플릿 복제를 가장 먼저 — 부차 단계(edge 계정발급·호실)가 지연/실패/미응답해도 기본 템플릿은 반드시 생성.
           //   (과거: provisionPartner를 먼저 await → edge 미응답 시 그 뒤 upsertTemplate가 영영 미실행되어 파트너만 남고 템플릿 누락)
           try { await tpl.upsertTemplate(p.id, cloned); } catch (e) { toast("템플릿 생성 실패: " + e.message); }
@@ -897,7 +947,7 @@ export const actions = {
     }
     set((s) => {
       const def = s.templates[D.DEFAULT_TEMPLATE_ID] || { bgm: D.DEFAULT_TEMPLATE.bgm, blocks: D.DEFAULT_TEMPLATE.blocks };
-      const cloned = { bgm: def.bgm, blocks: def.blocks.map((b, i) => ({ ...b, id: "e-" + Date.now() + "-" + i })) };
+      const cloned = { bgm: def.bgm, blocks: def.blocks.map((b, i) => ({ ...b, id: "e-" + Date.now() + "-" + i })), linkBgmIds: def.linkBgmIds || [] };
       return { partners: [...s.partners, { ...partner, bizUnit: s.bizUnit }], templates: { ...s.templates, [partner.id]: cloned } };
     });
   },

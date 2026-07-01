@@ -13,12 +13,27 @@ export const BUCKETS = {
 
 const need = () => { const sb = getClient(); if (!sb) throw new Error("백엔드 미연결"); return sb; };
 
+// 서명URL 메모 캐시 — 같은 (bucket,path,expiresSec)는 만료 전까지 재발급 없이 재사용.
+//   콘텐츠 허브 표 썸네일이 받아둔 URL을 미리보기 모달이 그대로 재사용 → 즉시 표시.
+//   in-flight도 같은 Promise로 합쳐, 같은 파일을 여러 셀이 동시에 열어도 왕복은 1회.
+//   유효기간은 실제 만료의 90%까지만 캐시(경계에서 만료된 URL 반환 방지).
+const _signedCache = new Map(); // key → { at, promise }
+
 // 비공개 객체 다운로드/재생용 서명 URL(기본 1시간).
-export async function signedUrl(bucket, path, expiresSec = 3600) {
-  const sb = need();
-  const { data, error } = await sb.storage.from(bucket).createSignedUrl(path, expiresSec);
-  if (error) throw new Error("서명URL 발급 실패: " + error.message);
-  return data.signedUrl;
+export function signedUrl(bucket, path, expiresSec = 3600) {
+  const key = `${bucket}|${path}|${expiresSec}`;
+  const hit = _signedCache.get(key);
+  if (hit && Date.now() - hit.at < expiresSec * 900) return hit.promise;
+  const promise = (async () => {
+    const sb = need();
+    const { data, error } = await sb.storage.from(bucket).createSignedUrl(path, expiresSec);
+    if (error) throw new Error("서명URL 발급 실패: " + error.message);
+    return data.signedUrl;
+  })();
+  _signedCache.set(key, { at: Date.now(), promise });
+  // 실패는 캐시에서 즉시 제거 — 다음 요청이 재발급을 시도할 수 있게.
+  promise.catch(() => { if (_signedCache.get(key)?.promise === promise) _signedCache.delete(key); });
+  return promise;
 }
 
 // 파일 업로드. path는 버킷 내 경로(예: `${partnerId}/${assetId}.mp4`). 반환: 저장 경로.

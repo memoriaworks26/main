@@ -120,13 +120,14 @@ export async function composeFinal(job, assets) {
     async function emitAi(i, fade) { if (aiRes[i]) { const fn = `ai${i}.mp4`; await dl(aiRes[i], fn); segs.push({ type: "video", path: path.join(dir, fn), fade }); } }
     // 추억 슬라이드(사진) — 사전 합성된 slide_video 있으면 그대로, 없으면 사진+전환으로 슬라이드쇼 합성(한 클립).
     async function emitSlides(fade) {
-      if (slideVid) { await dl(slideVid, "slidevid.mp4"); segs.push({ type: "video", path: path.join(dir, "slidevid.mp4"), fade }); return; }
+      // slide:true — BGM은 이 추억 슬라이드(사진) 구간에서만 재생(compose가 이 표시로 BGM 구간을 한정).
+      if (slideVid) { await dl(slideVid, "slidevid.mp4"); segs.push({ type: "video", path: path.join(dir, "slidevid.mp4"), slide: true, fade }); return; }
       if (!slidePhotos.length) return;
       const items = [];
       for (let i = 0; i < slidePhotos.length; i++) { await dl(slidePhotos[i], `s${i}.img`); items.push({ path: path.join(dir, `s${i}.img`), dur: SLIDE_DUR, xfade: slideXfades[i] || "fade" }); }
       const ss = path.join(dir, "slides.mp4");
       await makeSlideshow(items, ss);
-      segs.push({ type: "video", path: ss, fade });
+      segs.push({ type: "video", path: ss, slide: true, fade });
     }
     // 추억 영상(개별 클립) — 원본 사운드 유지(mem). 첫 클립만 경계 페이드. vols[i]=영상별 음량%(편집기 슬라이더).
     async function emitMemVideos(fade, vols) { for (let i = 0; i < memVideos.length; i++) { await dl(memVideos[i], `m${i}.mp4`); segs.push({ type: "video", path: path.join(dir, `m${i}.mp4`), mem: true, vol: Array.isArray(vols) ? vols[i] : undefined, fade: fade && i === 0 }); } }

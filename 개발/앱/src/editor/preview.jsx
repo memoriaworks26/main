@@ -52,13 +52,20 @@ function SubtitleLayer({ boxRef, subs, time, selSubId, onSubEdit, onSelSub }) {
         const p = drag && drag.id === s.id ? { xPct: drag.xPct, yPct: drag.yPct } : subPos(s);
         const fontPx = Math.max(8, (s.size || 48) * (boxW / 1920));
         const sel = s.id === selSubId;
+        const vertical = !!s.vertical;
         return (
           <div key={s.id}
             onPointerDown={(e) => { e.stopPropagation(); onSelSub && onSelSub(s.id); setDragBoth({ id: s.id, ...p }); }}
             className="absolute select-none px-1 text-center leading-snug"
             style={{
               left: p.xPct + "%", top: p.yPct + "%", transform: "translate(-50%,-50%)",
-              maxWidth: "92%", cursor: "move", whiteSpace: "pre-wrap", zIndex: 20,
+              cursor: "move", whiteSpace: "pre-wrap", zIndex: 20,
+              // 폭을 내용(max-content) 기준으로 고정 — left만 지정된 절대배치는 오른쪽으로 갈수록
+              //   shrink-to-fit 폭이 줄어 글자가 세로로 쪼개진다(위치=세로로 오해됨). 위치와 무관하게 가로 유지.
+              //   세로는 '세로로 변환' 체크로만(writingMode) — 드래그 위치로 자동 세로 안 됨.
+              ...(vertical
+                ? { writingMode: "vertical-rl", maxHeight: "88%" }
+                : { width: "max-content", maxWidth: "92%" }),
               fontFamily: subtitleFontCss(s.font), fontSize: fontPx, color: s.color || "#f3e9c8",
               ...subtitleEffectStyle(s.effect || SUBTITLE_EFFECT_DEFAULT),
               outline: sel ? "1px dashed rgba(212,175,90,.9)" : "none", borderRadius: 3,

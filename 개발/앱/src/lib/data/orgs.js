@@ -87,3 +87,20 @@ export async function createBizUnit(name) {
   if (error) throw new Error(error.message);
   return mapBiz(data);
 }
+
+export async function updateBizUnit(id, name) {
+  const d = need();
+  const { data, error } = await d.from("biz_units").update({ name }).eq("id", id).select().single();
+  if (error) throw new Error(error.message);
+  return mapBiz(data);
+}
+
+// 사업부 삭제 — 소속 파트너사·계정(staff)이 있으면 DB가 FK로 거부(23503) → 친절 안내로 변환.
+export async function deleteBizUnit(id) {
+  const d = need();
+  const { error } = await d.from("biz_units").delete().eq("id", id);
+  if (error) {
+    if (error.code === "23503") throw new Error("소속 파트너사나 계정이 남아 있어 삭제할 수 없습니다. 먼저 파트너사를 다른 사업부로 옮기거나 정리하세요.");
+    throw new Error(error.message);
+  }
+}

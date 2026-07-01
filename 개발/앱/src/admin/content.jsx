@@ -53,7 +53,7 @@ const durLabel = (c) => { const m = durMatch(c); return m ? m[1] + ":" + m[2] : 
 const durSec = (c) => { const m = durMatch(c); return m ? (+m[1] * 60 + +m[2]) : -1; };
 // 길이 부분을 뺀 나머지를 '형식'으로 (해상도·비트레이트·"투명 PNG" 등)
 const fmtLabel = (c) => ((c.meta || "").replace(/\d+:\d{2}\s*·?\s*/, "").trim() || KIND_LABEL[c.kind] || "—");
-// 귀속(대상) 라벨 — 공통(공용) 또는 파트너사명. 음악(BGM)은 항상 공용.
+// 귀속(대상) 라벨 — 공용 또는 파트너사명. 음악·클립·사진 모두 동일(대상 편집 가능).
 const ownerLabel = (c) => (c.shared ? "공용" : (c.partner || "—"));
 const contentSortValue = (c, k) =>
   k === "kind" ? (KIND_RANK[c.kind] ?? 9) :
@@ -273,30 +273,32 @@ export function ContentHub() {
   const onFiles = (list) => {
     const files = Array.from(list || []);
     if (!files.length) return;
-    const targetLabel = partner === "공통" ? "공용(모든 파트너)" : (allPartners.find((p) => p.id === partner)?.name || partner); // 음악은 항상 공용 BGM
+    // 업로드는 항상 공용으로 저장(위 대상 필터와 무관) — 대상(파트너)은 올린 뒤 표에서 개별 지정.
     const entries = files.map((file, k) => ({
       upId: `up-${Date.now()}-${k}-${Math.random().toString(36).slice(2, 6)}`,
-      name: file.name, kind: kindOf(file), progress: 0, status: "prep", file, target: partner, targetLabel,
+      name: file.name, kind: kindOf(file), progress: 0, status: "prep", file, target: "공통", targetLabel: "공용(모든 파트너)",
     }));
     setUploads((u) => [...entries, ...u]); // 즉시 행으로 표시
     enqueue(entries);                       // 백그라운드 처리
   };
-  // 인라인 편집(이름 + 귀속) — 음악은 BGM 라이브러리(이름만, 항상 공용). 클립·사진은 이름 + 파트너/공통.
+  // 인라인 편집(이름 + 대상) — 음악·클립·사진 모두 이름 + 파트너/공통 지정.
   //   target: "공통"(공용) | 파트너 id. 빈값/무변경 항목은 저장 생략.
   const startEdit = (c) => setEditing({ id: c.id, value: c.name, partner: c.shared ? "공통" : c.partnerId });
   const saveEdit = (c) => {
     const nm = (editing?.value || "").trim();
+    const cur = c.shared ? "공통" : c.partnerId;
+    const target = editing?.partner;
     if (c.kind === "audio") {
       if (nm && nm !== c.name) actions.renameBgm(c.id, nm);
+      if (target && target !== cur) actions.setBgmPartner(c.id, target);
     } else {
       if (nm && nm !== c.name) actions.renameContent(c.id, nm);
-      const cur = c.shared ? "공통" : c.partnerId;
-      if (editing?.partner && editing.partner !== cur) actions.setContentPartner(c.id, editing.partner);
+      if (target && target !== cur) actions.setContentPartner(c.id, target);
     }
     setEditing(null);
   };
-  // 음악(BGM)은 공용 라이브러리(memoria.bgm) → 모든 파트너사 공통. 클립·사진은 파트너사별.
-  const items = content.concat(bgm.map((b) => ({ id: b.id, kind: "audio", name: b.name, meta: b.meta, size: b.size || "", shared: true, storagePath: b.storagePath, src: b.src })));
+  // 음악(BGM)도 클립·사진처럼 대상(공용/파트너) 지정 — partnerId 있으면 그 파트너 전용, 없으면 공용.
+  const items = content.concat(bgm.map((b) => ({ id: b.id, kind: "audio", name: b.name, meta: b.meta, size: b.size || "", shared: b.shared ?? !b.partnerId, partnerId: b.partnerId, partner: b.partner, storagePath: b.storagePath, src: b.src })));
   const filtered = items
     .filter((c) => partner === "공통" ? c.shared : (c.partnerId === partner || c.shared))
     .filter((c) => t === "전체" || (t === "영상" && c.kind === "clip") || (t === "이미지" && c.kind === "photo") || (t === "음악" && c.kind === "audio"))
@@ -329,12 +331,12 @@ export function ContentHub() {
           <Btn size="sm" onClick={() => fileRef.current?.click()}><Plus className="h-4 w-4" /> 자산 업로드</Btn>
         </div>
       } />
-      {/* 파트너사 베이스(+공통 공용 자산) — 표 필터 겸 신규 업로드 대상. */}
+      {/* 파트너사 베이스(+공통 공용 자산) — 표 보기 필터. 신규 업로드는 항상 공용으로 저장. */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <span className="text-[12px] font-semibold" style={{ color: MUTE }}>대상</span>
         <SearchSelect value={partner} onChange={setPartner} placeholder="파트너사"
           options={[{ value: "공통", label: "공통 (공용 자산)" }, ...partners.map((p) => ({ value: p.id, label: p.name }))]} />
-        <span className="text-[12px]" style={{ color: FAINT }}>{sorted.length}개 · 신규 업로드는 이 대상에 저장(음악은 항상 공용)</span>
+        <span className="text-[12px]" style={{ color: FAINT }}>{sorted.length}개 · 신규 업로드는 공용으로 저장 · 대상은 올린 뒤 각 행에서 지정</span>
       </div>
       <div className="mb-3 flex gap-1.5">
         {tabs.map((x) => (
@@ -362,7 +364,7 @@ export function ContentHub() {
               </span>
             </span>
           );
-          if (k === "owner") return <span className="inline-block truncate" style={{ color: MUTE, maxWidth: 120 }}>{c.kind === "audio" ? "공용" : (c.targetLabel || "—")}</span>;
+          if (k === "owner") return <span className="inline-block truncate" style={{ color: MUTE, maxWidth: 120 }}>{c.targetLabel || "공용"}</span>;
           if (k === "fmt") return <span style={{ color: err ? "#c0392b" : MUTE }}>{UP_STATUS[c.status] || "처리 중"}</span>;
           if (k === "len") return <span className="tabular-nums" style={{ color: err ? "#c0392b" : MUTE }}>{c.status === "up" ? `${pct}%` : err ? "실패" : "준비"}</span>;
           if (k === "act") return err ? (
@@ -398,8 +400,8 @@ export function ContentHub() {
           return <span className="block truncate font-semibold" style={{ color: INK, maxWidth: 200 }} title={c.name}>{c.name}</span>;
         }
         if (k === "owner") {
-          // 편집 중인 클립·사진은 귀속(파트너/공통) 선택 드롭다운 — 음악은 항상 공용이라 라벨 고정.
-          if (editing?.id === c.id && c.kind !== "audio") return (
+          // 편집 중이면 대상(파트너/공통) 선택 드롭다운 — 음악·클립·사진 모두.
+          if (editing?.id === c.id) return (
             <select value={editing.partner ?? "공통"}
               onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}
               onChange={(e) => setEditing((ed) => ({ ...ed, partner: e.target.value }))}
@@ -432,7 +434,7 @@ export function ContentHub() {
           return (
             <span className="inline-flex items-center gap-0.5">
               <button onClick={(e) => { e.stopPropagation(); startEdit(c); }}
-                className="rounded p-1.5 outline-none transition hover:bg-[#f0ece4]" title={isBgm ? "이름 변경" : "이름·귀속 변경"} style={{ color: FAINT }}>
+                className="rounded p-1.5 outline-none transition hover:bg-[#f0ece4]" title="이름·대상 변경" style={{ color: FAINT }}>
                 <Pencil className="h-3.5 w-3.5" />
               </button>
               <button

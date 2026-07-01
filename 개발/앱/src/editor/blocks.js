@@ -20,8 +20,7 @@ export const blockTrans = (id) => BLOCK_TRANS_OVERRIDE[id] || "페이드";
 // 템플릿 blocks({ type, assetId? })를 elementDef(라벨·소스·길이) + clip은 콘텐츠 허브 자산명으로 보강.
 // (편집기가 EDITOR_BLOCKS 고정 더미 대신 이걸 쓰면 템플릿 수정이 제작에 즉시 반영된다)
 export function buildBlocks(tpl, content, reservation) {
-  // AI 영상이 2개 이상이면 A·B…로 구분 라벨(독사진 1장당 1영상 → 보통 A·B 2개).
-  const aiTotal = (tpl?.blocks || []).filter((b) => b.type === "ai").length;
+  // AI 영상은 A·B 딱 2개까지 — 순서대로 A·B 라벨(독사진 1장당 1영상).
   let aiN = 0;
   return (tpl?.blocks || []).map((b) => {
     const def = D.elementDef(b.type) || {};
@@ -37,7 +36,7 @@ export function buildBlocks(tpl, content, reservation) {
       };
     }
     let label = def.label;
-    if (b.type === "ai") { aiN += 1; label = aiTotal > 1 ? `AI 영상 ${String.fromCharCode(64 + aiN)}` : "AI 영상"; }
+    if (b.type === "ai") { aiN += 1; label = `AI 영상 ${String.fromCharCode(64 + aiN)}`; } // 1=A, 2=B
     return {
       id: b.id, type: b.type, label, source: def.source, detail: def.source,
       dur: def.dur || 0, status: "done",

@@ -2,11 +2,12 @@
 // 각 화면 컴포넌트는 admin/ 하위 도메인 파일에서 import. (분리 전 admin.jsx 단일 파일)
 import React, { useState } from "react";
 import {
-  Check, ChevronDown, Clapperboard, ClipboardList, Download, FolderOpen, HardDrive, KeyRound, LayoutGrid, LayoutTemplate, LogOut, MonitorPlay, Plus, Scissors, Settings, ShieldCheck, UserCircle, Users2, Wallet, Building2,
+  Check, ChevronDown, Clapperboard, ClipboardList, Download, FolderOpen, HardDrive, KeyRound, LayoutGrid, LayoutTemplate, LogOut, MonitorPlay, Pencil, Plus, Scissors, Settings, ShieldCheck, Trash2, UserCircle, Users2, Wallet, Building2, X,
 } from "lucide-react";
 import { NAVY, BG, SURFACE, LINE, LINE2, GOLD, GOLD_SOFT, GOLD_D, INK, MUTE, FAINT, NAV_LINE } from "../theme.js";
 import { Logo, NavItem, NavSection } from "../ui.jsx";
 import { toast } from "../toast.jsx";
+import { confirm } from "../confirm.jsx";
 import { signOut } from "../lib/auth.js";
 import { useStore, actions } from "../store.js";
 import * as D from "../data.js";
@@ -63,8 +64,19 @@ function BizUnitPicker() {
   const [open, setOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
+  const [editId, setEditId] = useState(null);  // 이름 편집 중인 사업부 id
+  const [editName, setEditName] = useState("");
   const count = (id) => partners.filter((p) => p.bizUnit === id).length;
+  const close = () => { setOpen(false); setAdding(false); setEditId(null); };
   const add = () => { const n = name.trim(); if (!n) return; actions.addBizUnit(n); setName(""); setAdding(false); setOpen(false); toast(n + " 사업부를 추가했습니다"); };
+  const startEdit = (b) => { setEditId(b.id); setEditName(b.name); setAdding(false); };
+  const saveEdit = () => { const n = editName.trim(); if (!n) return; actions.renameBizUnit(editId, n); setEditId(null); toast("사업부 이름을 변경했습니다"); };
+  const remove = async (b) => {
+    const n = count(b.id);
+    if (n > 0) { toast(`"${b.name}"에 소속 파트너사 ${n}개가 있어 삭제할 수 없습니다. 먼저 파트너사를 옮기거나 정리하세요.`); return; }
+    if (!(await confirm({ title: "사업부 삭제", message: `"${b.name}" 사업부를 삭제합니다.\n이 작업은 되돌릴 수 없습니다.`, confirmLabel: "삭제", danger: true }))) return;
+    actions.deleteBizUnit(b.id); toast("사업부를 삭제했습니다");
+  };
   return (
     <div className="relative px-3 py-3" style={{ borderBottom: "1px solid " + NAV_LINE }}>
       <div className="mb-1.5 flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-wide" style={{ color: "#6b7787" }}><Building2 className="h-3 w-3" /> 사업부</div>
@@ -74,17 +86,30 @@ function BizUnitPicker() {
       </button>
       {open && (
         <>
-          <div className="fixed inset-0 z-20" onClick={() => { setOpen(false); setAdding(false); }} />
+          <div className="fixed inset-0 z-20" onClick={close} />
           <div className="absolute left-3 right-3 z-30 mt-1 overflow-hidden rounded" style={{ background: "#fff", border: "1px solid " + LINE, boxShadow: "0 12px 32px -10px rgba(0,0,0,.45)" }}>
             <div className="max-h-56 overflow-y-auto">
               {bizUnits.map((b) => {
                 const on = b.id === bizUnit;
+                if (editId === b.id) {
+                  return (
+                    <div key={b.id} className="flex items-center gap-1.5 px-2 py-1.5" style={{ background: GOLD_SOFT }}>
+                      <input autoFocus value={editName} onChange={(e) => setEditName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditId(null); }} className="w-full px-2 py-1 text-[12.5px] outline-none" style={{ border: "1px solid " + LINE2, borderRadius: 4, color: INK }} />
+                      <button onClick={saveEdit} className="shrink-0 px-2.5 py-1 text-[12px] font-bold text-white" style={{ background: GOLD, borderRadius: 4 }}>저장</button>
+                      <button onClick={() => setEditId(null)} className="shrink-0 p-1 outline-none" style={{ color: FAINT }} title="취소"><X className="h-4 w-4" /></button>
+                    </div>
+                  );
+                }
                 return (
-                  <button key={b.id} onClick={() => { actions.setBizUnit(b.id); setOpen(false); }} className="flex w-full items-center gap-2 px-3 py-2 text-left outline-none transition hover:bg-[#f6f3ec]" style={{ background: on ? GOLD_SOFT : "#fff" }}>
-                    <Check className="h-3.5 w-3.5 shrink-0" style={{ color: on ? GOLD_D : "transparent" }} />
-                    <span className="flex-1 truncate text-[13px]" style={{ color: INK, fontWeight: on ? 700 : 500 }}>{b.name}</span>
-                    <span className="text-[11px] tabular-nums" style={{ color: FAINT }}>{count(b.id)}개</span>
-                  </button>
+                  <div key={b.id} className="group flex w-full items-center gap-2 px-3 py-2 transition hover:bg-[#f6f3ec]" style={{ background: on ? GOLD_SOFT : "#fff" }}>
+                    <button onClick={() => { actions.setBizUnit(b.id); setOpen(false); }} className="flex min-w-0 flex-1 items-center gap-2 text-left outline-none">
+                      <Check className="h-3.5 w-3.5 shrink-0" style={{ color: on ? GOLD_D : "transparent" }} />
+                      <span className="flex-1 truncate text-[13px]" style={{ color: INK, fontWeight: on ? 700 : 500 }}>{b.name}</span>
+                      <span className="text-[11px] tabular-nums" style={{ color: FAINT }}>{count(b.id)}개</span>
+                    </button>
+                    <button onClick={() => startEdit(b)} className="shrink-0 p-1 opacity-0 outline-none transition group-hover:opacity-100 hover:text-[color:var(--gd)]" style={{ color: FAINT, "--gd": GOLD_D }} title="이름 변경"><Pencil className="h-3.5 w-3.5" /></button>
+                    <button onClick={() => remove(b)} className="shrink-0 p-1 opacity-0 outline-none transition group-hover:opacity-100 hover:text-[#c0392b]" style={{ color: FAINT }} title="삭제"><Trash2 className="h-3.5 w-3.5" /></button>
+                  </div>
                 );
               })}
             </div>
@@ -95,7 +120,7 @@ function BizUnitPicker() {
                   <button onClick={add} className="shrink-0 px-2.5 py-1 text-[12px] font-bold text-white" style={{ background: GOLD, borderRadius: 4 }}>추가</button>
                 </div>
               ) : (
-                <button onClick={() => setAdding(true)} className="flex w-full items-center gap-1.5 px-3 py-2 text-[12.5px] font-semibold outline-none transition hover:bg-[#f6f3ec]" style={{ color: GOLD_D }}><Plus className="h-3.5 w-3.5" /> 사업부 추가</button>
+                <button onClick={() => { setAdding(true); setEditId(null); }} className="flex w-full items-center gap-1.5 px-3 py-2 text-[12.5px] font-semibold outline-none transition hover:bg-[#f6f3ec]" style={{ color: GOLD_D }}><Plus className="h-3.5 w-3.5" /> 사업부 추가</button>
               )}
             </div>
           </div>

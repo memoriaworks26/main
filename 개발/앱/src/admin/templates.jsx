@@ -1,7 +1,7 @@
-// [추모영상 제작] 영상 템플릿 — 파트너별 요소 구성·순서 편집. (BGM은 보호자가 제작 링크에서 선택 → 템플릿엔 두지 않음)
+// [추모영상 제작] 영상 템플릿 — 파트너별 요소 구성·순서 편집 + 배경음악(제작 링크 노출) 최대 3곡 선택.
 import React, { useState } from "react";
 import {
-  AlertTriangle, ChevronDown, ChevronRight, ChevronUp, Clapperboard, Film, GripVertical, Image, LayoutTemplate, Mail, Plus, Search, Sparkles, Trash2, Type, Upload,
+  AlertTriangle, Check, ChevronDown, ChevronRight, ChevronUp, Clapperboard, Film, GripVertical, Image, LayoutTemplate, Loader2, Mail, Music, Plus, Search, Sparkles, Trash2, Type, Upload,
 } from "lucide-react";
 import { SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, STATUS, RADIUS } from "../theme.js";
 import { Btn, PageHeader } from "../ui.jsx";
@@ -9,7 +9,10 @@ import { useStore, actions, bizPartners } from "../store.js";
 import { confirm } from "../confirm.jsx";
 import * as D from "../data.js";
 import { matchQuery } from "../lib/util.js";
+import { grabAudioMeta } from "../lib/media.js";
 import { SaveBar, SearchSelect } from "./shared.jsx";
+
+const BGM_MAX = 3; // 제작 링크에 노출할 배경음악 최대 곡 수
 
 const TPL_EL = {
   title: { icon: Type, color: GOLD },
@@ -73,7 +76,7 @@ function AddElementMenu({ addable, onAdd }) {
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] outline-none hover:bg-black/[.03]" style={{ color: INK }}>
                 <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: E.color }} />
                 <span className="flex-1">{d.label}</span>
-                <span className="text-[10px]" style={{ color: FAINT }}>{d.repeatable ? "여러 개" : "1개"}</span>
+                <span className="text-[10px]" style={{ color: FAINT }}>{d.tag ?? (d.repeatable ? "여러 개" : "1개")}</span>
               </button>
             );
           })}
@@ -116,9 +119,63 @@ function InstantAddClip({ partner, onAdded }) {
   );
 }
 
+// 배경 음악 선택 — 공용 라이브러리에서 이 파트너 제작 링크에 노출할 곡을 최대 3개까지.
+//   '음악 추가'로 그 자리에서 새 음원을 라이브러리에 올려 바로 선택할 수 있다.
+//   미선택이면 제작 링크엔 공용 음악 전체가 노출된다(무중단 폴백).
+function BgmPicker({ bgm, selected, onToggle, onAdd }) {
+  const ref = React.useRef(null);
+  const [busy, setBusy] = useState(false);
+  const onPick = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = ""; // 같은 파일 다시 선택 가능하도록 초기화
+    if (!f) return;
+    setBusy(true);
+    let meta = null;
+    try { const m = await grabAudioMeta(f); const t = Math.round(m?.duration || 0); if (t) meta = Math.floor(t / 60) + ":" + String(t % 60).padStart(2, "0"); } catch { /* 메타 실패해도 업로드는 진행 */ }
+    onAdd(f, meta, () => setBusy(false));
+  };
+  return (
+    <div>
+      <div className="space-y-1.5">
+        {bgm.length === 0 && (
+          <div className="rounded px-3 py-2.5 text-[12px]" style={{ background: "#faf8f3", color: FAINT, border: "1px dashed " + LINE2, borderRadius: RADIUS }}>
+            등록된 음악이 없습니다. 아래 ‘음악 추가’로 음원을 올려 시작하세요.
+          </div>
+        )}
+        {bgm.map((b) => {
+          const on = selected.includes(b.id);
+          const full = !on && selected.length >= BGM_MAX; // 3개 찼으면 미선택 곡은 비활성
+          return (
+            <button key={b.id} onClick={() => onToggle(b.id)} disabled={full}
+              className="flex w-full items-center gap-2.5 rounded px-2.5 py-2 text-left outline-none transition hover:bg-black/[.02] disabled:cursor-not-allowed disabled:opacity-40"
+              style={{ background: on ? GOLD_SOFT : "#faf8f3", border: "1px solid " + (on ? GOLD : LINE), borderRadius: RADIUS }}
+              title={full ? "최대 3곡까지 선택할 수 있습니다" : (on ? "선택 해제" : "제작 링크에 노출")}>
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded" style={{ border: "1.5px solid " + (on ? GOLD_D : LINE2), background: on ? GOLD_D : "transparent" }}>
+                {on && <Check className="h-3 w-3 text-white" strokeWidth={3} />}
+              </span>
+              <Music className="h-4 w-4 shrink-0" style={{ color: "#3f5e87" }} />
+              <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold" style={{ color: INK }}>{b.name}</span>
+              {b.meta && <span className="shrink-0 text-[11px] tabular-nums" style={{ color: FAINT }}>{b.meta}</span>}
+            </button>
+          );
+        })}
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <button onClick={() => ref.current?.click()} disabled={busy}
+          className="flex shrink-0 items-center gap-1.5 rounded px-2.5 py-2 text-[12px] font-semibold outline-none hover:bg-black/[.02] disabled:opacity-50"
+          style={{ border: "1.5px dashed " + LINE2, color: GOLD_D, borderRadius: RADIUS }} title="음원을 골라 라이브러리에 올리고 바로 선택">
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />} 음악 추가
+        </button>
+        <span className="text-[11px]" style={{ color: FAINT }}>{selected.length}/{BGM_MAX} 선택 · 미선택 시 공용 음악 전체 노출</span>
+      </div>
+      <input ref={ref} type="file" accept="audio/*" className="hidden" onChange={onPick} />
+    </div>
+  );
+}
+
 export function Templates() {
   const s = useStore();
-  const { templates: storeTpls, content } = s;
+  const { templates: storeTpls, content, bgm } = s;
   const allPartners = bizPartners(s); // 현재 사업부 파트너만
   const [tpls, setTpls] = useState(storeTpls); // 저장 전 초안 (전체 템플릿 맵)
   const dirty = JSON.stringify(tpls) !== JSON.stringify(storeTpls);
@@ -138,7 +195,7 @@ export function Templates() {
 
   return (
     <div>
-      <PageHeader title="영상 템플릿" sub="파트너사별 요소 구성·순서 편집 · 기본 요소(타이틀·추억 슬라이드·추억 영상·편지)는 각 1개, AI 영상(앞·뒤)·클립은 여러 개 · 클립 콘텐츠 선택 (BGM은 보호자가 제작 링크에서 선택)"
+      <PageHeader title="영상 템플릿" sub="파트너사별 요소 구성·순서 편집 · 기본 요소(타이틀·추억 슬라이드·추억 영상·편지)는 각 1개, AI 영상은 A·B 딱 2개까지, 클립은 여러 개 · 클립 콘텐츠 선택 · 배경음악은 제작 링크에 노출할 곡 최대 3개 선택"
         right={
           <div className="flex items-center gap-2">
             <div className="flex items-center px-3" style={{ height: 36, width: 220, background: SURFACE, border: "1px solid " + LINE, borderRadius: RADIUS }}>
@@ -160,9 +217,15 @@ export function Templates() {
             .filter((c) => (c.kind === "clip" || c.kind === "photo") && (c.partnerId === p.id || c.shared))
             .map((c) => ({ value: c.id, label: (c.kind === "clip" ? "🎬 영상 · " : "🖼 이미지 · ") + c.name + (c.shared ? " (공용)" : "") }));
           const noHub = assetOpts.length === 0;
-          // 추가 가능한 요소: 기본 요소는 미사용 시에만, 클립은 항상
+          // AI 영상은 A·B 딱 2개까지 — 순서대로 A·B 라벨 부여
+          const aiMax = D.elementDef("ai")?.max || 2;
+          const aiCount = blocks.filter((b) => b.type === "ai").length;
+          const aiLabelOf = (() => { let n = 0; const m = {}; blocks.forEach((b) => { if (b.type === "ai") m[b.id] = "AI 영상 " + String.fromCharCode(64 + (n += 1)); }); return (id) => m[id]; })();
+          // 추가 가능한 요소: 기본 요소는 미사용 시에만, 클립은 항상, AI 영상은 2개 미만일 때만
           const usedBase = new Set(blocks.filter((b) => b.type !== "clip").map((b) => b.type));
-          const addable = D.TEMPLATE_ELEMENTS.filter((e) => e.repeatable || !usedBase.has(e.type));
+          const addable = D.TEMPLATE_ELEMENTS
+            .filter((e) => (e.type === "ai" ? aiCount < aiMax : e.repeatable || !usedBase.has(e.type)))
+            .map((e) => (e.type === "ai" ? { ...e, label: "AI 영상 " + String.fromCharCode(64 + aiCount + 1), tag: "A·B 2개" } : e));
 
           const setBlocks = (fn) => setTpls((m) => ({ ...m, [p.id]: { ...(m[p.id] || { bgm: null, blocks: [] }), blocks: fn((m[p.id] && m[p.id].blocks) || []) } }));
           const addBlock = (type) => setBlocks((bs) => [...bs, { id: "e-" + Date.now(), type, ...(type === "clip" ? { assetId: null } : {}) }]);
@@ -180,6 +243,17 @@ export function Templates() {
             const next = bs.slice(); const [m] = next.splice(from, 1); next.splice(to, 0, m); return next;
           });
 
+          // 배경 음악 — 제작 링크에 노출할 곡(최대 3, 선택 순서 유지). 라이브러리에 아직 있는 id만 표시.
+          //   이 파트너가 고를 수 있는 곡: 공용 + 이 파트너 전용(대상 지정). 다른 파트너 전용곡은 숨김.
+          const partnerBgm = bgm.filter((b) => !b.partnerId || b.partnerId === p.id);
+          const linkBgmIds = (tpl.linkBgmIds || []).filter((id) => partnerBgm.some((b) => b.id === id));
+          const setLinkBgm = (fn) => setTpls((m) => ({ ...m, [p.id]: { ...(m[p.id] || { bgm: null, blocks: [], linkBgmIds: [] }), linkBgmIds: fn((m[p.id] && m[p.id].linkBgmIds) || []) } }));
+          const toggleBgm = (id) => setLinkBgm((ids) => ids.includes(id) ? ids.filter((x) => x !== id) : (ids.length >= BGM_MAX ? ids : [...ids, id]));
+          const addBgm = (file, meta, onFinish) => actions.addLibraryBgm(file, meta, (b) => {
+            if (b) setLinkBgm((ids) => (ids.includes(b.id) || ids.length >= BGM_MAX ? ids : [...ids, b.id])); // 새 곡을 바로 선택(3개 미만일 때)
+            onFinish?.();
+          });
+
           const isOpen = open === p.id;
           return (
             <div key={p.id} className="overflow-hidden" style={{ background: SURFACE, border: "1px solid " + (p.isDefault ? GOLD_SOFT : LINE), borderRadius: RADIUS }}>
@@ -192,7 +266,7 @@ export function Templates() {
                   <span className="truncate text-[13px] font-bold" style={{ color: INK }}>{p.name}</span>
                   {p.isDefault && <span className="shrink-0 px-1.5 py-0.5 text-[10.5px] font-bold" style={{ borderRadius: RADIUS, background: GOLD_SOFT, color: GOLD_D }}>신규 파트너 기본값</span>}
                 </span>
-                <span className="shrink-0 text-[11.5px] tabular-nums" style={{ color: FAINT }}>약 {mmss(total)} · {blocks.length}요소{p.isDefault ? "" : ` · 클립 ${clipCount}개`}</span>
+                <span className="shrink-0 text-[11.5px] tabular-nums" style={{ color: FAINT }}>약 {mmss(total)} · {blocks.length}요소{p.isDefault ? "" : ` · 클립 ${clipCount}개`}{linkBgmIds.length ? ` · 음악 ${linkBgmIds.length}곡` : ""}</span>
               </button>
 
               {isOpen && (
@@ -202,7 +276,7 @@ export function Templates() {
                   신규 파트너사를 등록하면 이 구성·순서가 그대로 복제되어 시작됩니다. 클립은 파트너별 콘텐츠 허브 자산에 연결되므로 기본 템플릿에는 두지 않는 것을 권장합니다.
                 </p>
               )}
-              {/* 요소 구성 · 순서 — 기본 요소(각 1개) + 클립(n개), ▲▼로 순서변경. BGM은 보호자가 제작 링크에서 선택하므로 템플릿에 두지 않음. */}
+              {/* 요소 구성 · 순서 — 기본 요소(각 1개) + 클립(n개), ▲▼로 순서변경. */}
               <div>
                 <SectionLabel icon={LayoutTemplate} right={`${blocks.length}요소`}>요소 구성 · 순서</SectionLabel>
                 <div className="space-y-1.5">
@@ -239,7 +313,7 @@ export function Templates() {
                         <span draggable onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; setDrag(b.id); }} className="shrink-0 cursor-grab rounded p-0.5 active:cursor-grabbing" style={{ color: FAINT }} title="끌어서 순서 변경"><GripVertical className="h-3.5 w-3.5" /></span>
                         <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold tabular-nums" style={{ background: "#e7e2d8", color: MUTE }}>{i + 1}</span>
                         <Icon className="h-4 w-4 shrink-0" style={{ color: E.color }} />
-                        <span className="shrink-0 text-[12.5px] font-bold" style={{ color: INK, width: 84 }}>{def.label}</span>
+                        <span className="shrink-0 text-[12.5px] font-bold" style={{ color: INK, width: 84 }}>{b.type === "ai" ? aiLabelOf(b.id) : def.label}</span>
                         {isClip ? (
                           p.isDefault ? (
                             <span className="min-w-0 flex-1 truncate text-[11.5px]" style={{ color: FAINT }}>· 자산은 파트너별로 연결 (기본 템플릿은 구조만)</span>
@@ -268,6 +342,11 @@ export function Templates() {
                     <AlertTriangle className="h-3.5 w-3.5" /> 콘텐츠 허브에 자산이 없어 클립을 지정할 수 없습니다 — 콘텐츠 허브에서 먼저 업로드하세요.
                   </p>
                 )}
+              </div>
+              {/* 배경 음악 — 이 파트너 제작 링크(보호자 화면)에 노출할 곡을 최대 3개까지. '음악 추가'로 바로 업로드. */}
+              <div className="mt-4">
+                <SectionLabel icon={Music} right={`${linkBgmIds.length}/${BGM_MAX}`}>배경 음악 · 제작 링크 노출</SectionLabel>
+                <BgmPicker bgm={partnerBgm} selected={linkBgmIds} onToggle={toggleBgm} onAdd={addBgm} />
               </div>
               </div>
               )}

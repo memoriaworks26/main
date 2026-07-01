@@ -248,6 +248,9 @@ export default function VideoEditor({ reservation, onClose }) {
   // 단계 인식: 2차 가공이면 secondJob, 아니면 예약(1차)의 상태로 동작 분기.
   const seJob = reservation?.secondJobId || null;
   const stage = seJob ? reservation?.secondJobStatus : reservation?.status;
+  // 블록(AI) 생성 진행 중 여부 — 진행 중이면 최종 렌더 요청 버튼을 잠근다(미완성 블록 compose 방지).
+  const subStatus = (!seJob && reservation?.id) ? (media?.status || submissionFor(store, reservation.id)?.status) : null;
+  const blockRendering = subStatus === "queued" || subStatus === "rendering";
   const setStage = (next) => {
     if (seJob) actions.setSecondJobStatus(seJob, next);
     else if (reservation && reservation.id) actions.setReservationStatus(reservation.id, next); // 목 DB 전파 → 큐·파트너·대시보드
@@ -255,10 +258,23 @@ export default function VideoEditor({ reservation, onClose }) {
 
   // 작업 중 → 최종 렌더 시작 + 컨펌 대기로 보냄(렌더 완료 후 검수)
   const requestConfirm = async () => {
+    // 블록 렌더 가드 — 블록(AI) 생성이 아직 도는 중이면 최종 합성을 트리거하지 않는다.
+    //   미완성 블록으로 compose를 걸면 진행 중이던 블록 렌더가 compose_queued로 덮여 버려지고 워커가 실패한다.
+    if (!seJob && reservation?.id) {
+      // 편집기가 6초 폴링으로 갱신하는 media.status를 우선(가장 최신) — 없으면 큐 폴링(store) 폴백.
+      const st = media?.status || submissionFor(store, reservation.id)?.status;
+      if (st === "queued" || st === "rendering") { toast("블록 생성이 아직 진행 중입니다 — 완료 후 최종 렌더를 요청해 주세요"); return; }
+      if (st === "compose_queued" || st === "composing") { toast("이미 최종 렌더가 진행 중입니다"); return; }
+    }
     if (!(await confirm({ title: "최종 렌더 · 컨펌 요청", message: "최종 렌더링을 시작하고 컨펌 대기로 보냅니다.\n렌더 완료 후 검수 → 확인·컨펌하면 발행됩니다." }))) return;
     const patch = { status: "confirm", renderAt: Date.now(), renderDur: 90 + Math.floor(Math.random() * 120) }; // 렌더 예상 90~210초
     if (seJob) actions.updateSecondJob(seJob, patch);
-    else if (reservation && reservation.id) { actions.updateReservation(reservation.id, patch); actions.requestCompose(reservation.id); } // 워커 합성 트리거
+    else if (reservation && reservation.id) {
+      // 합성 트리거가 성공해야 예약을 컨펌 대기로 넘긴다 — 서버 가드가 진행 중 렌더를 거부하면 예약을 옮기지 않는다.
+      try { await actions.requestCompose(reservation.id); }
+      catch (e) { toast("최종 렌더를 시작할 수 없습니다 — " + (e.message || e)); return; }
+      actions.updateReservation(reservation.id, patch);
+    }
     toast("최종 렌더링을 시작했습니다 — 컨펌 대기");
     setTimeout(() => onClose && onClose(), 1000);
   };
@@ -299,7 +315,7 @@ export default function VideoEditor({ reservation, onClose }) {
             <Save className="h-3.5 w-3.5" /> 저장{dirty && <span className="ml-0.5" style={{ color: GOLD }}>•</span>}
           </Btn>
           {stage === "rendering"
-            ? <Btn size="sm" onClick={requestConfirm}><Send className="h-3.5 w-3.5" strokeWidth={2.4} /> 최종 렌더 · 컨펌 요청</Btn>
+            ? <Btn size="sm" onClick={requestConfirm} disabled={blockRendering}><Send className="h-3.5 w-3.5" strokeWidth={2.4} /> {blockRendering ? "블록 생성 중…" : "최종 렌더 · 컨펌 요청"}</Btn>
             : stage === "confirm"
             ? <Btn size="sm" onClick={confirmPublish}><Check className="h-4 w-4" strokeWidth={2.4} /> 확인 · 컨펌(발행)</Btn>
             : <Btn size="sm" onClick={publish}><Check className="h-4 w-4" strokeWidth={2.4} /> 확정·발행</Btn>}
@@ -326,7 +342,7 @@ export default function VideoEditor({ reservation, onClose }) {
 
       <div className="flex items-center gap-3 px-5 py-2 text-[11.5px]" style={{ background: SURFACE, borderTop: "1px solid " + LINE, color: FAINT }}>
         <Volume2 className="h-3.5 w-3.5" /> 배경 음악: {bgmName}
-        <span className="ml-auto">{stage === "rendering" ? "최종 렌더 후 「컨펌 요청」하면 검수(컨펌 대기) 단계로 넘어갑니다." : stage === "confirm" ? "결과물을 확인하고 「확인·컨펌」하면 발행됩니다." : "확정하면 전체가 하나로 합쳐져 발행됩니다."}</span>
+        <span className="ml-auto">{stage === "rendering" ? (blockRendering ? "블록(AI) 생성이 진행 중입니다 — 완료 후 「컨펌 요청」할 수 있습니다." : "최종 렌더 후 「컨펌 요청」하면 검수(컨펌 대기) 단계로 넘어갑니다.") : stage === "confirm" ? "결과물을 확인하고 「확인·컨펌」하면 발행됩니다." : "확정하면 전체가 하나로 합쳐져 발행됩니다."}</span>
       </div>
     </div>
   );

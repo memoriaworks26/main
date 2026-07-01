@@ -146,10 +146,17 @@ export async function regenBlock(reservationId, target) {
 }
 
 // 최종 합성 요청 — 예약의 제출물을 compose_queued로(워커가 블록 결과물로 최종 영상 합성).
+//   방어: 진행 중인 블록 렌더(queued/rendering)나 이미 도는 합성(composing)은 덮어쓰지 않는다.
+//   덮어쓰면 그 블록 렌더가 버려진 채 미완성 자산으로 compose가 걸려 워커가 실패한다.
 export async function requestCompose(reservationId) {
   const d = need();
-  const { error } = await d.from("submissions").update({ status: "compose_queued" }).eq("reservation_id", reservationId);
+  const { data, error } = await d.from("submissions")
+    .update({ status: "compose_queued" })
+    .eq("reservation_id", reservationId)
+    .not("status", "in", "(queued,rendering,composing)")
+    .select("id");
   if (error) throw new Error(error.message);
+  if (!data?.length) throw new Error("블록 생성이 아직 진행 중입니다 — 완료 후 다시 시도해 주세요.");
 }
 
 // 예약에 대한 보호자 제작링크 발급(토큰 자동). 예약당 1건(unique).

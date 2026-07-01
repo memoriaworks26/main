@@ -1,15 +1,15 @@
 // 더미 데이터 — 영상 템플릿(요소 정의·기본 템플릿·파트너사별 배치).
 // 관리자가 파트너사별로 구성: 요소 순서 변경 · BGM 선택 · 각 클립의 콘텐츠 허브 자산 선택.
 
-// 기본 요소: 타이틀·추억 슬라이드·추억 영상·편지(각 1개) / 추가 요소(n개): AI 영상(앞·뒤 2개)·클립
+// 기본 요소: 타이틀·추억 슬라이드·추억 영상·편지(각 1개) / AI 영상(A·B 딱 2개까지)·클립(n개)
 //  · 타이틀(20초): 독사진 → AI 초상화 + 시스템문구·반려동물명 → 10초에 톤변경 오버랩 → 페이드아웃
-//  · AI 영상(8초): 독사진 1장 → AI 영상. 보통 추억 슬라이드 앞(A) / 추억 영상 뒤(B) 2개로 감싼다.
+//  · AI 영상(8초): 독사진 1장 → AI 영상. A(추억 슬라이드 앞)·B(추억 영상 뒤) 딱 2개까지 — 유저 소스를 감싼다.
 //  · 추억 슬라이드(2분30초): 보호자 사진 최대 20장(장당 7~10초) · 사진에만 BGM.
 //  · 추억 영상(1분30초): 보호자 영상 묶음(개수 제한 없음) · 원본 사운드 유지(BGM 없음) · 최종 렌더 시 합성.
 //  · 편지(3분30초).
 export const TEMPLATE_ELEMENTS = [
   { type: "title", label: "타이틀", source: "독사진 → AI 초상화·톤변경", dur: 20, repeatable: false },
-  { type: "ai", label: "AI 영상", source: "독사진 1장 → AI 영상", dur: 8, repeatable: true },
+  { type: "ai", label: "AI 영상", source: "독사진 1장 → AI 영상", dur: 8, repeatable: true, max: 2 }, // A·B 딱 2개까지
   { type: "slide", label: "추억 슬라이드", source: "보호자 사진 자동 구성 (최대 20장)", dur: 150, repeatable: false },
   { type: "video", label: "추억 영상", source: "보호자 영상 묶음", dur: 90, repeatable: false },
   { type: "letter", label: "편지", source: "보호자 작성 편지", dur: 210, repeatable: false },

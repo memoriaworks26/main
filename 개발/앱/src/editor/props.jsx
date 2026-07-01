@@ -430,7 +430,7 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
               <p className="mb-2 text-[11px] leading-relaxed" style={{ color: FAINT }}>※ 추억 영상(보호자 영상)에는 BGM이 들어가지 않고 원본 사운드가 유지됩니다.</p>
               {!_pid && <div className="mb-2 px-3 py-2 text-[11px] leading-relaxed" style={{ background: "#fbeaea", border: "1px solid #e6c6c6", borderRadius: RADIUS, color: "#9a3b3b" }}>이 예약에 파트너가 연결되지 않아 소리 크기·페이드 설정은 저장되지 않습니다(곡 선택은 이 영상에 적용됩니다).</div>}
               {/* 이 영상 배경 음악 — 공용 라이브러리에서 골라 이 영상에만 적용(submissions.bgm_id · 합성이 템플릿보다 우선) */}
-              <SlideBgmPicker reservation={reservation} submissionId={media?.submissionId} media={media} bgmLib={_store.bgm || []} tplBgmId={_tb.bgm} canEdit={!!(reservation?.id && media?.submissionId)} />
+              <SlideBgmPicker reservation={reservation} submissionId={media?.submissionId} media={media} bgmLib={(_store.bgm || []).filter((b) => !b.partnerId || b.partnerId === _pid)} tplBgmId={_tb.bgm} canEdit={!!(reservation?.id && media?.submissionId)} />
               {reservation?.id && media?.submissionId ? (
                 <FileButton accept="audio/*" onFile={(f) => actions.uploadSlideBgm(reservation.id, media.submissionId, _pid, f)}
                   className="mt-1 flex w-full items-center justify-center gap-1.5 py-2.5 text-[13px] font-bold text-white" style={{ background: GOLD, borderRadius: RADIUS }}>
@@ -526,6 +526,12 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
           <>
             <Field label="자막 글자"><textarea rows={3} value={item.text ?? ""} onChange={(e) => onEdit(item.id, { text: e.target.value })} className="w-full resize-none p-3 text-[13.5px] leading-relaxed outline-none" style={{ ...inputStyle, height: "auto", fontFamily: fontVal }} /></Field>
             <Field label="위치"><select className={inputCls} style={inputStyle} value={item.xPct != null ? "직접배치" : (item.pos || "하단")} onChange={(e) => onEdit(item.id, { pos: e.target.value, xPct: null, yPct: null })}>{item.xPct != null && <option value="직접배치">직접배치(드래그)</option>}{D.SUBTITLE_POS.map((p) => <option key={p}>{p}</option>)}</select></Field>
+            <Field label="글자 방향">
+              <label className="flex cursor-pointer items-center gap-2 px-3 text-[13px]" style={{ ...inputStyle, height: 38 }}>
+                <input type="checkbox" checked={!!item.vertical} onChange={(e) => onEdit(item.id, { vertical: e.target.checked })} style={{ accentColor: GOLD, width: 16, height: 16 }} />
+                세로로 변환 <span style={{ color: FAINT }}>· 글자를 세로로 세워서 표시</span>
+              </label>
+            </Field>
             <Field label="폰트"><select className={inputCls} style={{ ...inputStyle, fontFamily: fontVal }} value={font} onChange={(e) => onEdit(item.id, { font: e.target.value })}>{D.SUBTITLE_FONTS.map((f) => <option key={f.key} value={f.key} style={{ fontFamily: f.css }}>{f.name}</option>)}</select></Field>
             <Field label={`글자 크기 (${size}px)`}>
               <div className="flex items-center gap-2">
@@ -549,7 +555,7 @@ export function PropPanel({ blocks, subtitles = [], edits, onEdit, onRemoveSub, 
             </Field>
             <Field label="미리보기">
               <div className="flex items-center justify-center px-3 py-5" style={{ background: "#1c232c", borderRadius: RADIUS, overflow: "hidden" }}>
-                <span className="text-center leading-snug" style={{ fontFamily: fontVal, fontSize: Math.min(size, 34), color, borderRadius: 4, ...fx }}>{item.text || "자막 미리보기"}</span>
+                <span className="text-center leading-snug" style={{ fontFamily: fontVal, fontSize: Math.min(size, 34), color, borderRadius: 4, ...(item.vertical ? { writingMode: "vertical-rl", maxHeight: 120 } : null), ...fx }}>{item.text || "자막 미리보기"}</span>
               </div>
             </Field>
             <Field label="보이는 구간"><div className="px-3 py-2.5 text-[12.5px] tabular-nums" style={{ background: "#f6f3ec", border: "1px solid " + LINE, borderRadius: RADIUS, color: INK }}>{item.start}초 ~ {item.end}초 <span style={{ color: FAINT }}>· 타임라인에서 끌어 옮기거나 양끝으로 길이 조절</span></div></Field>

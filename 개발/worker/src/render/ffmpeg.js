@@ -112,38 +112,42 @@ export async function compose({ segments, bgmPath, bgmVol = 70, bgmFadeIn = 1, b
     let base = concat;
     if (subs && subs.length) { const subbed = path.join(dir, "subbed.mp4"); await burnSubtitles(concat, subbed, subs, fontFile, subFonts); base = subbed; }
 
-    // ── 오디오 트랙 구성 ── 추억영상 원본 사운드(해당 구간 배치) + BGM(볼륨·페이드, 추억영상 구간 덕킹)
+    // ── 오디오 트랙 구성 ── 추억영상 원본 사운드(해당 구간 배치) + BGM(추억 슬라이드 사진 구간에서만)
     const durs = []; for (const p of parts) durs.push(await durationOf(p));
     const total = durs.reduce((a, b) => a + b, 0);
     const offs = []; { let a = 0; for (const d of durs) { offs.push(a); a += d; } }
     // 오디오 보유 세그먼트(추억영상·클립 등)를 각자 볼륨으로 믹스. 세그 vol 우선 → 추억영상(mem)은 memVol 폴백 → 그 외 100.
-    //   vol<=0(음소거)이거나 오디오 트랙이 없는 세그(타이틀·슬라이드·AI영상·편지)는 믹스·BGM덕킹 모두 제외.
-    const segAudio = []; const duckRanges = [];
+    //   vol<=0(음소거)이거나 오디오 트랙이 없는 세그(타이틀·슬라이드·AI영상·편지)는 믹스 제외.
+    const segAudio = [];
     for (let i = 0; i < segments.length; i++) {
       const s = segments[i];
-      if (!s.mem && !s.clip) continue;                          // 소스 오디오 세그(추억영상·클립)만 — 타이틀/슬라이드/AI영상/편지는 항상 무음(BGM 덕킹 안 함)
+      if (!s.mem && !s.clip) continue;                          // 소스 오디오 세그(추억영상·클립)만 — 타이틀/슬라이드/AI영상/편지는 항상 무음
       const segVol = s.vol != null ? s.vol : (s.mem ? memVol : 100); // 편집기 슬라이더(영상별·클립별)
-      if (segVol <= 0) continue;                                 // 음소거 — 믹스·덕킹 제외
+      if (segVol <= 0) continue;                                 // 음소거 — 믹스 제외
       if (!(await hasAudio(s.path))) continue;                   // 오디오 트랙 없으면 제외
-      duckRanges.push([offs[i], offs[i] + durs[i]]);
       segAudio.push({ src: s.path, start: offs[i], gain: (Math.max(0, Math.min(200, segVol)) / 100).toFixed(2) });
     }
-    if (!bgmPath && segAudio.length === 0) { await ff(["-y", "-i", base, "-c", "copy", "-movflags", "+faststart", outPath]); return outPath; } // 무음(+faststart 리먹스)
+    // BGM은 추억 슬라이드(사진, slide:true) 구간에서만 재생 — 타이틀·AI영상·추억영상·편지·클립엔 깔지 않음.
+    const slideRanges = [];
+    for (let i = 0; i < segments.length; i++) if (segments[i].slide) slideRanges.push([offs[i], offs[i] + durs[i]]);
+    const hasBgm = !!bgmPath && slideRanges.length > 0;
+    if (!hasBgm && segAudio.length === 0) { await ff(["-y", "-i", base, "-c", "copy", "-movflags", "+faststart", outPath]); return outPath; } // 무음(+faststart 리먹스)
 
     const args = ["-y", "-i", base]; const fc = []; const mix = [];
     segAudio.forEach((m, j) => {
       args.push("-i", m.src); const ms = Math.round(m.start * 1000);
       fc.push(`[${1 + j}:a]adelay=${ms}|${ms},volume=${m.gain}[ma${j}]`); mix.push(`[ma${j}]`);
     });
-    if (bgmPath) {
+    if (hasBgm) {
       const bidx = 1 + segAudio.length; args.push("-stream_loop", "-1", "-i", bgmPath);
       const vol = (Math.max(0, Math.min(100, bgmVol)) / 100).toFixed(2);
-      const duck = duckRanges.length
-        ? `if(${duckRanges.map(([s, e]) => `between(t,${s.toFixed(2)},${e.toFixed(2)})`).join("+")},0,${vol})`
-        : `${vol}`;
-      let bg = `[${bidx}:a]atrim=0:${total.toFixed(2)},volume='${duck}':eval=frame`;
-      if (bgmFadeIn > 0) bg += `,afade=t=in:st=0:d=${bgmFadeIn}`;
-      if (bgmFadeOut > 0) bg += `,afade=t=out:st=${Math.max(0, total - bgmFadeOut).toFixed(2)}:d=${bgmFadeOut}`;
+      // 슬라이드 구간에서만 vol, 그 외엔 0(슬라이드는 사진뿐이라 소스 사운드와 겹치지 않음 → 덕킹 불필요).
+      const onSlide = slideRanges.map(([s, e]) => `between(t,${s.toFixed(2)},${e.toFixed(2)})`).join("+");
+      let bg = `[${bidx}:a]atrim=0:${total.toFixed(2)},volume='if(${onSlide},${vol},0)':eval=frame`;
+      // 페이드 — 첫 슬라이드 시작에 인, 마지막 슬라이드 끝에 아웃.
+      const sStart = slideRanges[0][0]; const sEnd = slideRanges[slideRanges.length - 1][1];
+      if (bgmFadeIn > 0) bg += `,afade=t=in:st=${sStart.toFixed(2)}:d=${bgmFadeIn}`;
+      if (bgmFadeOut > 0) bg += `,afade=t=out:st=${Math.max(0, sEnd - bgmFadeOut).toFixed(2)}:d=${bgmFadeOut}`;
       fc.push(`${bg}[bg]`); mix.push("[bg]");
     }
     fc.push(`${mix.join("")}amix=inputs=${mix.length}:normalize=0:duration=longest[aout]`);
@@ -298,7 +302,9 @@ export async function burnSubtitles(inPath, outPath, subs, fontFile, subFonts = 
     const y = s.yPct != null ? `(h*${(s.yPct / 100).toFixed(4)})`
       : s.pos === "상단" ? "h*0.10" : s.pos === "중앙" ? "(h-text_h)/2" : "h-200";
     const st = Number(s.start) || 0, en = Number(s.end) || st + 3;
-    return `drawtext=${font}text='${escText(s.text)}':fontcolor=${color}:fontsize=${size}:x=${x}:y=${y}:${subEffectFilter(s.effect)}enable='between(t,${st.toFixed(2)},${en.toFixed(2)})'`;
+    // 세로 자막 — drawtext엔 세로쓰기 모드가 없어 글자마다 줄바꿈해 위에서 아래로 세운다(앱 미리보기 writingMode와 동일 의미).
+    const text = s.vertical ? Array.from(String(s.text)).filter((c) => c !== "\n").join("\n") : s.text;
+    return `drawtext=${font}text='${escText(text)}':fontcolor=${color}:fontsize=${size}:x=${x}:y=${y}:${subEffectFilter(s.effect)}enable='between(t,${st.toFixed(2)},${en.toFixed(2)})'`;
   });
   if (!filters.length) { await ff(["-y", "-i", inPath, "-c", "copy", outPath]); return outPath; }
   await ff(["-y", "-i", inPath, "-vf", filters.join(","), "-r", String(FPS), ...ENC, outPath]);
