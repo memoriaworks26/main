@@ -97,15 +97,18 @@ export function useUserWizard(previewBizId, stepCtl, previewOverride) {
   }, [token]);
 
   // [QA] 제작 상태 폴링 — 제작중이면 주기적으로 재조회해 완료 시 새로고침 없이 영상 노출.
+  //   완료 화면(제출 후)에서만 폴링한다. 편집 중(draft)에 폴링하면 8초마다 setLink(새 객체)로
+  //   위저드가 리렌더 → 미리보기 슬라이드쇼가 계속 처음으로 되감겨(빨리감기·새로고침처럼 보임) 네트워크도 낭비.
   useEffect(() => {
     if (!liveMode || !token) return;
+    if (step !== STEPS.length - 1) return;                       // 완료 화면에서만 — 편집 중엔 폴링 금지
     if (videoStatus === "done" || videoStatus === "failed") return;
     let alive = true;
     const iv = setInterval(() => {
       resolveLink(token).then((r) => { if (alive && r.ok) { setLink(r); if (r.status) setVideoStatus(r.status); } });
     }, 8000);
     return () => { alive = false; clearInterval(iv); };
-  }, [liveMode, token, videoStatus]);
+  }, [liveMode, token, step, videoStatus]);
 
   // [QA] 실 보호자 링크 — 토큰의 사업부 공개설정(예시사진·유저문구·동의문구·고객센터) 로드.
   //   실패하면 null → 아래 계산이 기본값으로 폴백(현 동작 유지).

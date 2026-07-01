@@ -17,6 +17,10 @@ const TRANSITIONS = D.USER_TRANSITIONS; // 전환 효과 명칭은 data.js에서
 //   (ffmpeg 최종 렌더와 100% 동일하진 않은 근사 미리보기 — 효과의 느낌/방향만 일치)
 function SlideCanvas({ frames }) {
   const ref = useRef(null);
+  // frames는 부모 리렌더마다 내용이 같아도 매번 새 배열로 재생성된다(참조만 바뀜).
+  // 배열 참조를 의존성으로 쓰면 무관한 리렌더마다 애니메이션이 취소·재시작(t0 리셋·이미지 재로딩)돼
+  // 슬라이드가 처음으로 되감기고 깜빡인다. 내용 시그니처(src+전환)로 잡아 내용이 실제로 바뀔 때만 재시작.
+  const sig = frames.map((f) => `${f.src}|${f.x}`).join("~");
   useEffect(() => {
     const cv = ref.current; if (!cv) return;
     const ctx = cv.getContext("2d"); const W = cv.width, H = cv.height;
@@ -60,7 +64,7 @@ function SlideCanvas({ frames }) {
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [frames]);
+  }, [sig]); // eslint-disable-line react-hooks/exhaustive-deps -- sig가 같으면 frames는 내용 동일(참조만 다름)이라 재시작 불필요
   return <canvas ref={ref} width={640} height={360} className="absolute inset-0 h-full w-full" />;
 }
 
