@@ -1,6 +1,6 @@
 // 공용 UI — 오버레이(모달·달력·날짜 입력). DateField는 Modal+Calendar를 함께 쓴다.
 import React, { useState } from "react";
-import { ChevronLeft, ChevronRight, Calendar as CalIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, Calendar as CalIcon } from "lucide-react";
 import { SURFACE, LINE, LINE2, GOLD, GOLD_D, GOLD_SOFT, INK, MUTE, FAINT, RADIUS } from "../theme.js";
 import { useEscape } from "../lib/hooks.js";
 import { pad2 } from "../lib/util.js";
@@ -34,11 +34,15 @@ const parseISO = (s) => {
   return m ? { y: +m[1], mo: +m[2] - 1, d: +m[3] } : null;
 };
 
-// 달력 그리드 (월 이동 · 오늘·선택 강조 · 빨강 배제, 골드 한정)
+// 달력 그리드 (월 이동 · 연도 선택 · 오늘·선택 강조 · 빨강 배제, 골드 한정)
+//   ※ 날짜 그리드는 항상 6줄(42칸) 고정 — 달마다 줄 수(4·5·6)가 달라지면 모달 높이가
+//     들썩여 이전/다음·연도 버튼 위치가 흔들리고, 그래서 탭이 어긋난다.
 export function Calendar({ value, onSelect }) {
   const today = new Date();
   const sel = parseISO(value);
   const [view, setView] = useState(() => sel ? { y: sel.y, mo: sel.mo } : { y: today.getFullYear(), mo: today.getMonth() });
+  const [mode, setMode] = useState("days"); // "days" | "years"
+  const [yFrom, setYFrom] = useState(() => (sel ? sel.y : today.getFullYear()) - 5);
 
   const first = new Date(view.y, view.mo, 1);
   const lead = first.getDay(); // 그 달 1일의 요일(일=0)
@@ -46,7 +50,7 @@ export function Calendar({ value, onSelect }) {
   const cells = [];
   for (let i = 0; i < lead; i++) cells.push(null);
   for (let d = 1; d <= days; d++) cells.push(d);
-  while (cells.length % 7 !== 0) cells.push(null);
+  while (cells.length < 42) cells.push(null); // 6줄(42칸) 고정 — 높이 흔들림 방지
 
   const isToday = (d) => d && today.getFullYear() === view.y && today.getMonth() === view.mo && today.getDate() === d;
   const isSel = (d) => d && sel && sel.y === view.y && sel.mo === view.mo && sel.d === d;
@@ -63,18 +67,57 @@ export function Calendar({ value, onSelect }) {
     </button>
   );
 
+  // 연도 선택 — 연도를 눌러 12년 그리드에서 바로 이동(월 화살표 반복 클릭 불필요)
+  if (mode === "years") {
+    const years = Array.from({ length: 12 }, (_, i) => yFrom + i);
+    return (
+      <div>
+        <div className="flex items-center justify-between px-4" style={{ height: 48, borderBottom: "1px solid " + LINE }}>
+          {navBtn(() => setYFrom((y) => y - 12), ChevronLeft, "이전 12년")}
+          <div className="text-[14px] font-bold tabular-nums" style={{ color: INK }}>{yFrom}–{yFrom + 11}</div>
+          {navBtn(() => setYFrom((y) => y + 12), ChevronRight, "다음 12년")}
+        </div>
+        <div className="px-4 pb-3 pt-3" style={{ minHeight: 216 }}>
+          <div className="grid grid-cols-3 gap-2">
+            {years.map((y) => {
+              const cur = y === view.y, tdy = y === today.getFullYear();
+              return (
+                <button type="button" key={y} onClick={() => { setView((v) => ({ ...v, y })); setMode("days"); }}
+                  className="flex h-12 items-center justify-center text-[13px] tabular-nums outline-none transition focus-visible:ring-1"
+                  style={{
+                    borderRadius: RADIUS,
+                    fontWeight: cur ? 700 : tdy ? 600 : 500,
+                    color: cur ? "#fff" : INK,
+                    background: cur ? GOLD : "transparent",
+                    boxShadow: tdy && !cur ? "inset 0 0 0 1px " + GOLD_SOFT + ", inset 0 -2px 0 " + GOLD : "none",
+                  }}
+                  onMouseEnter={(e) => { if (!cur) e.currentTarget.style.background = "#f6f3ec"; }}
+                  onMouseLeave={(e) => { if (!cur) e.currentTarget.style.background = "transparent"; }}>
+                  {y}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
-      {/* 헤더 — 월 이동 */}
+      {/* 헤더 — 월 이동 · 연도 눌러 연도 선택 */}
       <div className="flex items-center justify-between px-4" style={{ height: 48, borderBottom: "1px solid " + LINE }}>
         {navBtn(() => step(-1), ChevronLeft, "이전 달")}
-        <div className="text-[14px] font-bold tabular-nums" style={{ color: INK }}>
-          {view.y}년 {view.mo + 1}월
-        </div>
+        <button type="button" onClick={() => { setYFrom(view.y - 5); setMode("years"); }} aria-label="연도 선택"
+          className="flex items-center gap-1 px-2 py-1 text-[14px] font-bold tabular-nums outline-none transition hover:bg-[#f6f3ec] focus-visible:ring-1"
+          style={{ borderRadius: RADIUS, color: INK }}>
+          <span style={{ color: GOLD_D }}>{view.y}년</span> {view.mo + 1}월
+          <ChevronDown className="h-3.5 w-3.5" style={{ color: MUTE }} strokeWidth={2.2} />
+        </button>
         {navBtn(() => step(1), ChevronRight, "다음 달")}
       </div>
 
-      {/* 본문 */}
+      {/* 본문 — 6줄 고정 */}
       <div className="px-4 pb-2 pt-3">
         <div className="grid grid-cols-7">
           {WEEKDAYS.map((w) => (
